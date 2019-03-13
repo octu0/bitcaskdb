@@ -57,6 +57,38 @@ $ bitcask -p /tmp/db get Hello
 World
 ```
 
+## Usage (server)
+
+There is also a builtin very  simple Redis-compatible server called `bitcaskd`:
+
+```#!bash
+$ ./bitcaskd ./tmp
+INFO[0000] starting bitcaskd v0.0.7@146f777              bind=":6379" path=./tmp
+```
+
+Example session:
+
+```
+$ telnet localhost 6379
+Trying ::1...
+Connected to localhost.
+Escape character is '^]'.
+SET foo bar
++OK
+GET foo
+$3
+bar
+DEL foo
+:1
+GET foo
+$-1
+PING
++PONG
+QUIT
++OK
+Connection closed by foreign host.
+```
+
 ## Performance
 
 Benchmarks run on a 11" Macbook with a 1.4Ghz Intel Core i7:
