@@ -48,7 +48,7 @@ func main() {
 	}
 
 	if len(flag.Args()) < 1 {
-		flag.PrintDefaults()
+		flag.Usage()
 		os.Exit(1)
 	}
 
