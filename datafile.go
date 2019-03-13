@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	pb "github.com/prologic/bitcask/proto"
@@ -20,6 +21,8 @@ var (
 )
 
 type Datafile struct {
+	sync.Mutex
+
 	id  int
 	r   *os.File
 	w   *os.File
@@ -130,7 +133,10 @@ func (df *Datafile) Write(e pb.Entry) (int64, error) {
 	e.Index = index
 	e.Timestamp = time.Now().Unix()
 
+	df.Lock()
 	err = df.enc.Encode(&e)
+	df.Unlock()
+
 	if err != nil {
 		return -1, err
 	}
