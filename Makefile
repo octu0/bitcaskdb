@@ -7,12 +7,17 @@ all: dev
 
 dev: build
 	@./bitcask --version
+	@./bitcaskd --version
 
 build: clean generate
 	@go build \
 		-tags "netgo static_build" -installsuffix netgo \
 		-ldflags "-w -X $(shell go list)/.Commit=$(COMMIT)" \
 		./cmd/bitcask/...
+	@go build \
+		-tags "netgo static_build" -installsuffix netgo \
+		-ldflags "-w -X $(shell go list)/.Commit=$(COMMIT)" \
+		./cmd/bitcaskd/...
 
 generate:
 	@go generate $(shell go list)/...

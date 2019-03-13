@@ -135,7 +135,7 @@ func (b *Bitcask) setMaxDatafileSize(size int64) error {
 	return nil
 }
 
-func MaxDatafileSize(size int64) func(*Bitcask) error {
+func WithMaxDatafileSize(size int64) func(*Bitcask) error {
 	return func(b *Bitcask) error {
 		return b.setMaxDatafileSize(size)
 	}
