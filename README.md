@@ -12,6 +12,9 @@ A Bitcask (LSM+WAL) Key/Value Store written in Go.
 
 * Embeddable
 * Builtin CLI
+* Predictable read/write performance
+* Low latecny
+* High throughput (See: [Performance](README.md#Performance)
 
 ## Install
 
@@ -65,8 +68,7 @@ BenchmarkGet-4   	  300000	      5065 ns/op	     144 B/op	       4 allocs/op
 BenchmarkPut-4   	  100000	     14640 ns/op	     699 B/op	       7 allocs/op
 ```
 
-* ~30,000 reads/sec for non-active data
-* ~180,000 reads/sec for active data
+* ~180,000 reads/sec
 * ~60,000 writes/sec
 
 ## License
