@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/gofrs/flock"
 )
 
 const (
@@ -18,10 +20,13 @@ const (
 )
 
 var (
-	ErrKeyNotFound = errors.New("error: key not found")
+	ErrKeyNotFound       = errors.New("error: key not found")
+	ErrCannotAcquireLock = errors.New("error: cannot acquire lock")
 )
 
 type Bitcask struct {
+	*flock.Flock
+
 	path      string
 	curr      *Datafile
 	keydir    *Keydir
@@ -31,6 +36,10 @@ type Bitcask struct {
 }
 
 func (b *Bitcask) Close() error {
+	defer func() {
+		b.Flock.Unlock()
+	}()
+
 	for _, df := range b.datafiles {
 		df.Close()
 	}
@@ -343,6 +352,7 @@ func Open(path string, options ...func(*Bitcask) error) (*Bitcask, error) {
 	}
 
 	bitcask := &Bitcask{
+		Flock:     flock.New(filepath.Join(path, "lock")),
 		path:      path,
 		curr:      curr,
 		keydir:    keydir,
@@ -356,6 +366,15 @@ func Open(path string, options ...func(*Bitcask) error) (*Bitcask, error) {
 		if err != nil {
 			return nil, err
 		}
+	}
+
+	locked, err := bitcask.Flock.TryLock()
+	if err != nil {
+		return nil, err
+	}
+
+	if !locked {
+		return nil, ErrCannotAcquireLock
 	}
 
 	return bitcask, nil

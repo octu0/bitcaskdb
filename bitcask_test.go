@@ -198,6 +198,21 @@ func TestMerge(t *testing.T) {
 	})
 }
 
+func TestLocking(t *testing.T) {
+	assert := assert.New(t)
+
+	testdir, err := ioutil.TempDir("", "bitcask")
+	assert.NoError(err)
+
+	db, err := Open(testdir)
+	assert.NoError(err)
+	defer db.Close()
+
+	_, err = Open(testdir)
+	assert.Error(err)
+	assert.Equal("error: cannot acquire lock", err.Error())
+}
+
 func BenchmarkGet(b *testing.B) {
 	testdir, err := ioutil.TempDir("", "bitcask")
 	if err != nil {

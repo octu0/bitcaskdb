@@ -1,6 +1,7 @@
 module github.com/prologic/bitcask
 
 require (
+	github.com/gofrs/flock v0.7.1
 	github.com/gogo/protobuf v1.2.1
 	github.com/golang/protobuf v1.2.0
 	github.com/gorilla/websocket v1.4.0 // indirect
