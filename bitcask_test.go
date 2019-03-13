@@ -140,7 +140,7 @@ func TestMerge(t *testing.T) {
 		)
 
 		t.Run("Open", func(t *testing.T) {
-			db, err = Open(testdir, MaxDatafileSize(1024))
+			db, err = Open(testdir, WithMaxDatafileSize(1024))
 			assert.NoError(err)
 		})
 
