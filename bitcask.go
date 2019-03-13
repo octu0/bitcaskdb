@@ -22,14 +22,18 @@ var (
 )
 
 type Bitcask struct {
-	path   string
-	curr   *Datafile
-	keydir *Keydir
+	path      string
+	curr      *Datafile
+	keydir    *Keydir
+	datafiles []*Datafile
 
 	maxDatafileSize int64
 }
 
 func (b *Bitcask) Close() error {
+	for _, df := range b.datafiles {
+		df.Close()
+	}
 	return b.curr.Close()
 }
 
@@ -38,26 +42,17 @@ func (b *Bitcask) Sync() error {
 }
 
 func (b *Bitcask) Get(key string) ([]byte, error) {
+	var df *Datafile
+
 	item, ok := b.keydir.Get(key)
 	if !ok {
 		return nil, ErrKeyNotFound
 	}
 
-	var (
-		df  *Datafile
-		err error
-	)
-
-	// Optimization
 	if item.FileID == b.curr.id {
 		df = b.curr
 	} else {
-		// TODO: Pre-open non-active Datafiles and cache the file pointers?
-		df, err = NewDatafile(b.path, item.FileID, true)
-		if err != nil {
-			return nil, err
-		}
-		defer df.Close()
+		df = b.datafiles[item.FileID]
 	}
 
 	e, err := df.ReadAt(item.Index)
@@ -110,6 +105,9 @@ func (b *Bitcask) put(key string, value []byte) (int64, error) {
 		if err != nil {
 			return -1, err
 		}
+
+		df, err := NewDatafile(b.path, b.curr.id, true)
+		b.datafiles = append(b.datafiles, df)
 
 		id := b.curr.id + 1
 		curr, err := NewDatafile(b.path, id, false)
@@ -277,8 +275,6 @@ func Open(path string, options ...func(*Bitcask) error) (*Bitcask, error) {
 		return nil, err
 	}
 
-	keydir := NewKeydir()
-
 	fns, err := getDatafiles(path)
 	if err != nil {
 		return nil, err
@@ -289,7 +285,16 @@ func Open(path string, options ...func(*Bitcask) error) (*Bitcask, error) {
 		return nil, err
 	}
 
+	keydir := NewKeydir()
+	var datafiles []*Datafile
+
 	for i, fn := range fns {
+		df, err := NewDatafile(path, ids[i], true)
+		if err != nil {
+			return nil, err
+		}
+		datafiles = append(datafiles, df)
+
 		if filepath.Ext(fn) == ".hint" {
 			f, err := os.Open(filepath.Join(path, fn))
 			if err != nil {
@@ -307,11 +312,6 @@ func Open(path string, options ...func(*Bitcask) error) (*Bitcask, error) {
 				keydir.Add(key, item.FileID, item.Index, item.Timestamp)
 			}
 		} else {
-			df, err := NewDatafile(path, ids[i], true)
-			if err != nil {
-				return nil, err
-			}
-
 			for {
 				e, err := df.Read()
 				if err != nil {
@@ -336,15 +336,17 @@ func Open(path string, options ...func(*Bitcask) error) (*Bitcask, error) {
 	if len(ids) > 0 {
 		id = ids[(len(ids) - 1)]
 	}
+
 	curr, err := NewDatafile(path, id, false)
 	if err != nil {
 		return nil, err
 	}
 
 	bitcask := &Bitcask{
-		path:   path,
-		curr:   curr,
-		keydir: keydir,
+		path:      path,
+		curr:      curr,
+		keydir:    keydir,
+		datafiles: datafiles,
 
 		maxDatafileSize: DefaultMaxDatafileSize,
 	}
