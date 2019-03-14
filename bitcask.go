@@ -2,21 +2,14 @@ package bitcask
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"sort"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gofrs/flock"
-)
-
-const (
-	DefaultMaxDatafileSize = 1 << 20 // 1MB
 )
 
 var (
@@ -27,6 +20,7 @@ var (
 type Bitcask struct {
 	*flock.Flock
 
+	opts      Options
 	path      string
 	curr      *Datafile
 	keydir    *Keydir
@@ -133,39 +127,6 @@ func (b *Bitcask) put(key string, value []byte) (int64, error) {
 func (b *Bitcask) setMaxDatafileSize(size int64) error {
 	b.maxDatafileSize = size
 	return nil
-}
-
-func WithMaxDatafileSize(size int64) func(*Bitcask) error {
-	return func(b *Bitcask) error {
-		return b.setMaxDatafileSize(size)
-	}
-}
-
-func getDatafiles(path string) ([]string, error) {
-	fns, err := filepath.Glob(fmt.Sprintf("%s/*.data", path))
-	if err != nil {
-		return nil, err
-	}
-	sort.Strings(fns)
-	return fns, nil
-}
-
-func parseIds(fns []string) ([]int, error) {
-	var ids []int
-	for _, fn := range fns {
-		fn = filepath.Base(fn)
-		ext := filepath.Ext(fn)
-		if ext != ".data" {
-			continue
-		}
-		id, err := strconv.ParseInt(strings.TrimSuffix(fn, ext), 10, 32)
-		if err != nil {
-			return nil, err
-		}
-		ids = append(ids, int(id))
-	}
-	sort.Ints(ids)
-	return ids, nil
 }
 
 func Merge(path string, force bool) error {
@@ -353,6 +314,7 @@ func Open(path string, options ...func(*Bitcask) error) (*Bitcask, error) {
 
 	bitcask := &Bitcask{
 		Flock:     flock.New(filepath.Join(path, "lock")),
+		opts:      NewDefaultOptions(),
 		path:      path,
 		curr:      curr,
 		keydir:    keydir,
