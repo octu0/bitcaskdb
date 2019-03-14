@@ -34,6 +34,7 @@ type Bitcask struct {
 func (b *Bitcask) Close() error {
 	defer func() {
 		b.Flock.Unlock()
+		os.Remove(b.Flock.Path())
 	}()
 
 	for _, df := range b.datafiles {
