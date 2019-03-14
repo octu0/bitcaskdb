@@ -34,6 +34,7 @@ func keys(path string) int {
 		log.WithError(err).Error("error opening database")
 		return 1
 	}
+	defer db.Close()
 
 	err = db.Fold(func(key string) error {
 		fmt.Printf("%s\n", key)

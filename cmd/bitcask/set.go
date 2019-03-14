@@ -47,6 +47,7 @@ func set(path, key string, value io.Reader) int {
 		log.WithError(err).Error("error opening database")
 		return 1
 	}
+	defer db.Close()
 
 	data, err := ioutil.ReadAll(value)
 	if err != nil {

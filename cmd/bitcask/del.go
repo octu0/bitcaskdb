@@ -35,6 +35,7 @@ func del(path, key string) int {
 		log.WithError(err).Error("error opening database")
 		return 1
 	}
+	defer db.Close()
 
 	err = db.Delete(key)
 	if err != nil {

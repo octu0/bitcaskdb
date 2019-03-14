@@ -36,6 +36,7 @@ func get(path, key string) int {
 		log.WithError(err).Error("error opening database")
 		return 1
 	}
+	defer db.Close()
 
 	value, err := db.Get(key)
 	if err != nil {
