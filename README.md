@@ -12,6 +12,7 @@ A Bitcask (LSM+WAL) Key/Value Store written in Go.
 
 * Embeddable
 * Builtin CLI
+* Builtin Redis-compatible server
 * Predictable read/write performance
 * Low latecny
 * High throughput (See: [Performance](README.md#Performance)
