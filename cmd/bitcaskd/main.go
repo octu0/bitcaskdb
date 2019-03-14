@@ -16,7 +16,7 @@ var (
 	bind            string
 	debug           bool
 	version         bool
-	maxDatafileSize int64
+	maxDatafileSize int
 )
 
 func init() {
@@ -30,7 +30,7 @@ func init() {
 
 	flag.StringVarP(&bind, "bind", "b", ":6379", "interface and port to bind to")
 
-	flag.Int64Var(&maxDatafileSize, "max-datafile-size", 1<<20, "maximum datafile size in bytes")
+	flag.IntVar(&maxDatafileSize, "max-datafile-size", 1<<20, "maximum datafile size in bytes")
 }
 
 func main() {
