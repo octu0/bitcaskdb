@@ -13,7 +13,9 @@ import (
 )
 
 var (
-	ErrKeyNotFound       = errors.New("error: key not found")
+	ErrKeyNotFound    = errors.New("error: key not found")
+	ErrKeyTooLarge    = errors.New("error: key too large")
+	ErrValueTooLarge  = errors.New("error: value too large")
 	ErrDatabaseLocked = errors.New("error: database locked")
 )
 
@@ -67,6 +69,13 @@ func (b *Bitcask) Get(key string) ([]byte, error) {
 }
 
 func (b *Bitcask) Put(key string, value []byte) error {
+	if len(key) > b.opts.MaxKeySize {
+		return ErrKeyTooLarge
+	}
+	if len(value) > b.opts.MaxValueSize {
+		return ErrValueTooLarge
+	}
+
 	index, err := b.put(key, value)
 	if err != nil {
 		return err

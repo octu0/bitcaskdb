@@ -128,6 +128,54 @@ func TestDeletedKeys(t *testing.T) {
 	})
 }
 
+func TestMaxKeySize(t *testing.T) {
+	assert := assert.New(t)
+
+	testdir, err := ioutil.TempDir("", "bitcask")
+	assert.NoError(err)
+
+	var db *Bitcask
+
+	size := 16
+
+	t.Run("Open", func(t *testing.T) {
+		db, err = Open(testdir, WithMaxKeySize(size))
+		assert.NoError(err)
+	})
+
+	t.Run("Put", func(t *testing.T) {
+		key := strings.Repeat(" ", size+1)
+		value := []byte("foobar")
+		err = db.Put(key, value)
+		assert.Error(err)
+		assert.Equal("error: key too large", err.Error())
+	})
+}
+
+func TestMaxValueSize(t *testing.T) {
+	assert := assert.New(t)
+
+	testdir, err := ioutil.TempDir("", "bitcask")
+	assert.NoError(err)
+
+	var db *Bitcask
+
+	size := 16
+
+	t.Run("Open", func(t *testing.T) {
+		db, err = Open(testdir, WithMaxValueSize(size))
+		assert.NoError(err)
+	})
+
+	t.Run("Put", func(t *testing.T) {
+		key := "foo"
+		value := []byte(strings.Repeat(" ", size+1))
+		err = db.Put(key, value)
+		assert.Error(err)
+		assert.Equal("error: value too large", err.Error())
+	})
+}
+
 func TestMerge(t *testing.T) {
 	assert := assert.New(t)
 
