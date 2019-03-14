@@ -200,41 +200,29 @@ func TestMerge(t *testing.T) {
 }
 
 func TestConcurrent(t *testing.T) {
+	var (
+		db  *Bitcask
+		err error
+	)
+
 	assert := assert.New(t)
 
 	testdir, err := ioutil.TempDir("", "bitcask")
 	assert.NoError(err)
 
 	t.Run("Setup", func(t *testing.T) {
-		var (
-			db  *Bitcask
-			err error
-		)
-
 		t.Run("Open", func(t *testing.T) {
 			db, err = Open(testdir)
 			assert.NoError(err)
 		})
 
 		t.Run("Put", func(t *testing.T) {
-			for i := 0; i < 1024; i++ {
-				err = db.Put(string(i), []byte(strings.Repeat(" ", 1024)))
-				assert.NoError(err)
-			}
+			err = db.Put("foo", []byte("bar"))
+			assert.NoError(err)
 		})
 	})
 
 	t.Run("Concurrent", func(t *testing.T) {
-		var (
-			db  *Bitcask
-			err error
-		)
-
-		t.Run("Open", func(t *testing.T) {
-			db, err = Open(testdir)
-			assert.NoError(err)
-		})
-
 		t.Run("Put", func(t *testing.T) {
 			f := func(wg *sync.WaitGroup, x int) {
 				defer func() {
@@ -256,6 +244,29 @@ func TestConcurrent(t *testing.T) {
 			wg.Add(1)
 
 			go f(wg, 3)
+			wg.Add(1)
+
+			wg.Wait()
+		})
+
+		t.Run("Get", func(t *testing.T) {
+			f := func(wg *sync.WaitGroup, N int) {
+				defer func() {
+					wg.Done()
+				}()
+				for i := 0; i <= N; i++ {
+					value, err := db.Get("foo")
+					assert.NoError(err)
+					assert.Equal([]byte("bar"), value)
+				}
+			}
+
+			wg := &sync.WaitGroup{}
+
+			go f(wg, 100)
+			wg.Add(1)
+
+			go f(wg, 100)
 			wg.Add(1)
 
 			wg.Wait()

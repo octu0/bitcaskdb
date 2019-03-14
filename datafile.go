@@ -21,7 +21,7 @@ var (
 )
 
 type Datafile struct {
-	sync.Mutex
+	sync.RWMutex
 
 	id  int
 	r   *os.File
@@ -105,17 +105,23 @@ func (df *Datafile) Size() (int64, error) {
 	return stat.Size(), nil
 }
 
-func (df *Datafile) Read() (pb.Entry, error) {
-	var e pb.Entry
+func (df *Datafile) Read() (e pb.Entry, err error) {
+	df.Lock()
+	defer df.Unlock()
+
 	return e, df.dec.Decode(&e)
 }
 
 func (df *Datafile) ReadAt(index int64) (e pb.Entry, err error) {
+	df.Lock()
+	defer df.Unlock()
+
 	_, err = df.r.Seek(index, os.SEEK_SET)
 	if err != nil {
 		return
 	}
-	return df.Read()
+
+	return e, df.dec.Decode(&e)
 }
 
 func (df *Datafile) Write(e pb.Entry) (int64, error) {

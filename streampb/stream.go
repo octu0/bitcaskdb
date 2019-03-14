@@ -16,26 +16,27 @@ const (
 
 // NewEncoder creates a streaming protobuf encoder.
 func NewEncoder(w io.Writer) *Encoder {
-	return &Encoder{w: w, prefixBuf: make([]byte, prefixSize)}
+	return &Encoder{w}
 }
 
 // Encoder wraps an underlying io.Writer and allows you to stream
 // proto encodings on it.
 type Encoder struct {
-	w         io.Writer
-	prefixBuf []byte
+	w io.Writer
 }
 
 // Encode takes any proto.Message and streams it to the underlying writer.
 // Messages are framed with a length prefix.
 func (e *Encoder) Encode(msg proto.Message) error {
+	prefixBuf := make([]byte, prefixSize)
+
 	buf, err := proto.Marshal(msg)
 	if err != nil {
 		return err
 	}
-	binary.BigEndian.PutUint64(e.prefixBuf, uint64(len(buf)))
+	binary.BigEndian.PutUint64(prefixBuf, uint64(len(buf)))
 
-	if _, err := e.w.Write(e.prefixBuf); err != nil {
+	if _, err := e.w.Write(prefixBuf); err != nil {
 		return errors.Wrap(err, "failed writing length prefix")
 	}
 
@@ -45,28 +46,26 @@ func (e *Encoder) Encode(msg proto.Message) error {
 
 // NewDecoder creates a streaming protobuf decoder.
 func NewDecoder(r io.Reader) *Decoder {
-	return &Decoder{
-		r:         r,
-		prefixBuf: make([]byte, prefixSize),
-	}
+	return &Decoder{r: r}
 }
 
 // Decoder wraps an underlying io.Reader and allows you to stream
 // proto decodings on it.
 type Decoder struct {
-	r         io.Reader
-	prefixBuf []byte
+	r io.Reader
 }
 
 // Decode takes a proto.Message and unmarshals the next payload in the
 // underlying io.Reader. It returns an EOF when it's done.
 func (d *Decoder) Decode(v proto.Message) error {
-	_, err := io.ReadFull(d.r, d.prefixBuf)
+	prefixBuf := make([]byte, prefixSize)
+
+	_, err := io.ReadFull(d.r, prefixBuf)
 	if err != nil {
 		return err
 	}
 
-	n := binary.BigEndian.Uint64(d.prefixBuf)
+	n := binary.BigEndian.Uint64(prefixBuf)
 
 	buf := make([]byte, n)
 
