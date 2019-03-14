@@ -14,7 +14,7 @@ import (
 
 var (
 	ErrKeyNotFound       = errors.New("error: key not found")
-	ErrCannotAcquireLock = errors.New("error: cannot acquire lock")
+	ErrDatabaseLocked = errors.New("error: database locked")
 )
 
 type Bitcask struct {
@@ -336,7 +336,7 @@ func Open(path string, options ...func(*Bitcask) error) (*Bitcask, error) {
 	}
 
 	if !locked {
-		return nil, ErrCannotAcquireLock
+		return nil, ErrDatabaseLocked
 	}
 
 	return bitcask, nil

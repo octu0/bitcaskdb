@@ -291,7 +291,7 @@ func TestLocking(t *testing.T) {
 
 	_, err = Open(testdir)
 	assert.Error(err)
-	assert.Equal("error: cannot acquire lock", err.Error())
+	assert.Equal("error: database locked", err.Error())
 }
 
 type benchmarkTestCase struct {
