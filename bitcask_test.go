@@ -294,6 +294,11 @@ func TestLocking(t *testing.T) {
 	assert.Equal("error: cannot acquire lock", err.Error())
 }
 
+type benchmarkTestCase struct {
+	name string
+	size int
+}
+
 func BenchmarkGet(b *testing.B) {
 	testdir, err := ioutil.TempDir("", "bitcask")
 	if err != nil {
@@ -306,20 +311,39 @@ func BenchmarkGet(b *testing.B) {
 	}
 	defer db.Close()
 
-	err = db.Put("foo", []byte("bar"))
-	if err != nil {
-		b.Fatal(err)
+	tests := []benchmarkTestCase{
+		{"128B", 128},
+		{"256B", 256},
+		{"512B", 512},
+		{"1K", 1024},
+		{"2K", 2048},
+		{"4K", 4096},
+		{"8K", 8192},
+		{"16K", 16384},
+		{"32K", 32768},
 	}
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		val, err := db.Get("foo")
-		if err != nil {
-			b.Fatal(err)
-		}
-		if string(val) != "bar" {
-			b.Errorf("expected val=bar got=%s", val)
-		}
+	for _, tt := range tests {
+		b.Run(tt.name, func(b *testing.B) {
+			key := "foo"
+			value := []byte(strings.Repeat(" ", tt.size))
+
+			err = db.Put(key, value)
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				val, err := db.Get(key)
+				if err != nil {
+					b.Fatal(err)
+				}
+				if string(val) != string(value) {
+					b.Errorf("unexpected value")
+				}
+			}
+		})
 	}
 }
 
@@ -335,11 +359,29 @@ func BenchmarkPut(b *testing.B) {
 	}
 	defer db.Close()
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		err := db.Put(fmt.Sprintf("key%d", i), []byte("bar"))
-		if err != nil {
-			b.Fatal(err)
-		}
+	tests := []benchmarkTestCase{
+		{"128B", 128},
+		{"256B", 256},
+		{"512B", 512},
+		{"1K", 1024},
+		{"2K", 2048},
+		{"4K", 4096},
+		{"8K", 8192},
+		{"16K", 16384},
+		{"32K", 32768},
+	}
+
+	for _, tt := range tests {
+		b.Run(tt.name, func(b *testing.B) {
+			key := "foo"
+			value := []byte(strings.Repeat(" ", tt.size))
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				err := db.Put(key, value)
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
 	}
 }
