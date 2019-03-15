@@ -97,31 +97,33 @@ Benchmarks run on a 11" Macbook with a 1.4Ghz Intel Core i7:
 ```
 $ make bench
 ...
-BenchmarkGet/128B-4         	  200000	      5780 ns/op	     400 B/op	       5 allocs/op
-BenchmarkGet/256B-4         	  200000	      6138 ns/op	     656 B/op	       5 allocs/op
-BenchmarkGet/512B-4         	  200000	      5967 ns/op	    1200 B/op	       5 allocs/op
-BenchmarkGet/1K-4           	  200000	      6290 ns/op	    2288 B/op	       5 allocs/op
-BenchmarkGet/2K-4           	  200000	      6293 ns/op	    4464 B/op	       5 allocs/op
-BenchmarkGet/4K-4           	  200000	      7673 ns/op	    9072 B/op	       5 allocs/op
-BenchmarkGet/8K-4           	  200000	     10373 ns/op	   17776 B/op	       5 allocs/op
-BenchmarkGet/16K-4          	  100000	     14227 ns/op	   34928 B/op	       5 allocs/op
-BenchmarkGet/32K-4          	  100000	     25953 ns/op	   73840 B/op	       5 allocs/op
+BenchmarkGet/128B-4         	  300000	      5144 ns/op	     400 B/op	       5 allocs/op
+BenchmarkGet/256B-4         	  300000	      5166 ns/op	     656 B/op	       5 allocs/op
+BenchmarkGet/512B-4         	  300000	      5284 ns/op	    1200 B/op	       5 allocs/op
+BenchmarkGet/1K-4           	  200000	      5779 ns/op	    2288 B/op	       5 allocs/op
+BenchmarkGet/2K-4           	  200000	      6396 ns/op	    4464 B/op	       5 allocs/op
+BenchmarkGet/4K-4           	  200000	      7716 ns/op	    9072 B/op	       5 allocs/op
+BenchmarkGet/8K-4           	  200000	      9802 ns/op	   17776 B/op	       5 allocs/op
+BenchmarkGet/16K-4          	  100000	     13299 ns/op	   34928 B/op	       5 allocs/op
+BenchmarkGet/32K-4          	  100000	     21819 ns/op	   73840 B/op	       5 allocs/op
 
-BenchmarkPut/128B-4         	  100000	     17353 ns/op	     680 B/op	       5 allocs/op
-BenchmarkPut/256B-4         	  100000	     18620 ns/op	     808 B/op	       5 allocs/op
-BenchmarkPut/512B-4         	  100000	     19068 ns/op	    1096 B/op	       5 allocs/op
-BenchmarkPut/1K-4           	  100000	     23738 ns/op	    1673 B/op	       5 allocs/op
-BenchmarkPut/2K-4           	   50000	     25118 ns/op	    2826 B/op	       5 allocs/op
-BenchmarkPut/4K-4           	   50000	     44605 ns/op	    5389 B/op	       5 allocs/op
-BenchmarkPut/8K-4           	   30000	     55237 ns/op	   10001 B/op	       5 allocs/op
-BenchmarkPut/16K-4          	   20000	     78966 ns/op	   18972 B/op	       5 allocs/op
-BenchmarkPut/32K-4          	   10000	    116253 ns/op	   41520 B/op	       5 allocs/op
+BenchmarkPut/128B-4         	  100000	     12746 ns/op	     825 B/op	       8 allocs/op
+BenchmarkPut/256B-4         	  100000	     12937 ns/op	     954 B/op	       8 allocs/op
+BenchmarkPut/512B-4         	  100000	     14610 ns/op	    1245 B/op	       8 allocs/op
+BenchmarkPut/1K-4           	  100000	     16920 ns/op	    1825 B/op	       8 allocs/op
+BenchmarkPut/2K-4           	  100000	     22075 ns/op	    2987 B/op	       8 allocs/op
+BenchmarkPut/4K-4           	   30000	     40544 ns/op	    5566 B/op	       8 allocs/op
+BenchmarkPut/8K-4           	   20000	     63392 ns/op	   10210 B/op	       8 allocs/op
+BenchmarkPut/16K-4          	   10000	    108667 ns/op	   19244 B/op	       8 allocs/op
+BenchmarkPut/32K-4          	   10000	    129256 ns/op	   41920 B/op	       8 allocs/op
+
+BenchmarkScan-4             	 1000000	      1858 ns/op	     493 B/op	      25 allocs/op
 ```
 
 For 128B values:
 
 * ~180,000 reads/sec
-*  ~60,000 writes/sec
+*  ~80,000 writes/sec
 
 The full benchmark above shows linear performance as you increase key/value sizes.
 

@@ -1,6 +1,7 @@
 package streampb
 
 import (
+	"bufio"
 	"encoding/binary"
 	"io"
 
@@ -16,13 +17,13 @@ const (
 
 // NewEncoder creates a streaming protobuf encoder.
 func NewEncoder(w io.Writer) *Encoder {
-	return &Encoder{w}
+	return &Encoder{w: bufio.NewWriter(w)}
 }
 
 // Encoder wraps an underlying io.Writer and allows you to stream
 // proto encodings on it.
 type Encoder struct {
-	w io.Writer
+	w *bufio.Writer
 }
 
 // Encode takes any proto.Message and streams it to the underlying writer.
@@ -40,8 +41,15 @@ func (e *Encoder) Encode(msg proto.Message) error {
 		return errors.Wrap(err, "failed writing length prefix")
 	}
 
-	_, err = e.w.Write(buf)
-	return errors.Wrap(err, "failed writing marshaled data")
+	if _, err = e.w.Write(buf); err != nil {
+		return errors.Wrap(err, "failed writing marshaled data")
+	}
+
+	if err = e.w.Flush(); err != nil {
+		return errors.Wrap(err, "failed flushing data")
+	}
+
+	return nil
 }
 
 // NewDecoder creates a streaming protobuf decoder.
