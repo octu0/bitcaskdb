@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/derekparker/trie"
 	"github.com/gofrs/flock"
 )
 
@@ -27,6 +28,7 @@ type Bitcask struct {
 	curr      *Datafile
 	keydir    *Keydir
 	datafiles []*Datafile
+	trie      *trie.Trie
 
 	maxDatafileSize int64
 }
@@ -82,7 +84,8 @@ func (b *Bitcask) Put(key string, value []byte) error {
 		return err
 	}
 
-	b.keydir.Add(key, b.curr.id, index, time.Now().Unix())
+	item := b.keydir.Add(key, b.curr.id, index, time.Now().Unix())
+	b.trie.Add(key, item)
 
 	return nil
 }
@@ -94,7 +97,18 @@ func (b *Bitcask) Delete(key string) error {
 	}
 
 	b.keydir.Delete(key)
+	b.trie.Remove(key)
 
+	return nil
+}
+
+func (b *Bitcask) Scan(prefix string, f func(key string) error) error {
+	keys := b.trie.PrefixSearch(prefix)
+	for _, key := range keys {
+		if err := f(key); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -265,8 +279,10 @@ func Open(path string, options ...func(*Bitcask) error) (*Bitcask, error) {
 		return nil, err
 	}
 
-	keydir := NewKeydir()
 	var datafiles []*Datafile
+
+	keydir := NewKeydir()
+	trie := trie.New()
 
 	for i, fn := range fns {
 		df, err := NewDatafile(path, ids[i], true)
@@ -289,7 +305,8 @@ func Open(path string, options ...func(*Bitcask) error) (*Bitcask, error) {
 
 			for key := range hint.Keys() {
 				item, _ := hint.Get(key)
-				keydir.Add(key, item.FileID, item.Index, item.Timestamp)
+				_ = keydir.Add(key, item.FileID, item.Index, item.Timestamp)
+				trie.Add(key, item)
 			}
 		} else {
 			for {
@@ -307,7 +324,8 @@ func Open(path string, options ...func(*Bitcask) error) (*Bitcask, error) {
 					continue
 				}
 
-				keydir.Add(e.Key, ids[i], e.Index, e.Timestamp)
+				item := keydir.Add(e.Key, ids[i], e.Index, e.Timestamp)
+				trie.Add(e.Key, item)
 			}
 		}
 	}
@@ -329,6 +347,7 @@ func Open(path string, options ...func(*Bitcask) error) (*Bitcask, error) {
 		curr:      curr,
 		keydir:    keydir,
 		datafiles: datafiles,
+		trie:      trie,
 
 		maxDatafileSize: DefaultMaxDatafileSize,
 	}

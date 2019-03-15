@@ -1,6 +1,7 @@
 module github.com/prologic/bitcask
 
 require (
+	github.com/derekparker/trie v0.0.0-20180212171413-e608c2733dc7
 	github.com/gofrs/flock v0.7.1
 	github.com/gogo/protobuf v1.2.1
 	github.com/golang/protobuf v1.2.0

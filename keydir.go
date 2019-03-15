@@ -25,15 +25,18 @@ func NewKeydir() *Keydir {
 	}
 }
 
-func (k *Keydir) Add(key string, fileid int, index, timestamp int64) {
-	k.Lock()
-	defer k.Unlock()
-
-	k.kv[key] = Item{
+func (k *Keydir) Add(key string, fileid int, index, timestamp int64) Item {
+	item := Item{
 		FileID:    fileid,
 		Index:     index,
 		Timestamp: timestamp,
 	}
+
+	k.Lock()
+	k.kv[key] = item
+	k.Unlock()
+
+	return item
 }
 
 func (k *Keydir) Get(key string) (Item, bool) {

@@ -3,6 +3,8 @@ package bitcask
 import (
 	"fmt"
 	"io/ioutil"
+	"reflect"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -327,6 +329,58 @@ func TestConcurrent(t *testing.T) {
 	})
 }
 
+func TestScan(t *testing.T) {
+	assert := assert.New(t)
+
+	testdir, err := ioutil.TempDir("", "bitcask")
+	assert.NoError(err)
+
+	var db *Bitcask
+
+	t.Run("Setup", func(t *testing.T) {
+		t.Run("Open", func(t *testing.T) {
+			db, err = Open(testdir)
+			assert.NoError(err)
+		})
+
+		t.Run("Put", func(t *testing.T) {
+			var items = map[string][]byte{
+				"1":     []byte("1"),
+				"2":     []byte("2"),
+				"3":     []byte("3"),
+				"food":  []byte("pizza"),
+				"foo":   []byte("foo"),
+				"fooz":  []byte("fooz ball"),
+				"hello": []byte("world"),
+			}
+			for k, v := range items {
+				err = db.Put(k, v)
+				assert.NoError(err)
+			}
+		})
+	})
+
+	t.Run("Scan", func(t *testing.T) {
+		var (
+			vals     []string
+			expected = []string{
+				"foo",
+				"fooz ball",
+				"pizza",
+			}
+		)
+
+		err = db.Scan("fo", func(key string) error {
+			val, err := db.Get(key)
+			assert.NoError(err)
+			vals = append(vals, string(val))
+			return nil
+		})
+		sort.Strings(vals)
+		assert.Equal(expected, vals)
+	})
+}
+
 func TestLocking(t *testing.T) {
 	assert := assert.New(t)
 
@@ -431,5 +485,49 @@ func BenchmarkPut(b *testing.B) {
 				}
 			}
 		})
+	}
+}
+
+func BenchmarkScan(b *testing.B) {
+	testdir, err := ioutil.TempDir("", "bitcask")
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	db, err := Open(testdir)
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer db.Close()
+
+	var items = map[string][]byte{
+		"1":     []byte("1"),
+		"2":     []byte("2"),
+		"3":     []byte("3"),
+		"food":  []byte("pizza"),
+		"foo":   []byte("foo"),
+		"fooz":  []byte("fooz ball"),
+		"hello": []byte("world"),
+	}
+	for k, v := range items {
+		err := db.Put(k, v)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+
+	var expected = []string{"foo", "food", "fooz"}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var keys []string
+		err = db.Scan("fo", func(key string) error {
+			keys = append(keys, key)
+			return nil
+		})
+		sort.Strings(keys)
+		if !reflect.DeepEqual(expected, keys) {
+			b.Fatal(fmt.Errorf("expected keys=#%v got=%#v", expected, keys))
+		}
 	}
 }
