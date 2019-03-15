@@ -28,28 +28,29 @@ type Encoder struct {
 
 // Encode takes any proto.Message and streams it to the underlying writer.
 // Messages are framed with a length prefix.
-func (e *Encoder) Encode(msg proto.Message) error {
+func (e *Encoder) Encode(msg proto.Message) (int64, error) {
 	prefixBuf := make([]byte, prefixSize)
 
 	buf, err := proto.Marshal(msg)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	binary.BigEndian.PutUint64(prefixBuf, uint64(len(buf)))
 
 	if _, err := e.w.Write(prefixBuf); err != nil {
-		return errors.Wrap(err, "failed writing length prefix")
+		return 0, errors.Wrap(err, "failed writing length prefix")
 	}
 
-	if _, err = e.w.Write(buf); err != nil {
-		return errors.Wrap(err, "failed writing marshaled data")
+	n, err := e.w.Write(buf)
+	if err != nil {
+		return 0, errors.Wrap(err, "failed writing marshaled data")
 	}
 
 	if err = e.w.Flush(); err != nil {
-		return errors.Wrap(err, "failed flushing data")
+		return 0, errors.Wrap(err, "failed flushing data")
 	}
 
-	return nil
+	return int64(n + prefixSize), nil
 }
 
 // NewDecoder creates a streaming protobuf decoder.

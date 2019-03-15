@@ -1,12 +1,13 @@
 package bitcask
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/pkg/errors"
 
 	pb "github.com/prologic/bitcask/proto"
 	"github.com/prologic/bitcask/streampb"
@@ -23,11 +24,12 @@ var (
 type Datafile struct {
 	sync.RWMutex
 
-	id  int
-	r   *os.File
-	w   *os.File
-	dec *streampb.Decoder
-	enc *streampb.Encoder
+	id     int
+	r      *os.File
+	w      *os.File
+	offset int64
+	dec    *streampb.Decoder
+	enc    *streampb.Encoder
 }
 
 func NewDatafile(path string, id int, readonly bool) (*Datafile, error) {
@@ -50,16 +52,23 @@ func NewDatafile(path string, id int, readonly bool) (*Datafile, error) {
 	if err != nil {
 		return nil, err
 	}
+	stat, err := r.Stat()
+	if err != nil {
+		return nil, errors.Wrap(err, "error calling Stat()")
+	}
+
+	offset := stat.Size()
 
 	dec := streampb.NewDecoder(r)
 	enc := streampb.NewEncoder(w)
 
 	return &Datafile{
-		id:  id,
-		r:   r,
-		w:   w,
-		dec: dec,
-		enc: enc,
+		id:     id,
+		r:      r,
+		w:      w,
+		offset: offset,
+		dec:    dec,
+		enc:    enc,
 	}, nil
 }
 
@@ -87,22 +96,7 @@ func (df *Datafile) Sync() error {
 }
 
 func (df *Datafile) Size() (int64, error) {
-	var (
-		stat os.FileInfo
-		err  error
-	)
-
-	if df.w == nil {
-		stat, err = df.r.Stat()
-	} else {
-		stat, err = df.w.Stat()
-	}
-
-	if err != nil {
-		return -1, err
-	}
-
-	return stat.Size(), nil
+	return df.offset, nil
 }
 
 func (df *Datafile) Read() (e pb.Entry, err error) {
@@ -129,23 +123,17 @@ func (df *Datafile) Write(e pb.Entry) (int64, error) {
 		return -1, ErrReadonly
 	}
 
-	stat, err := df.w.Stat()
-	if err != nil {
-		return -1, err
-	}
-
-	index := stat.Size()
-
-	e.Index = index
+	e.Index = df.offset
 	e.Timestamp = time.Now().Unix()
 
 	df.Lock()
-	err = df.enc.Encode(&e)
+	n, err := df.enc.Encode(&e)
 	df.Unlock()
 
 	if err != nil {
 		return -1, err
 	}
+	df.offset += n
 
-	return index, nil
+	return e.Index, nil
 }
