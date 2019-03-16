@@ -2,6 +2,7 @@ package bitcask
 
 import (
 	"fmt"
+	"hash/crc32"
 	"io"
 	"io/ioutil"
 	"os"
@@ -59,6 +60,11 @@ func (b *Bitcask) Get(key string) ([]byte, error) {
 	e, err := df.ReadAt(item.Index)
 	if err != nil {
 		return nil, err
+	}
+
+	crc := crc32.ChecksumIEEE(e.Value)
+	if crc != e.CRC {
+		return nil, fmt.Errorf("error: crc checksum falied %s %d != %d", key, e.CRC, crc)
 	}
 
 	return e.Value, nil
