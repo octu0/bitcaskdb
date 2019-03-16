@@ -45,7 +45,7 @@ func TestAll(t *testing.T) {
 		assert.NoError(err)
 		_, err = db.Get("foo")
 		assert.Error(err)
-		assert.Equal(err.Error(), "error: key not found")
+		assert.Equal("error: key not found foo", err.Error())
 	})
 
 	t.Run("Sync", func(t *testing.T) {
@@ -92,7 +92,7 @@ func TestDeletedKeys(t *testing.T) {
 			assert.NoError(err)
 			_, err = db.Get("foo")
 			assert.Error(err)
-			assert.Equal("error: key not found", err.Error())
+			assert.Equal("error: key not found foo", err.Error())
 		})
 
 		t.Run("Sync", func(t *testing.T) {
@@ -120,7 +120,7 @@ func TestDeletedKeys(t *testing.T) {
 		t.Run("Get", func(t *testing.T) {
 			_, err = db.Get("foo")
 			assert.Error(err)
-			assert.Equal("error: key not found", err.Error())
+			assert.Equal("error: key not found foo", err.Error())
 		})
 
 		t.Run("Close", func(t *testing.T) {
@@ -138,19 +138,17 @@ func TestMaxKeySize(t *testing.T) {
 
 	var db *Bitcask
 
-	size := 16
-
 	t.Run("Open", func(t *testing.T) {
-		db, err = Open(testdir, WithMaxKeySize(size))
+		db, err = Open(testdir, WithMaxKeySize(16))
 		assert.NoError(err)
 	})
 
 	t.Run("Put", func(t *testing.T) {
-		key := strings.Repeat(" ", size+1)
+		key := strings.Repeat(" ", 17)
 		value := []byte("foobar")
 		err = db.Put(key, value)
 		assert.Error(err)
-		assert.Equal("error: key too large", err.Error())
+		assert.Equal("error: key too large 17 > 16", err.Error())
 	})
 }
 
@@ -162,19 +160,17 @@ func TestMaxValueSize(t *testing.T) {
 
 	var db *Bitcask
 
-	size := 16
-
 	t.Run("Open", func(t *testing.T) {
-		db, err = Open(testdir, WithMaxValueSize(size))
+		db, err = Open(testdir, WithMaxValueSize(16))
 		assert.NoError(err)
 	})
 
 	t.Run("Put", func(t *testing.T) {
 		key := "foo"
-		value := []byte(strings.Repeat(" ", size+1))
+		value := []byte(strings.Repeat(" ", 17))
 		err = db.Put(key, value)
 		assert.Error(err)
-		assert.Equal("error: value too large", err.Error())
+		assert.Equal("error: value too large 17 > 16", err.Error())
 	})
 }
 
@@ -393,7 +389,7 @@ func TestLocking(t *testing.T) {
 
 	_, err = Open(testdir)
 	assert.Error(err)
-	assert.Equal("error: database locked", err.Error())
+	assert.Equal(fmt.Sprintf("error: database locked %s", testdir), err.Error())
 }
 
 type benchmarkTestCase struct {

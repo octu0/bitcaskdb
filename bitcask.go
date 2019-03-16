@@ -1,7 +1,7 @@
 package bitcask
 
 import (
-	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
@@ -11,13 +11,6 @@ import (
 
 	"github.com/gofrs/flock"
 	"github.com/prologic/trie"
-)
-
-var (
-	ErrKeyNotFound    = errors.New("error: key not found")
-	ErrKeyTooLarge    = errors.New("error: key too large")
-	ErrValueTooLarge  = errors.New("error: value too large")
-	ErrDatabaseLocked = errors.New("error: database locked")
 )
 
 type Bitcask struct {
@@ -54,7 +47,7 @@ func (b *Bitcask) Get(key string) ([]byte, error) {
 
 	item, ok := b.keydir.Get(key)
 	if !ok {
-		return nil, ErrKeyNotFound
+		return nil, fmt.Errorf("error: key not found %s", key)
 	}
 
 	if item.FileID == b.curr.id {
@@ -73,10 +66,10 @@ func (b *Bitcask) Get(key string) ([]byte, error) {
 
 func (b *Bitcask) Put(key string, value []byte) error {
 	if len(key) > b.opts.MaxKeySize {
-		return ErrKeyTooLarge
+		return fmt.Errorf("error: key too large %d > %d", len(key), b.opts.MaxKeySize)
 	}
 	if len(value) > b.opts.MaxValueSize {
-		return ErrValueTooLarge
+		return fmt.Errorf("error: value too large %d > %d", len(value), b.opts.MaxValueSize)
 	}
 
 	index, err := b.put(key, value)
@@ -365,7 +358,7 @@ func Open(path string, options ...func(*Bitcask) error) (*Bitcask, error) {
 	}
 
 	if !locked {
-		return nil, ErrDatabaseLocked
+		return nil, fmt.Errorf("error: database locked %s", path)
 	}
 
 	return bitcask, nil
