@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/gofrs/flock"
 	"github.com/prologic/trie"
@@ -57,14 +56,14 @@ func (b *Bitcask) Get(key string) ([]byte, error) {
 		df = b.datafiles[item.FileID]
 	}
 
-	e, err := df.ReadAt(item.Index)
+	e, err := df.ReadAt(item.Offset)
 	if err != nil {
 		return nil, err
 	}
 
-	crc := crc32.ChecksumIEEE(e.Value)
-	if crc != e.CRC {
-		return nil, fmt.Errorf("error: crc checksum falied %s %d != %d", key, e.CRC, crc)
+	checksum := crc32.ChecksumIEEE(e.Value)
+	if checksum != e.Checksum {
+		return nil, fmt.Errorf("error: checksum falied %s %d != %d", key, e.Checksum, checksum)
 	}
 
 	return e.Value, nil
@@ -78,12 +77,12 @@ func (b *Bitcask) Put(key string, value []byte) error {
 		return fmt.Errorf("error: value too large %d > %d", len(value), b.opts.MaxValueSize)
 	}
 
-	index, err := b.put(key, value)
+	offset, err := b.put(key, value)
 	if err != nil {
 		return err
 	}
 
-	item := b.keydir.Add(key, b.curr.id, index, time.Now().Unix())
+	item := b.keydir.Add(key, b.curr.id, offset)
 	b.trie.Add(key, item)
 
 	return nil
@@ -211,7 +210,7 @@ func Merge(path string, force bool) error {
 				continue
 			}
 
-			keydir.Add(e.Key, ids[i], e.Index, e.Timestamp)
+			keydir.Add(e.Key, ids[i], e.Offset)
 		}
 
 		tempdf, err := NewDatafile(temp, id, false)
@@ -222,7 +221,7 @@ func Merge(path string, force bool) error {
 
 		for key := range keydir.Keys() {
 			item, _ := keydir.Get(key)
-			e, err := df.ReadAt(item.Index)
+			e, err := df.ReadAt(item.Offset)
 			if err != nil {
 				return err
 			}
@@ -304,7 +303,7 @@ func Open(path string, options ...func(*Bitcask) error) (*Bitcask, error) {
 
 			for key := range hint.Keys() {
 				item, _ := hint.Get(key)
-				_ = keydir.Add(key, item.FileID, item.Index, item.Timestamp)
+				_ = keydir.Add(key, item.FileID, item.Offset)
 				trie.Add(key, item)
 			}
 		} else {
@@ -323,7 +322,7 @@ func Open(path string, options ...func(*Bitcask) error) (*Bitcask, error) {
 					continue
 				}
 
-				item := keydir.Add(e.Key, ids[i], e.Index, e.Timestamp)
+				item := keydir.Add(e.Key, ids[i], e.Offset)
 				trie.Add(e.Key, item)
 			}
 		}

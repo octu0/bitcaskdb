@@ -7,11 +7,11 @@ import (
 )
 
 func NewEntry(key string, value []byte) pb.Entry {
-	crc := crc32.ChecksumIEEE(value)
+	checksum := crc32.ChecksumIEEE(value)
 
 	return pb.Entry{
-		CRC:   crc,
-		Key:   key,
-		Value: value,
+		Checksum: checksum,
+		Key:      key,
+		Value:    value,
 	}
 }

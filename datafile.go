@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"time"
 
 	"github.com/pkg/errors"
 
@@ -128,8 +127,7 @@ func (df *Datafile) Write(e pb.Entry) (int64, error) {
 	df.Lock()
 	defer df.Unlock()
 
-	e.Index = df.offset
-	e.Timestamp = time.Now().Unix()
+	e.Offset = df.offset
 
 	n, err := df.enc.Encode(&e)
 	if err != nil {
@@ -137,5 +135,5 @@ func (df *Datafile) Write(e pb.Entry) (int64, error) {
 	}
 	df.offset += n
 
-	return e.Index, nil
+	return e.Offset, nil
 }

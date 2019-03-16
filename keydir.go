@@ -9,9 +9,8 @@ import (
 )
 
 type Item struct {
-	FileID    int
-	Index     int64
-	Timestamp int64
+	FileID int
+	Offset int64
 }
 
 type Keydir struct {
@@ -25,11 +24,10 @@ func NewKeydir() *Keydir {
 	}
 }
 
-func (k *Keydir) Add(key string, fileid int, index, timestamp int64) Item {
+func (k *Keydir) Add(key string, fileid int, offset int64) Item {
 	item := Item{
-		FileID:    fileid,
-		Index:     index,
-		Timestamp: timestamp,
+		FileID: fileid,
+		Offset: offset,
 	}
 
 	k.Lock()
