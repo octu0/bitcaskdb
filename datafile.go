@@ -96,6 +96,8 @@ func (df *Datafile) Sync() error {
 }
 
 func (df *Datafile) Size() (int64, error) {
+	df.RLock()
+	defer df.RUnlock()
 	return df.offset, nil
 }
 
@@ -123,13 +125,13 @@ func (df *Datafile) Write(e pb.Entry) (int64, error) {
 		return -1, ErrReadonly
 	}
 
+	df.Lock()
+	defer df.Unlock()
+
 	e.Index = df.offset
 	e.Timestamp = time.Now().Unix()
 
-	df.Lock()
 	n, err := df.enc.Encode(&e)
-	df.Unlock()
-
 	if err != nil {
 		return -1, err
 	}

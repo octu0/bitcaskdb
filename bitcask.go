@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/derekparker/trie"
 	"github.com/gofrs/flock"
+	"github.com/prologic/trie"
 )
 
 var (
