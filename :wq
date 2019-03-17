@@ -16,7 +16,7 @@ import (
 type Bitcask struct {
 	*flock.Flock
 
-	config    *config
+	config    config
 	path      string
 	curr      *Datafile
 	keydir    *Keydir
