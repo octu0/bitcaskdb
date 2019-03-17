@@ -132,6 +132,10 @@ func (b *Bitcask) put(key string, value []byte) (int64, error) {
 		}
 
 		df, err := NewDatafile(b.path, b.curr.id, true)
+		if err != nil {
+			return -1, err
+		}
+
 		b.datafiles = append(b.datafiles, df)
 
 		id := b.curr.id + 1
