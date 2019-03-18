@@ -13,11 +13,11 @@ dev: build
 build: clean generate
 	@go build \
 		-tags "netgo static_build" -installsuffix netgo \
-		-ldflags "-w -X $(shell go list).Version=$(VERSION) -X $(shell go list).Commit=$(COMMIT)" \
+		-ldflags "-w -X $(shell go list)/internal.Version=$(VERSION) -X $(shell go list)/internal.Commit=$(COMMIT)" \
 		./cmd/bitcask/...
 	@go build \
 		-tags "netgo static_build" -installsuffix netgo \
-		-ldflags "-w -X $(shell go list).Version=$(VERSION) -X $(shell go list).Commit=$(COMMIT)" \
+		-ldflags "-w -X $(shell go list)/internal.Version=$(VERSION) -X $(shell go list)/internal.Commit=$(COMMIT)" \
 		./cmd/bitcaskd/...
 
 generate:

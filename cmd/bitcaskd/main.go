@@ -10,6 +10,7 @@ import (
 	"github.com/tidwall/redcon"
 
 	"github.com/prologic/bitcask"
+	"github.com/prologic/bitcask/internal"
 )
 
 var (
@@ -43,7 +44,7 @@ func main() {
 	}
 
 	if version {
-		fmt.Printf("bitcaskd version %s", bitcask.FullVersion())
+		fmt.Printf("bitcaskd version %s", internal.FullVersion())
 		os.Exit(0)
 	}
 
@@ -60,7 +61,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	log.WithField("bind", bind).WithField("path", path).Infof("starting bitcaskd v%s", bitcask.FullVersion())
+	log.WithField("bind", bind).WithField("path", path).Infof("starting bitcaskd v%s", internal.FullVersion())
 
 	err = redcon.ListenAndServe(bind,
 		func(conn redcon.Conn, cmd redcon.Command) {

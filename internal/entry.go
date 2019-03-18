@@ -1,9 +1,9 @@
-package bitcask
+package internal
 
 import (
 	"hash/crc32"
 
-	pb "github.com/prologic/bitcask/proto"
+	pb "github.com/prologic/bitcask/internal/proto"
 )
 
 func NewEntry(key string, value []byte) pb.Entry {

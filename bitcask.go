@@ -11,6 +11,8 @@ import (
 
 	"github.com/gofrs/flock"
 	"github.com/prologic/trie"
+
+	"github.com/prologic/bitcask/internal"
 )
 
 type Bitcask struct {
@@ -18,9 +20,9 @@ type Bitcask struct {
 
 	config    *config
 	path      string
-	curr      *Datafile
-	keydir    *Keydir
-	datafiles []*Datafile
+	curr      *internal.Datafile
+	keydir    *internal.Keydir
+	datafiles []*internal.Datafile
 	trie      *trie.Trie
 
 	maxDatafileSize int64
@@ -43,14 +45,14 @@ func (b *Bitcask) Sync() error {
 }
 
 func (b *Bitcask) Get(key string) ([]byte, error) {
-	var df *Datafile
+	var df *internal.Datafile
 
 	item, ok := b.keydir.Get(key)
 	if !ok {
 		return nil, fmt.Errorf("error: key not found %s", key)
 	}
 
-	if item.FileID == b.curr.id {
+	if item.FileID == b.curr.FileID() {
 		df = b.curr
 	} else {
 		df = b.datafiles[item.FileID]
@@ -82,7 +84,7 @@ func (b *Bitcask) Put(key string, value []byte) error {
 		return err
 	}
 
-	item := b.keydir.Add(key, b.curr.id, offset)
+	item := b.keydir.Add(key, b.curr.FileID(), offset)
 	b.trie.Add(key, item)
 
 	return nil
@@ -131,22 +133,22 @@ func (b *Bitcask) put(key string, value []byte) (int64, error) {
 			return -1, err
 		}
 
-		df, err := NewDatafile(b.path, b.curr.id, true)
+		df, err := internal.NewDatafile(b.path, b.curr.FileID(), true)
 		if err != nil {
 			return -1, err
 		}
 
 		b.datafiles = append(b.datafiles, df)
 
-		id := b.curr.id + 1
-		curr, err := NewDatafile(b.path, id, false)
+		id := b.curr.FileID() + 1
+		curr, err := internal.NewDatafile(b.path, id, false)
 		if err != nil {
 			return -1, err
 		}
 		b.curr = curr
 	}
 
-	e := NewEntry(key, value)
+	e := internal.NewEntry(key, value)
 	return b.curr.Write(e)
 }
 
@@ -156,12 +158,12 @@ func (b *Bitcask) setMaxDatafileSize(size int64) error {
 }
 
 func Merge(path string, force bool) error {
-	fns, err := getDatafiles(path)
+	fns, err := internal.GetDatafiles(path)
 	if err != nil {
 		return err
 	}
 
-	ids, err := parseIds(fns)
+	ids, err := internal.ParseIds(fns)
 	if err != nil {
 		return err
 	}
@@ -191,9 +193,9 @@ func Merge(path string, force bool) error {
 
 		id := ids[i]
 
-		keydir := NewKeydir()
+		keydir := internal.NewKeydir()
 
-		df, err := NewDatafile(path, id, true)
+		df, err := internal.NewDatafile(path, id, true)
 		if err != nil {
 			return err
 		}
@@ -217,7 +219,7 @@ func Merge(path string, force bool) error {
 			keydir.Add(e.Key, ids[i], e.Offset)
 		}
 
-		tempdf, err := NewDatafile(temp, id, false)
+		tempdf, err := internal.NewDatafile(temp, id, false)
 		if err != nil {
 			return err
 		}
@@ -271,23 +273,23 @@ func Open(path string, options ...option) (*Bitcask, error) {
 		return nil, err
 	}
 
-	fns, err := getDatafiles(path)
+	fns, err := internal.GetDatafiles(path)
 	if err != nil {
 		return nil, err
 	}
 
-	ids, err := parseIds(fns)
+	ids, err := internal.ParseIds(fns)
 	if err != nil {
 		return nil, err
 	}
 
-	var datafiles []*Datafile
+	var datafiles []*internal.Datafile
 
-	keydir := NewKeydir()
+	keydir := internal.NewKeydir()
 	trie := trie.New()
 
 	for i, fn := range fns {
-		df, err := NewDatafile(path, ids[i], true)
+		df, err := internal.NewDatafile(path, ids[i], true)
 		if err != nil {
 			return nil, err
 		}
@@ -300,7 +302,7 @@ func Open(path string, options ...option) (*Bitcask, error) {
 			}
 			defer f.Close()
 
-			hint, err := NewKeydirFromBytes(f)
+			hint, err := internal.NewKeydirFromBytes(f)
 			if err != nil {
 				return nil, err
 			}
@@ -337,7 +339,7 @@ func Open(path string, options ...option) (*Bitcask, error) {
 		id = ids[(len(ids) - 1)]
 	}
 
-	curr, err := NewDatafile(path, id, false)
+	curr, err := internal.NewDatafile(path, id, false)
 	if err != nil {
 		return nil, err
 	}

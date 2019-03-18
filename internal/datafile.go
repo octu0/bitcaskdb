@@ -1,4 +1,4 @@
-package bitcask
+package internal
 
 import (
 	"fmt"
@@ -8,8 +8,8 @@ import (
 
 	"github.com/pkg/errors"
 
-	pb "github.com/prologic/bitcask/proto"
-	"github.com/prologic/bitcask/streampb"
+	pb "github.com/prologic/bitcask/internal/proto"
+	"github.com/prologic/bitcask/internal/streampb"
 )
 
 const (
@@ -69,6 +69,10 @@ func NewDatafile(path string, id int, readonly bool) (*Datafile, error) {
 		dec:    dec,
 		enc:    enc,
 	}, nil
+}
+
+func (df *Datafile) FileID() int {
+	return df.id
 }
 
 func (df *Datafile) Name() string {

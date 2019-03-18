@@ -1,4 +1,4 @@
-package bitcask
+package internal
 
 import (
 	"fmt"
@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-func getDatafiles(path string) ([]string, error) {
+func GetDatafiles(path string) ([]string, error) {
 	fns, err := filepath.Glob(fmt.Sprintf("%s/*.data", path))
 	if err != nil {
 		return nil, err
@@ -17,7 +17,7 @@ func getDatafiles(path string) ([]string, error) {
 	return fns, nil
 }
 
-func parseIds(fns []string) ([]int, error) {
+func ParseIds(fns []string) ([]int, error) {
 	var ids []int
 	for _, fn := range fns {
 		fn = filepath.Base(fn)
