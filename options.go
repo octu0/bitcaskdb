@@ -17,7 +17,7 @@ type config struct {
 	MaxValueSize    int
 }
 
-func NewDefaultConfig() *config {
+func newDefaultConfig() *config {
 	return &config{
 		MaxDatafileSize: DefaultMaxDatafileSize,
 		MaxKeySize:      DefaultMaxKeySize,

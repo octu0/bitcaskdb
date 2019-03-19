@@ -354,7 +354,7 @@ func Open(path string, options ...option) (*Bitcask, error) {
 
 	bitcask := &Bitcask{
 		Flock:     flock.New(filepath.Join(path, "lock")),
-		config:    NewDefaultConfig(),
+		config:    newDefaultConfig(),
 		path:      path,
 		curr:      curr,
 		keydir:    keydir,
