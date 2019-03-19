@@ -25,6 +25,7 @@ generate:
 
 install: build
 	@go install ./cmd/bitcask/...
+	@go install ./cmd/bitcaskd/...
 
 image:
 	@docker build -t prologic/bitcask .
