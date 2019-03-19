@@ -12,13 +12,3 @@ steps:
     settings:
       token:
         from_secret: codecov-token
-
-  - name: notify
-    image: plugins/webhook
-    settings:
-      urls:
-        - https://msgbus.mills.io/ci.mills.io
-    when:
-      status:
-        - success
-        - failure
