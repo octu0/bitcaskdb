@@ -15,8 +15,9 @@ steps:
 
   - name: notify
     image: plugins/webhook
-    urls:
-      - https://msgbus.mills.io/ci.mills.io
+    settings:
+      urls:
+        - https://msgbus.mills.io/ci.mills.io
     when:
       status:
         - success
