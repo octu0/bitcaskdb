@@ -1,7 +1,7 @@
 package bitcask
 
 import (
-	"fmt"
+	"errors"
 	"hash/crc32"
 	"io"
 	"io/ioutil"
@@ -13,6 +13,14 @@ import (
 	"github.com/prologic/trie"
 
 	"github.com/prologic/bitcask/internal"
+)
+
+var (
+	ErrKeyNotFound    = errors.New("error: key not found")
+	ErrKeyTooLarge    = errors.New("error: key too large")
+	ErrValueTooLarge  = errors.New("error: value too large")
+	ErrChecksumFailed = errors.New("error: checksum failed")
+	ErrDatabaseLocked = errors.New("error: database locked")
 )
 
 type Bitcask struct {
@@ -49,7 +57,7 @@ func (b *Bitcask) Get(key string) ([]byte, error) {
 
 	item, ok := b.keydir.Get(key)
 	if !ok {
-		return nil, fmt.Errorf("error: key not found %s", key)
+		return nil, ErrKeyNotFound
 	}
 
 	if item.FileID == b.curr.FileID() {
@@ -65,7 +73,7 @@ func (b *Bitcask) Get(key string) ([]byte, error) {
 
 	checksum := crc32.ChecksumIEEE(e.Value)
 	if checksum != e.Checksum {
-		return nil, fmt.Errorf("error: checksum falied %s %d != %d", key, e.Checksum, checksum)
+		return nil, ErrChecksumFailed
 	}
 
 	return e.Value, nil
@@ -73,10 +81,10 @@ func (b *Bitcask) Get(key string) ([]byte, error) {
 
 func (b *Bitcask) Put(key string, value []byte) error {
 	if len(key) > b.config.MaxKeySize {
-		return fmt.Errorf("error: key too large %d > %d", len(key), b.config.MaxKeySize)
+		return ErrKeyTooLarge
 	}
 	if len(value) > b.config.MaxValueSize {
-		return fmt.Errorf("error: value too large %d > %d", len(value), b.config.MaxValueSize)
+		return ErrValueTooLarge
 	}
 
 	offset, err := b.put(key, value)
@@ -369,7 +377,7 @@ func Open(path string, options ...option) (*Bitcask, error) {
 	}
 
 	if !locked {
-		return nil, fmt.Errorf("error: database locked %s", path)
+		return nil, ErrDatabaseLocked
 	}
 
 	return bitcask, nil

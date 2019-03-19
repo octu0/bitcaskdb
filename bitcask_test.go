@@ -45,7 +45,7 @@ func TestAll(t *testing.T) {
 		assert.NoError(err)
 		_, err = db.Get("foo")
 		assert.Error(err)
-		assert.Equal("error: key not found foo", err.Error())
+		assert.Equal(ErrKeyNotFound, err)
 	})
 
 	t.Run("Sync", func(t *testing.T) {
@@ -92,7 +92,7 @@ func TestDeletedKeys(t *testing.T) {
 			assert.NoError(err)
 			_, err = db.Get("foo")
 			assert.Error(err)
-			assert.Equal("error: key not found foo", err.Error())
+			assert.Equal(ErrKeyNotFound, err)
 		})
 
 		t.Run("Sync", func(t *testing.T) {
@@ -120,7 +120,7 @@ func TestDeletedKeys(t *testing.T) {
 		t.Run("Get", func(t *testing.T) {
 			_, err = db.Get("foo")
 			assert.Error(err)
-			assert.Equal("error: key not found foo", err.Error())
+			assert.Equal(ErrKeyNotFound, err)
 		})
 
 		t.Run("Close", func(t *testing.T) {
@@ -148,7 +148,7 @@ func TestMaxKeySize(t *testing.T) {
 		value := []byte("foobar")
 		err = db.Put(key, value)
 		assert.Error(err)
-		assert.Equal("error: key too large 17 > 16", err.Error())
+		assert.Equal(ErrKeyTooLarge, err)
 	})
 }
 
@@ -170,7 +170,7 @@ func TestMaxValueSize(t *testing.T) {
 		value := []byte(strings.Repeat(" ", 17))
 		err = db.Put(key, value)
 		assert.Error(err)
-		assert.Equal("error: value too large 17 > 16", err.Error())
+		assert.Equal(ErrValueTooLarge, err)
 	})
 }
 
@@ -387,7 +387,7 @@ func TestLocking(t *testing.T) {
 
 	_, err = Open(testdir)
 	assert.Error(err)
-	assert.Equal(fmt.Sprintf("error: database locked %s", testdir), err.Error())
+	assert.Equal(ErrDatabaseLocked, err)
 }
 
 type benchmarkTestCase struct {
