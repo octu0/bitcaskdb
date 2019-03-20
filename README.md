@@ -6,13 +6,13 @@
 [![GoDoc](https://godoc.org/github.com/prologic/bitcask?status.svg)](https://godoc.org/github.com/prologic/bitcask) 
 [![Sourcegraph](https://sourcegraph.com/github.com/prologic/bitcask/-/badge.svg)](https://sourcegraph.com/github.com/prologic/bitcask?badge)
 
-A high performance Key/Value store written in Go with a predictable read/write performance and high throughput. Uses a [Bitcask](https://en.wikipedia.org/wiki/Bitcask) on-disk layout (LSM+WAL) similar to [Riak](https://riak.com/).
+A high performance Key/Value store written in [Go](https://golang.org) with a predictable read/write performance and high throughput. Uses a [Bitcask](https://en.wikipedia.org/wiki/Bitcask) on-disk layout (LSM+WAL) similar to [Riak](https://riak.com/).
 
 ## Features
 
-* Embeddable
-* Builtin CLI
-* Builtin Redis-compatible server
+* Embeddable (`import "github.com/prologic/bitcask"`)
+* Builtin CLI (`bitcask`)
+* Builtin Redis-compatible server (`bitcaskd`)
 * Predictable read/write performance
 * Low latecny
 * High throughput (See: [Performance](README.md#Performance)
@@ -34,16 +34,13 @@ $ go get github.com/prologic/bitcask
 ```#!go
 package main
 
-import (
-    "log"
-
-    "github.com/prologic/bitcask"
-)
+import "github.com/prologic/bitcask"
 
 func main() {
     db, _ := bitcask.Open("/tmp/db")
+    defer db.Close()
     db.Set("Hello", []byte("World"))
-    db.Close()
+    val, _ := db.Get("hello")
 }
 ```
 
