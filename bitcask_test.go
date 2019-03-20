@@ -194,7 +194,7 @@ func TestMaxValueSize(t *testing.T) {
 	})
 }
 
-func TestMerge(t *testing.T) {
+func TestOpenMerge(t *testing.T) {
 	assert := assert.New(t)
 
 	testdir, err := ioutil.TempDir("", "bitcask")
@@ -207,7 +207,7 @@ func TestMerge(t *testing.T) {
 		)
 
 		t.Run("Open", func(t *testing.T) {
-			db, err = Open(testdir, WithMaxDatafileSize(1024))
+			db, err = Open(testdir, WithMaxDatafileSize(32))
 			assert.NoError(err)
 		})
 
@@ -244,6 +244,77 @@ func TestMerge(t *testing.T) {
 			db  *Bitcask
 			err error
 		)
+
+		t.Run("Open", func(t *testing.T) {
+			db, err = Open(testdir)
+			assert.NoError(err)
+		})
+
+		t.Run("Get", func(t *testing.T) {
+			for i := 0; i < 32; i++ {
+				val, err := db.Get(string(i))
+				assert.NoError(err)
+				assert.Equal([]byte(strings.Repeat(" ", 1024)), val)
+			}
+		})
+
+		t.Run("Close", func(t *testing.T) {
+			err = db.Close()
+			assert.NoError(err)
+		})
+	})
+}
+
+func TestMergeOpen(t *testing.T) {
+	var (
+		db  *Bitcask
+		err error
+	)
+
+	assert := assert.New(t)
+
+	testdir, err := ioutil.TempDir("", "bitcask")
+	assert.NoError(err)
+
+	t.Run("Setup", func(t *testing.T) {
+		t.Run("Open", func(t *testing.T) {
+			db, err = Open(testdir, WithMaxDatafileSize(32))
+			assert.NoError(err)
+		})
+
+		t.Run("Put", func(t *testing.T) {
+			for i := 0; i < 1024; i++ {
+				err = db.Put(string(i), []byte(strings.Repeat(" ", 1024)))
+				assert.NoError(err)
+			}
+		})
+
+		t.Run("Get", func(t *testing.T) {
+			for i := 0; i < 32; i++ {
+				err = db.Put(string(i), []byte(strings.Repeat(" ", 1024)))
+				assert.NoError(err)
+				val, err := db.Get(string(i))
+				assert.NoError(err)
+				assert.Equal([]byte(strings.Repeat(" ", 1024)), val)
+			}
+		})
+
+		t.Run("Sync", func(t *testing.T) {
+			err = db.Sync()
+			assert.NoError(err)
+		})
+
+		t.Run("Close", func(t *testing.T) {
+			err = db.Close()
+			assert.NoError(err)
+		})
+	})
+
+	t.Run("Merge", func(t *testing.T) {
+		t.Run("Merge", func(t *testing.T) {
+			err = Merge(testdir, true)
+			assert.NoError(err)
+		})
 
 		t.Run("Open", func(t *testing.T) {
 			db, err = Open(testdir)
