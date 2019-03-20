@@ -40,6 +40,26 @@ func TestAll(t *testing.T) {
 		assert.Equal([]byte("bar"), val)
 	})
 
+	t.Run("Fold", func(t *testing.T) {
+		var (
+			keys   []string
+			values [][]byte
+		)
+
+		err := db.Fold(func(key string) error {
+			value, err := db.Get(key)
+			if err != nil {
+				return err
+			}
+			keys = append(keys, key)
+			values = append(values, value)
+			return nil
+		})
+		assert.NoError(err)
+		assert.Equal([]string{"foo"}, keys)
+		assert.Equal([][]byte{[]byte("bar")}, values)
+	})
+
 	t.Run("Delete", func(t *testing.T) {
 		err := db.Delete("foo")
 		assert.NoError(err)
