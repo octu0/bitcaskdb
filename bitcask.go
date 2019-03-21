@@ -79,6 +79,11 @@ func (b *Bitcask) Get(key string) ([]byte, error) {
 	return e.Value, nil
 }
 
+func (b *Bitcask) Has(key string) bool {
+	_, ok := b.keydir.Get(key)
+	return ok
+}
+
 func (b *Bitcask) Put(key string, value []byte) error {
 	if len(key) > b.config.MaxKeySize {
 		return ErrKeyTooLarge

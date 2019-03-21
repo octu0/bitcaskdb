@@ -40,6 +40,10 @@ func TestAll(t *testing.T) {
 		assert.Equal([]byte("bar"), val)
 	})
 
+	t.Run("Has", func(t *testing.T) {
+		assert.True(db.Has("foo"))
+	})
+
 	t.Run("Fold", func(t *testing.T) {
 		var (
 			keys   []string
