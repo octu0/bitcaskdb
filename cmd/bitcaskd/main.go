@@ -96,6 +96,17 @@ func main() {
 				} else {
 					conn.WriteBulk(value)
 				}
+			case "exists":
+				if len(cmd.Args) != 2 {
+					conn.WriteError("ERR wrong number of arguments for '" + string(cmd.Args[0]) + "' command")
+					return
+				}
+				key := string(cmd.Args[1])
+				if db.Has(key) {
+					conn.WriteInt(1)
+				} else {
+					conn.WriteInt(0)
+				}
 			case "del":
 				if len(cmd.Args) != 2 {
 					conn.WriteError("ERR wrong number of arguments for '" + string(cmd.Args[0]) + "' command")
