@@ -85,10 +85,10 @@ func (b *Bitcask) Has(key string) bool {
 }
 
 func (b *Bitcask) Put(key string, value []byte) error {
-	if len(key) > b.config.MaxKeySize {
+	if len(key) > b.config.maxKeySize {
 		return ErrKeyTooLarge
 	}
-	if len(value) > b.config.MaxValueSize {
+	if len(value) > b.config.maxValueSize {
 		return ErrValueTooLarge
 	}
 
@@ -284,7 +284,7 @@ func Merge(path string, force bool) error {
 	return nil
 }
 
-func Open(path string, options ...option) (*Bitcask, error) {
+func Open(path string, options ...Option) (*Bitcask, error) {
 	if err := os.MkdirAll(path, 0755); err != nil {
 		return nil, err
 	}

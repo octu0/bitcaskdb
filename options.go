@@ -1,47 +1,53 @@
 package bitcask
 
 const (
+	// DefaultMaxDatafileSize is the default maximum datafile size in bytes
 	DefaultMaxDatafileSize = 1 << 20 // 1MB
-	DefaultMaxKeySize      = 64      // 64 bytes
-	DefaultMaxValueSize    = 1 << 16 // 65KB
+
+	// DefaultMaxKeySize is the default maximum key size in bytes
+	DefaultMaxKeySize = 64 // 64 bytes
+
+	// DefaultMaxValueSize is the default value size in bytes
+	DefaultMaxValueSize = 1 << 16 // 65KB
 )
 
-// Option ...
-type Option option
-
-type option func(*config) error
+// Option is a function that takes a config struct and modifies it
+type Option func(*config) error
 
 type config struct {
-	MaxDatafileSize int
-	MaxKeySize      int
-	MaxValueSize    int
+	maxDatafileSize int
+	maxKeySize      int
+	maxValueSize    int
 }
 
 func newDefaultConfig() *config {
 	return &config{
-		MaxDatafileSize: DefaultMaxDatafileSize,
-		MaxKeySize:      DefaultMaxKeySize,
-		MaxValueSize:    DefaultMaxValueSize,
+		maxDatafileSize: DefaultMaxDatafileSize,
+		maxKeySize:      DefaultMaxKeySize,
+		maxValueSize:    DefaultMaxValueSize,
 	}
 }
 
-func WithMaxDatafileSize(size int) option {
+// WithMaxDatafileSize sets the maximum datafile size option
+func WithMaxDatafileSize(size int) Option {
 	return func(cfg *config) error {
-		cfg.MaxDatafileSize = size
+		cfg.maxDatafileSize = size
 		return nil
 	}
 }
 
-func WithMaxKeySize(size int) option {
+// WithMaxKeySize sets the maximum key size option
+func WithMaxKeySize(size int) Option {
 	return func(cfg *config) error {
-		cfg.MaxKeySize = size
+		cfg.maxKeySize = size
 		return nil
 	}
 }
 
-func WithMaxValueSize(size int) option {
+// WithMaxValueSize sets the maximum value size option
+func WithMaxValueSize(size int) Option {
 	return func(cfg *config) error {
-		cfg.MaxValueSize = size
+		cfg.maxValueSize = size
 		return nil
 	}
 }
