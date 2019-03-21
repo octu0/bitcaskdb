@@ -125,6 +125,10 @@ func (b *Bitcask) Scan(prefix string, f func(key string) error) error {
 	return nil
 }
 
+func (b *Bitcask) Keys() chan string {
+	return b.keydir.Keys()
+}
+
 func (b *Bitcask) Fold(f func(key string) error) error {
 	for key := range b.keydir.Keys() {
 		if err := f(key); err != nil {

@@ -55,8 +55,10 @@ func (k *Keydir) Delete(key string) {
 func (k *Keydir) Keys() chan string {
 	ch := make(chan string)
 	go func() {
-		for k := range k.kv {
-			ch <- k
+		k.RLock()
+		defer k.RUnlock()
+		for key := range k.kv {
+			ch <- key
 		}
 		close(ch)
 	}()

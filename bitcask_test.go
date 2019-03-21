@@ -44,6 +44,14 @@ func TestAll(t *testing.T) {
 		assert.True(db.Has("foo"))
 	})
 
+	t.Run("Keys", func(t *testing.T) {
+		keys := make([]string, 0)
+		for key := range db.Keys() {
+			keys = append(keys, key)
+		}
+		assert.Equal([]string{"foo"}, keys)
+	})
+
 	t.Run("Fold", func(t *testing.T) {
 		var (
 			keys   []string
