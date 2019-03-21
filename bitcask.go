@@ -125,6 +125,10 @@ func (b *Bitcask) Scan(prefix string, f func(key string) error) error {
 	return nil
 }
 
+func (b *Bitcask) Len() int {
+	return b.keydir.Len()
+}
+
 func (b *Bitcask) Keys() chan string {
 	return b.keydir.Keys()
 }

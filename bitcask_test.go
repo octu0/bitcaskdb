@@ -40,6 +40,10 @@ func TestAll(t *testing.T) {
 		assert.Equal([]byte("bar"), val)
 	})
 
+	t.Run("Len", func(t *testing.T) {
+		assert.Equal(1, db.Len())
+	})
+
 	t.Run("Has", func(t *testing.T) {
 		assert.True(db.Has("foo"))
 	})

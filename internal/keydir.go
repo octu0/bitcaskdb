@@ -52,6 +52,10 @@ func (k *Keydir) Delete(key string) {
 	delete(k.kv, key)
 }
 
+func (k *Keydir) Len() int {
+	return len(k.kv)
+}
+
 func (k *Keydir) Keys() chan string {
 	ch := make(chan string)
 	go func() {
