@@ -96,6 +96,11 @@ func main() {
 				} else {
 					conn.WriteBulk(value)
 				}
+			case "keys":
+				conn.WriteArray(db.Len())
+				for key := range db.Keys() {
+					conn.WriteBulk([]byte(key))
+				}
 			case "exists":
 				if len(cmd.Args) != 2 {
 					conn.WriteError("ERR wrong number of arguments for '" + string(cmd.Args[0]) + "' command")
