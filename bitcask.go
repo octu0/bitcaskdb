@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/gofrs/flock"
 	"github.com/prologic/trie"
@@ -40,6 +41,8 @@ var (
 // and in-memory hash of key/value pairs as per the Bitcask paper and seen
 // in the Riak database.
 type Bitcask struct {
+	mu sync.RWMutex
+
 	*flock.Flock
 
 	config    *config
@@ -175,6 +178,9 @@ func (b *Bitcask) Fold(f func(key string) error) error {
 }
 
 func (b *Bitcask) put(key string, value []byte) (int64, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
 	size := b.curr.Size()
 	if size >= int64(b.config.maxDatafileSize) {
 		err := b.curr.Close()
