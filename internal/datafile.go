@@ -98,10 +98,10 @@ func (df *Datafile) Sync() error {
 	return df.w.Sync()
 }
 
-func (df *Datafile) Size() (int64, error) {
+func (df *Datafile) Size() int64 {
 	df.RLock()
 	defer df.RUnlock()
-	return df.offset, nil
+	return df.offset
 }
 
 func (df *Datafile) Read() (e pb.Entry, err error) {

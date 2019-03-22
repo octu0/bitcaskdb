@@ -175,11 +175,7 @@ func (b *Bitcask) Fold(f func(key string) error) error {
 }
 
 func (b *Bitcask) put(key string, value []byte) (int64, error) {
-	size, err := b.curr.Size()
-	if err != nil {
-		return -1, err
-	}
-
+	size := b.curr.Size()
 	if size >= int64(b.config.maxDatafileSize) {
 		err := b.curr.Close()
 		if err != nil {
