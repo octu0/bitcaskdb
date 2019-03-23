@@ -89,7 +89,7 @@ func (b *Bitcask) Get(key string) ([]byte, error) {
 		df = b.datafiles[item.FileID]
 	}
 
-	e, err := df.ReadAt(item.Offset)
+	e, err := df.ReadAt(item.Offset, item.Size)
 	if err != nil {
 		return nil, err
 	}
@@ -117,12 +117,12 @@ func (b *Bitcask) Put(key string, value []byte) error {
 		return ErrValueTooLarge
 	}
 
-	offset, err := b.put(key, value)
+	offset, n, err := b.put(key, value)
 	if err != nil {
 		return err
 	}
 
-	item := b.keydir.Add(key, b.curr.FileID(), offset)
+	item := b.keydir.Add(key, b.curr.FileID(), offset, n)
 	b.trie.Add(key, item)
 
 	return nil
@@ -131,7 +131,7 @@ func (b *Bitcask) Put(key string, value []byte) error {
 // Delete deletes the named key. If the key doesn't exist or an I/O error
 // occurs the error is returned.
 func (b *Bitcask) Delete(key string) error {
-	_, err := b.put(key, []byte{})
+	_, _, err := b.put(key, []byte{})
 	if err != nil {
 		return err
 	}
@@ -177,7 +177,7 @@ func (b *Bitcask) Fold(f func(key string) error) error {
 	return nil
 }
 
-func (b *Bitcask) put(key string, value []byte) (int64, error) {
+func (b *Bitcask) put(key string, value []byte) (int64, int64, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -185,12 +185,12 @@ func (b *Bitcask) put(key string, value []byte) (int64, error) {
 	if size >= int64(b.config.maxDatafileSize) {
 		err := b.curr.Close()
 		if err != nil {
-			return -1, err
+			return -1, 0, err
 		}
 
 		df, err := internal.NewDatafile(b.path, b.curr.FileID(), true)
 		if err != nil {
-			return -1, err
+			return -1, 0, err
 		}
 
 		b.datafiles = append(b.datafiles, df)
@@ -198,7 +198,7 @@ func (b *Bitcask) put(key string, value []byte) (int64, error) {
 		id := b.curr.FileID() + 1
 		curr, err := internal.NewDatafile(b.path, id, false)
 		if err != nil {
-			return -1, err
+			return -1, 0, err
 		}
 		b.curr = curr
 	}
@@ -255,7 +255,7 @@ func Merge(path string, force bool) error {
 		defer df.Close()
 
 		for {
-			e, err := df.Read()
+			e, n, err := df.Read()
 			if err != nil {
 				if err == io.EOF {
 					break
@@ -269,7 +269,7 @@ func Merge(path string, force bool) error {
 				continue
 			}
 
-			keydir.Add(e.Key, ids[i], e.Offset)
+			keydir.Add(e.Key, ids[i], e.Offset, n)
 		}
 
 		tempdf, err := internal.NewDatafile(temp, id, false)
@@ -280,12 +280,12 @@ func Merge(path string, force bool) error {
 
 		for key := range keydir.Keys() {
 			item, _ := keydir.Get(key)
-			e, err := df.ReadAt(item.Offset)
+			e, err := df.ReadAt(item.Offset, item.Size)
 			if err != nil {
 				return err
 			}
 
-			_, err = tempdf.Write(e)
+			_, _, err = tempdf.Write(e)
 			if err != nil {
 				return err
 			}
@@ -365,12 +365,12 @@ func Open(path string, options ...Option) (*Bitcask, error) {
 
 			for key := range hint.Keys() {
 				item, _ := hint.Get(key)
-				_ = keydir.Add(key, item.FileID, item.Offset)
+				_ = keydir.Add(key, item.FileID, item.Offset, item.Size)
 				trie.Add(key, item)
 			}
 		} else {
 			for {
-				e, err := df.Read()
+				e, n, err := df.Read()
 				if err != nil {
 					if err == io.EOF {
 						break
@@ -384,7 +384,7 @@ func Open(path string, options ...Option) (*Bitcask, error) {
 					continue
 				}
 
-				item := keydir.Add(e.Key, ids[i], e.Offset)
+				item := keydir.Add(e.Key, ids[i], e.Offset, n)
 				trie.Add(e.Key, item)
 			}
 		}

@@ -66,12 +66,12 @@ type Decoder struct {
 
 // Decode takes a proto.Message and unmarshals the next payload in the
 // underlying io.Reader. It returns an EOF when it's done.
-func (d *Decoder) Decode(v proto.Message) error {
+func (d *Decoder) Decode(v proto.Message) (int64, error) {
 	prefixBuf := make([]byte, prefixSize)
 
 	_, err := io.ReadFull(d.r, prefixBuf)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	n := binary.BigEndian.Uint64(prefixBuf)
@@ -82,11 +82,11 @@ func (d *Decoder) Decode(v proto.Message) error {
 	for idx < n {
 		m, err := d.r.Read(buf[idx:n])
 		if err != nil {
-			return errors.Wrap(translateError(err), "failed reading marshaled data")
+			return 0, errors.Wrap(translateError(err), "failed reading marshaled data")
 		}
 		idx += uint64(m)
 	}
-	return proto.Unmarshal(buf[:n], v)
+	return int64(idx + prefixSize), proto.Unmarshal(buf[:n], v)
 }
 
 func translateError(err error) error {

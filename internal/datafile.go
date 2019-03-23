@@ -1,12 +1,14 @@
 package internal
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
 
 	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
 
 	pb "github.com/prologic/bitcask/internal/proto"
 	"github.com/prologic/bitcask/internal/streampb"
@@ -17,7 +19,8 @@ const (
 )
 
 var (
-	ErrReadonly = errors.New("error: read only datafile")
+	ErrReadonly  = errors.New("error: read only datafile")
+	ErrReadError = errors.New("error: read error")
 )
 
 type Datafile struct {
@@ -104,28 +107,40 @@ func (df *Datafile) Size() int64 {
 	return df.offset
 }
 
-func (df *Datafile) Read() (e pb.Entry, err error) {
+func (df *Datafile) Read() (e pb.Entry, n int64, err error) {
 	df.Lock()
 	defer df.Unlock()
 
-	return e, df.dec.Decode(&e)
-}
-
-func (df *Datafile) ReadAt(index int64) (e pb.Entry, err error) {
-	df.Lock()
-	defer df.Unlock()
-
-	_, err = df.r.Seek(index, os.SEEK_SET)
+	n, err = df.dec.Decode(&e)
 	if err != nil {
 		return
 	}
 
-	return e, df.dec.Decode(&e)
+	return
 }
 
-func (df *Datafile) Write(e pb.Entry) (int64, error) {
+func (df *Datafile) ReadAt(index, size int64) (e pb.Entry, err error) {
+	log.WithField("index", index).WithField("size", size).Debug("ReadAt")
+
+	b := make([]byte, size)
+	n, err := df.r.ReadAt(b, index)
+	if err != nil {
+		return
+	}
+	if int64(n) != size {
+		err = ErrReadError
+		return
+	}
+
+	buf := bytes.NewBuffer(b)
+	dec := streampb.NewDecoder(buf)
+	_, err = dec.Decode(&e)
+	return
+}
+
+func (df *Datafile) Write(e pb.Entry) (int64, int64, error) {
 	if df.w == nil {
-		return -1, ErrReadonly
+		return -1, 0, ErrReadonly
 	}
 
 	df.Lock()
@@ -135,9 +150,9 @@ func (df *Datafile) Write(e pb.Entry) (int64, error) {
 
 	n, err := df.enc.Encode(&e)
 	if err != nil {
-		return -1, err
+		return -1, 0, err
 	}
 	df.offset += n
 
-	return e.Offset, nil
+	return e.Offset, n, nil
 }

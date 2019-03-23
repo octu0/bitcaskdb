@@ -11,6 +11,7 @@ import (
 type Item struct {
 	FileID int
 	Offset int64
+	Size   int64
 }
 
 type Keydir struct {
@@ -24,10 +25,11 @@ func NewKeydir() *Keydir {
 	}
 }
 
-func (k *Keydir) Add(key string, fileid int, offset int64) Item {
+func (k *Keydir) Add(key string, fileid int, offset, size int64) Item {
 	item := Item{
 		FileID: fileid,
 		Offset: offset,
+		Size:   size,
 	}
 
 	k.Lock()

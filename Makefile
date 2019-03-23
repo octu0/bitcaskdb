@@ -34,13 +34,17 @@ release:
 	@./tools/release.sh
 
 profile: build
-	@go test -cpuprofile cpu.prof -memprofile mem.prof -v -bench ./...
+	@go test -cpuprofile cpu.prof -memprofile mem.prof -v -bench .
 
 bench: build
-	@go test -v -benchmem -bench=. ./...
+	@go test -v -benchmem -bench=. .
 
 test: build
-	@go test -v -cover -coverprofile=coverage.txt -covermode=atomic -coverpkg=$(shell go list) -race ./...
+	@go test -v \
+		-cover -coverprofile=coverage.txt -covermode=atomic \
+		-coverpkg=$(shell go list) \
+		-race \
+		.
 
 clean:
 	@git clean -f -d -X
