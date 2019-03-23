@@ -8,7 +8,7 @@ import (
 	"sync"
 
 	"github.com/pkg/errors"
-	log "github.com/sirupsen/logrus"
+	"golang.org/x/exp/mmap"
 
 	pb "github.com/prologic/bitcask/internal/proto"
 	"github.com/prologic/bitcask/internal/streampb"
@@ -28,6 +28,7 @@ type Datafile struct {
 
 	id     int
 	r      *os.File
+	ra     *mmap.ReaderAt
 	w      *os.File
 	offset int64
 	dec    *streampb.Decoder
@@ -37,6 +38,7 @@ type Datafile struct {
 func NewDatafile(path string, id int, readonly bool) (*Datafile, error) {
 	var (
 		r   *os.File
+		ra  *mmap.ReaderAt
 		w   *os.File
 		err error
 	)
@@ -59,6 +61,11 @@ func NewDatafile(path string, id int, readonly bool) (*Datafile, error) {
 		return nil, errors.Wrap(err, "error calling Stat()")
 	}
 
+	ra, err = mmap.Open(fn)
+	if err != nil {
+		return nil, err
+	}
+
 	offset := stat.Size()
 
 	dec := streampb.NewDecoder(r)
@@ -67,6 +74,7 @@ func NewDatafile(path string, id int, readonly bool) (*Datafile, error) {
 	return &Datafile{
 		id:     id,
 		r:      r,
+		ra:     ra,
 		w:      w,
 		offset: offset,
 		dec:    dec,
@@ -84,6 +92,10 @@ func (df *Datafile) Name() string {
 
 func (df *Datafile) Close() error {
 	if df.w == nil {
+		err := df.ra.Close()
+		if err != nil {
+			return err
+		}
 		return df.r.Close()
 	}
 
@@ -120,10 +132,15 @@ func (df *Datafile) Read() (e pb.Entry, n int64, err error) {
 }
 
 func (df *Datafile) ReadAt(index, size int64) (e pb.Entry, err error) {
-	log.WithField("index", index).WithField("size", size).Debug("ReadAt")
+	var n int
 
 	b := make([]byte, size)
-	n, err := df.r.ReadAt(b, index)
+
+	if df.w == nil {
+		n, err = df.ra.ReadAt(b, index)
+	} else {
+		n, err = df.r.ReadAt(b, index)
+	}
 	if err != nil {
 		return
 	}
