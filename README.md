@@ -89,6 +89,15 @@ QUIT
 Connection closed by foreign host.
 ```
 
+## Docker
+
+You can also use the [Bitcask Docker Image](https://cloud.docker.com/u/prologic/repository/docker/prologic/bitcask):
+
+```#!bash
+$ docker pull prologic/bitcask
+$ docker run -d -p 6379:6379 prologic/bitcask
+```
+
 ## Performance
 
 Benchmarks run on a 11" Macbook with a 1.4Ghz Intel Core i7:
