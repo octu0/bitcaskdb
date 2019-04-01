@@ -23,19 +23,19 @@ For a more feature-complete Redis-compatible server, distributed key/value store
 
 ## Development
 
-1. Get the source:
+1. Get the source
 
 ```#!bash
 $ git clone https://github.com/prologic/bitcask.git
 ```
 
-2. Install required tools:
+2. Install required tools
 
 This library uses [Protobuf](https://github.com/protocolbuffers/protobuf) to serialize data on disk. Please follow the
 instructions for installing `protobuf` on your system. You will also need the
 following Go libraries/tools to generate Go code from Protobuf defs:
 
-3. Build the project:
+3. Build the project
 
 ```#!bash
 $ make
