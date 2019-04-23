@@ -5,10 +5,13 @@
 [![Go Report Card](https://goreportcard.com/badge/prologic/bitcask)](https://goreportcard.com/report/prologic/bitcask)
 [![GoDoc](https://godoc.org/github.com/prologic/bitcask?status.svg)](https://godoc.org/github.com/prologic/bitcask) 
 [![Sourcegraph](https://sourcegraph.com/github.com/prologic/bitcask/-/badge.svg)](https://sourcegraph.com/github.com/prologic/bitcask?badge)
-[![GitHub license](https://img.shields.io/github/license/prologic/bitcask.svg)](https://github.com/prologic/bitcask)
 [![Github all releases](https://img.shields.io/github/downloads/prologic/bitcask/total.svg)](https://github.com/prologic/bitcask/releases)
+[![GitHub license](https://img.shields.io/github/license/prologic/bitcask.svg)](https://github.com/prologic/bitcask)
 
-A high performance Key/Value store written in [Go](https://golang.org) with a predictable read/write performance and high throughput. Uses a [Bitcask](https://en.wikipedia.org/wiki/Bitcask) on-disk layout (LSM+WAL) similar to [Riak](https://riak.com/).
+[![](https://images.microbadger.com/badges/version/prologic/bitcask.svg)](https://microbadger.com/images/prologic/bitcask)
+[![](https://images.microbadger.com/badges/image/prologic/bitcask.svg)](https://microbadger.com/images/prologic/bitcask)
+
+A high performance Key/Value store written in [Go](https://golang.org) with a predictable read/write performance and high throughput. Uses a [Bitcask](https://en.wikipedia.org/wiki/Bitcask) on-disk layout (LSM+WAL) similar to [Riak](https://riak.com/). 🗃️
 
 For a more feature-complete Redis-compatible server, distributed key/value store have a look at [Bitraft](https://github.com/prologic/bitraft) which uses this library as its backend. Use [Bitcask](https://github.com/prologic/bitcask) as a starting point or if you want to embed in your application, use [Bitraft](https://github.com/prologic/bitraft) if you need a complete server/client solution with high availability with a Redis-compatible API.
 
@@ -19,7 +22,7 @@ For a more feature-complete Redis-compatible server, distributed key/value store
 * Builtin Redis-compatible server (`bitcaskd`)
 * Predictable read/write performance
 * Low latecny
-* High throughput (See: [Performance](README.md#Performance)
+* High throughput (See: [Performance](README.md#Performance) )
 
 ## Development
 
