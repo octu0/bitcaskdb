@@ -28,7 +28,7 @@ var (
 	// maximum allowed value size (configured with WithMaxValueSize).
 	ErrValueTooLarge = errors.New("error: value too large")
 
-	// ErrChecksumFailed is the error returned if a key/valie retrieved does
+	// ErrChecksumFailed is the error returned if a key/value retrieved does
 	// not match its CRC checksum
 	ErrChecksumFailed = errors.New("error: checksum failed")
 
@@ -54,7 +54,7 @@ type Bitcask struct {
 }
 
 // Close closes the database and removes the lock. It is important to call
-// Close() as this is the only wat to cleanup the lock held by the open
+// Close() as this is the only way to cleanup the lock held by the open
 // database.
 func (b *Bitcask) Close() error {
 	defer func() {
@@ -74,7 +74,7 @@ func (b *Bitcask) Sync() error {
 }
 
 // Get retrieves the value of the given key. If the key is not found or an/I/O
-// error occurs a null byte slice is returend along with the error.
+// error occurs a null byte slice is returned along with the error.
 func (b *Bitcask) Get(key string) ([]byte, error) {
 	var df *internal.Datafile
 
@@ -142,7 +142,7 @@ func (b *Bitcask) Delete(key string) error {
 	return nil
 }
 
-// Scan performa a prefix scan of keys matching the given prefix and calling
+// Scan performs a prefix scan of keys matching the given prefix and calling
 // the function `f` with the keys found. If the function returns an error
 // no further keys are processed and the first error returned.
 func (b *Bitcask) Scan(prefix string, f func(key string) error) error {
