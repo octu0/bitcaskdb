@@ -70,7 +70,7 @@ import "github.com/prologic/bitcask"
 func main() {
     db, _ := bitcask.Open("/tmp/db")
     defer db.Close()
-    db.Set("Hello", []byte("World"))
+    db.Put("Hello", []byte("World"))
     val, _ := db.Get("hello")
 }
 ```
