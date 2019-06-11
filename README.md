@@ -71,7 +71,7 @@ func main() {
     db, _ := bitcask.Open("/tmp/db")
     defer db.Close()
     db.Put("Hello", []byte("World"))
-    val, _ := db.Get("hello")
+    val, _ := db.Get("Hello")
 }
 ```
 
