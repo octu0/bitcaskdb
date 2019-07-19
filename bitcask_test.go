@@ -626,6 +626,9 @@ func BenchmarkScan(b *testing.B) {
 			keys = append(keys, key)
 			return nil
 		})
+		if err != nil {
+			b.Fatal(err)
+		}
 		sort.Strings(keys)
 		if !reflect.DeepEqual(expected, keys) {
 			b.Fatal(fmt.Errorf("expected keys=#%v got=%#v", expected, keys))
