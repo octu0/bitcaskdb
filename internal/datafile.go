@@ -91,12 +91,14 @@ func (df *Datafile) Name() string {
 }
 
 func (df *Datafile) Close() error {
+	defer func() {
+		df.ra.Close()
+		df.r.Close()
+	}()
+
+	// Readonly Datafile -- Nothing further to close on the write side
 	if df.w == nil {
-		err := df.ra.Close()
-		if err != nil {
-			return err
-		}
-		return df.r.Close()
+		return nil
 	}
 
 	err := df.Sync()
