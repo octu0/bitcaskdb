@@ -230,7 +230,7 @@ func Merge(path string, force bool) error {
 	fns = fns[:len(fns)-1]
 	ids = ids[:len(ids)-1]
 
-	temp, err := ioutil.TempDir("", "bitcask")
+	temp, err := ioutil.TempDir(path, "merge")
 	if err != nil {
 		return err
 	}
