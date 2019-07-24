@@ -3,6 +3,7 @@ package bitcask
 import (
 	"fmt"
 	"io/ioutil"
+	"os"
 	"reflect"
 	"sort"
 	"strings"
@@ -503,10 +504,16 @@ type benchmarkTestCase struct {
 }
 
 func BenchmarkGet(b *testing.B) {
-	testdir, err := ioutil.TempDir("", "bitcask")
+	currentDir, err := os.Getwd()
 	if err != nil {
 		b.Fatal(err)
 	}
+
+	testdir, err := ioutil.TempDir(currentDir, "bitcask_bench")
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer os.RemoveAll(testdir)
 
 	db, err := Open(testdir)
 	if err != nil {
@@ -553,10 +560,16 @@ func BenchmarkGet(b *testing.B) {
 }
 
 func BenchmarkPut(b *testing.B) {
-	testdir, err := ioutil.TempDir("", "bitcask")
+	currentDir, err := os.Getwd()
 	if err != nil {
 		b.Fatal(err)
 	}
+
+	testdir, err := ioutil.TempDir(currentDir, "bitcask")
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer os.RemoveAll(testdir)
 
 	db, err := Open(testdir)
 	if err != nil {
@@ -594,10 +607,16 @@ func BenchmarkPut(b *testing.B) {
 }
 
 func BenchmarkScan(b *testing.B) {
-	testdir, err := ioutil.TempDir("", "bitcask")
+	currentDir, err := os.Getwd()
 	if err != nil {
 		b.Fatal(err)
 	}
+
+	testdir, err := ioutil.TempDir(currentDir, "bitcask")
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer os.RemoveAll(testdir)
 
 	db, err := Open(testdir)
 	if err != nil {
