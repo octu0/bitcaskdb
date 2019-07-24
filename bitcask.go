@@ -234,6 +234,7 @@ func Merge(path string, force bool) error {
 	if err != nil {
 		return err
 	}
+	defer os.RemoveAll(temp)
 
 	for i, fn := range fns {
 		// Don't merge Datafiles whose .hint files we've already generated
