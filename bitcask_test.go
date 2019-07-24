@@ -528,6 +528,8 @@ func BenchmarkGet(b *testing.B) {
 
 	for _, tt := range tests {
 		b.Run(tt.name, func(b *testing.B) {
+			b.SetBytes(int64(tt.size))
+
 			key := "foo"
 			value := []byte(strings.Repeat(" ", tt.size))
 
@@ -576,6 +578,8 @@ func BenchmarkPut(b *testing.B) {
 
 	for _, tt := range tests {
 		b.Run(tt.name, func(b *testing.B) {
+			b.SetBytes(int64(tt.size))
+
 			key := "foo"
 			value := []byte(strings.Repeat(" ", tt.size))
 			b.ResetTimer()
