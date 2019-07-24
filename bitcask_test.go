@@ -565,7 +565,7 @@ func BenchmarkPut(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	testdir, err := ioutil.TempDir(currentDir, "bitcask")
+	testdir, err := ioutil.TempDir(currentDir, "bitcask_bench")
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -612,7 +612,7 @@ func BenchmarkScan(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	testdir, err := ioutil.TempDir(currentDir, "bitcask")
+	testdir, err := ioutil.TempDir(currentDir, "bitcask_bench")
 	if err != nil {
 		b.Fatal(err)
 	}
