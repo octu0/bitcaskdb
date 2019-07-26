@@ -143,10 +143,10 @@ BenchmarkGet/4K-4           	  200000	      8960 ns/op	 457.11 MB/s	   13984 B/o
 BenchmarkGet/8K-4           	  100000	     12465 ns/op	 657.16 MB/s	   27296 B/op	       7 allocs/op
 BenchmarkGet/16K-4          	  100000	     19233 ns/op	 851.84 MB/s	   53408 B/op	       7 allocs/op
 BenchmarkGet/32K-4          	   50000	     33106 ns/op	 989.77 MB/s	  114848 B/op	       7 allocs/op
+
 BenchmarkPut/128B-4         	  100000	     13659 ns/op	   9.37 MB/s	     409 B/op	       6 allocs/op
 BenchmarkPut/256B-4         	  100000	     14854 ns/op	  17.23 MB/s	     539 B/op	       6 allocs/op
 BenchmarkPut/512B-4         	  100000	     20823 ns/op	  24.59 MB/s	     829 B/op	       6 allocs/op
-
 BenchmarkPut/1K-4           	   50000	     28086 ns/op	  36.46 MB/s	    1411 B/op	       6 allocs/op
 BenchmarkPut/2K-4           	   30000	     40797 ns/op	  50.20 MB/s	    2574 B/op	       6 allocs/op
 BenchmarkPut/4K-4           	   20000	     75518 ns/op	  54.24 MB/s	    5155 B/op	       6 allocs/op
