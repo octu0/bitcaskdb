@@ -5,6 +5,7 @@ import (
 	"encoding/gob"
 	"io"
 	"io/ioutil"
+	"os"
 	"sync"
 )
 
@@ -79,6 +80,21 @@ func (k *Keydir) Bytes() ([]byte, error) {
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+func (k *Keydir) Load(fn string) error {
+	f, err := os.Open(fn)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	dec := gob.NewDecoder(f)
+	if err := dec.Decode(&k.kv); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (k *Keydir) Save(fn string) error {

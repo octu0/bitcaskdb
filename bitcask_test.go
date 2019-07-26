@@ -211,38 +211,39 @@ func TestMaxValueSize(t *testing.T) {
 	})
 }
 
-func TestOpenMerge(t *testing.T) {
+func TestStats(t *testing.T) {
+	var (
+		db  *Bitcask
+		err error
+	)
+
 	assert := assert.New(t)
 
 	testdir, err := ioutil.TempDir("", "bitcask")
 	assert.NoError(err)
 
 	t.Run("Setup", func(t *testing.T) {
-		var (
-			db  *Bitcask
-			err error
-		)
-
 		t.Run("Open", func(t *testing.T) {
-			db, err = Open(testdir, WithMaxDatafileSize(32))
+			db, err = Open(testdir)
 			assert.NoError(err)
 		})
 
 		t.Run("Put", func(t *testing.T) {
-			for i := 0; i < 1024; i++ {
-				err = db.Put(string(i), []byte(strings.Repeat(" ", 1024)))
-				assert.NoError(err)
-			}
+			err := db.Put("foo", []byte("bar"))
+			assert.NoError(err)
 		})
 
 		t.Run("Get", func(t *testing.T) {
-			for i := 0; i < 32; i++ {
-				err = db.Put(string(i), []byte(strings.Repeat(" ", 1024)))
-				assert.NoError(err)
-				val, err := db.Get(string(i))
-				assert.NoError(err)
-				assert.Equal([]byte(strings.Repeat(" ", 1024)), val)
-			}
+			val, err := db.Get("foo")
+			assert.NoError(err)
+			assert.Equal([]byte("bar"), val)
+		})
+
+		t.Run("Stats", func(t *testing.T) {
+			stats, err := db.Stats()
+			assert.NoError(err)
+			assert.Equal(stats.Datafiles, 0)
+			assert.Equal(stats.Keys, 1)
 		})
 
 		t.Run("Sync", func(t *testing.T) {
@@ -255,34 +256,9 @@ func TestOpenMerge(t *testing.T) {
 			assert.NoError(err)
 		})
 	})
-
-	t.Run("Merge", func(t *testing.T) {
-		var (
-			db  *Bitcask
-			err error
-		)
-
-		t.Run("Open", func(t *testing.T) {
-			db, err = Open(testdir)
-			assert.NoError(err)
-		})
-
-		t.Run("Get", func(t *testing.T) {
-			for i := 0; i < 32; i++ {
-				val, err := db.Get(string(i))
-				assert.NoError(err)
-				assert.Equal([]byte(strings.Repeat(" ", 1024)), val)
-			}
-		})
-
-		t.Run("Close", func(t *testing.T) {
-			err = db.Close()
-			assert.NoError(err)
-		})
-	})
 }
 
-func TestMergeOpen(t *testing.T) {
+func TestMerge(t *testing.T) {
 	var (
 		db  *Bitcask
 		err error
@@ -300,50 +276,43 @@ func TestMergeOpen(t *testing.T) {
 		})
 
 		t.Run("Put", func(t *testing.T) {
-			for i := 0; i < 1024; i++ {
-				err = db.Put(string(i), []byte(strings.Repeat(" ", 1024)))
+			err := db.Put("foo", []byte("bar"))
+			assert.NoError(err)
+		})
+
+		s1, err := db.Stats()
+		assert.NoError(err)
+		assert.Equal(0, s1.Datafiles)
+		assert.Equal(1, s1.Keys)
+
+		t.Run("Put", func(t *testing.T) {
+			for i := 0; i < 10; i++ {
+				err := db.Put("foo", []byte("bar"))
 				assert.NoError(err)
 			}
 		})
 
-		t.Run("Get", func(t *testing.T) {
-			for i := 0; i < 32; i++ {
-				err = db.Put(string(i), []byte(strings.Repeat(" ", 1024)))
-				assert.NoError(err)
-				val, err := db.Get(string(i))
-				assert.NoError(err)
-				assert.Equal([]byte(strings.Repeat(" ", 1024)), val)
-			}
+		s2, err := db.Stats()
+		assert.NoError(err)
+		assert.Equal(5, s2.Datafiles)
+		assert.Equal(1, s2.Keys)
+		assert.True(s2.Size > s1.Size)
+
+		t.Run("Merge", func(t *testing.T) {
+			err := db.Merge()
+			assert.NoError(err)
 		})
+
+		s3, err := db.Stats()
+		assert.NoError(err)
+		assert.Equal(1, s3.Datafiles)
+		assert.Equal(1, s3.Keys)
+		assert.True(s3.Size > s1.Size)
+		assert.True(s3.Size < s2.Size)
 
 		t.Run("Sync", func(t *testing.T) {
 			err = db.Sync()
 			assert.NoError(err)
-		})
-
-		t.Run("Close", func(t *testing.T) {
-			err = db.Close()
-			assert.NoError(err)
-		})
-	})
-
-	t.Run("Merge", func(t *testing.T) {
-		t.Run("Merge", func(t *testing.T) {
-			err = Merge(testdir, true)
-			assert.NoError(err)
-		})
-
-		t.Run("Open", func(t *testing.T) {
-			db, err = Open(testdir)
-			assert.NoError(err)
-		})
-
-		t.Run("Get", func(t *testing.T) {
-			for i := 0; i < 32; i++ {
-				val, err := db.Get(string(i))
-				assert.NoError(err)
-				assert.Equal([]byte(strings.Repeat(" ", 1024)), val)
-			}
 		})
 
 		t.Run("Close", func(t *testing.T) {

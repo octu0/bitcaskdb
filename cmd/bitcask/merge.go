@@ -20,28 +20,23 @@ keys.`,
 	Args: cobra.ExactArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
 		path := viper.GetString("path")
-		force, err := cmd.Flags().GetBool("force")
-		if err != nil {
-			log.WithError(err).Error("error parsing force flag")
-			os.Exit(1)
-		}
 
-		os.Exit(merge(path, force))
+		os.Exit(merge(path))
 	},
 }
 
 func init() {
 	RootCmd.AddCommand(mergeCmd)
-
-	mergeCmd.Flags().BoolP(
-		"force", "f", false,
-		"Force a re-merge even if .hint files exist",
-	)
 }
 
-func merge(path string, force bool) int {
-	err := bitcask.Merge(path, force)
+func merge(path string) int {
+	db, err := bitcask.Open(path)
 	if err != nil {
+		log.WithError(err).Error("error opening database")
+		return 1
+	}
+
+	if err = db.Merge(); err != nil {
 		log.WithError(err).Error("error merging database")
 		return 1
 	}

@@ -6,8 +6,8 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"path"
 	"path/filepath"
-	"strings"
 	"sync"
 
 	"github.com/gofrs/flock"
@@ -46,11 +46,36 @@ type Bitcask struct {
 	*flock.Flock
 
 	config    *config
+	options   []Option
 	path      string
 	curr      *internal.Datafile
 	keydir    *internal.Keydir
 	datafiles []*internal.Datafile
 	trie      *trie.Trie
+}
+
+// Stats is a struct returned by Stats() on an open Bitcask instance
+type Stats struct {
+	Datafiles int
+	Keys      int
+	Size      int64
+}
+
+// Stats returns statistics about the database including the number of
+// data files, keys and overall size on disk of the data
+func (b *Bitcask) Stats() (stats Stats, err error) {
+	var size int64
+
+	size, err = internal.DirSize(b.path)
+	if err != nil {
+		return
+	}
+
+	stats.Datafiles = len(b.datafiles)
+	stats.Keys = b.keydir.Len()
+	stats.Size = size
+
+	return
 }
 
 // Close closes the database and removes the lock. It is important to call
@@ -62,9 +87,16 @@ func (b *Bitcask) Close() error {
 		os.Remove(b.Flock.Path())
 	}()
 
-	for _, df := range b.datafiles {
-		df.Close()
+	if err := b.keydir.Save(path.Join(b.path, "index")); err != nil {
+		return err
 	}
+
+	for _, df := range b.datafiles {
+		if err := df.Close(); err != nil {
+			return err
+		}
+	}
+
 	return b.curr.Close()
 }
 
@@ -207,11 +239,11 @@ func (b *Bitcask) put(key string, value []byte) (int64, int64, error) {
 	return b.curr.Write(e)
 }
 
-// Merge merges all datafiles in the database creating hint files for faster
-// startup. Old keys are squashed and deleted keys removes. Call this function
-// periodically to reclaim disk space.
-func Merge(path string, force bool) error {
-	fns, err := internal.GetDatafiles(path)
+func (b *Bitcask) reopen() error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	fns, err := internal.GetDatafiles(b.path)
 	if err != nil {
 		return err
 	}
@@ -219,164 +251,38 @@ func Merge(path string, force bool) error {
 	ids, err := internal.ParseIds(fns)
 	if err != nil {
 		return err
-	}
-
-	// Do not merge if we only have 1 Datafile
-	if len(ids) <= 1 {
-		return nil
-	}
-
-	// Don't merge the Active Datafile (the last one)
-	fns = fns[:len(fns)-1]
-	ids = ids[:len(ids)-1]
-
-	temp, err := ioutil.TempDir(path, "merge")
-	if err != nil {
-		return err
-	}
-	defer os.RemoveAll(temp)
-
-	for i, fn := range fns {
-		// Don't merge Datafiles whose .hint files we've already generated
-		// (they are already merged); unless we set the force flag to true
-		// (forcing a re-merge).
-		if filepath.Ext(fn) == ".hint" && !force {
-			// Already merged
-			continue
-		}
-
-		id := ids[i]
-
-		keydir := internal.NewKeydir()
-
-		df, err := internal.NewDatafile(path, id, true)
-		if err != nil {
-			return err
-		}
-		defer df.Close()
-
-		for {
-			e, n, err := df.Read()
-			if err != nil {
-				if err == io.EOF {
-					break
-				}
-				return err
-			}
-
-			// Tombstone value  (deleted key)
-			if len(e.Value) == 0 {
-				keydir.Delete(e.Key)
-				continue
-			}
-
-			keydir.Add(e.Key, ids[i], e.Offset, n)
-		}
-
-		tempdf, err := internal.NewDatafile(temp, id, false)
-		if err != nil {
-			return err
-		}
-		defer tempdf.Close()
-
-		for key := range keydir.Keys() {
-			item, _ := keydir.Get(key)
-			e, err := df.ReadAt(item.Offset, item.Size)
-			if err != nil {
-				return err
-			}
-
-			_, _, err = tempdf.Write(e)
-			if err != nil {
-				return err
-			}
-		}
-
-		err = tempdf.Close()
-		if err != nil {
-			return err
-		}
-
-		err = df.Close()
-		if err != nil {
-			return err
-		}
-
-		err = os.Rename(tempdf.Name(), df.Name())
-		if err != nil {
-			return err
-		}
-
-		hint := strings.TrimSuffix(df.Name(), ".data") + ".hint"
-		err = keydir.Save(hint)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// Open opens the database at the given path with optional options.
-// Options can be provided with the `WithXXX` functions that provide
-// configuration options as functions.
-func Open(path string, options ...Option) (*Bitcask, error) {
-	if err := os.MkdirAll(path, 0755); err != nil {
-		return nil, err
-	}
-
-	err := Merge(path, false)
-	if err != nil {
-		return nil, err
-	}
-
-	fns, err := internal.GetDatafiles(path)
-	if err != nil {
-		return nil, err
-	}
-
-	ids, err := internal.ParseIds(fns)
-	if err != nil {
-		return nil, err
 	}
 
 	var datafiles []*internal.Datafile
 
+	for _, id := range ids {
+		df, err := internal.NewDatafile(b.path, id, true)
+		if err != nil {
+			return err
+		}
+		datafiles = append(datafiles, df)
+	}
+
 	keydir := internal.NewKeydir()
 	trie := trie.New()
 
-	for i, fn := range fns {
-		df, err := internal.NewDatafile(path, ids[i], true)
-		if err != nil {
-			return nil, err
+	if internal.Exists(path.Join(b.path, "index")) {
+		if err := keydir.Load(path.Join(b.path, "index")); err != nil {
+			return err
 		}
-		datafiles = append(datafiles, df)
-
-		if filepath.Ext(fn) == ".hint" {
-			f, err := os.Open(filepath.Join(path, fn))
-			if err != nil {
-				return nil, err
-			}
-			defer f.Close()
-
-			hint, err := internal.NewKeydirFromBytes(f)
-			if err != nil {
-				return nil, err
-			}
-
-			for key := range hint.Keys() {
-				item, _ := hint.Get(key)
-				_ = keydir.Add(key, item.FileID, item.Offset, item.Size)
-				trie.Add(key, item)
-			}
-		} else {
+		for key := range keydir.Keys() {
+			item, _ := keydir.Get(key)
+			trie.Add(key, item)
+		}
+	} else {
+		for i, df := range datafiles {
 			for {
 				e, n, err := df.Read()
 				if err != nil {
 					if err == io.EOF {
 						break
 					}
-					return nil, err
+					return err
 				}
 
 				// Tombstone value  (deleted key)
@@ -396,24 +302,118 @@ func Open(path string, options ...Option) (*Bitcask, error) {
 		id = ids[(len(ids) - 1)]
 	}
 
-	curr, err := internal.NewDatafile(path, id, false)
+	curr, err := internal.NewDatafile(b.path, id, false)
 	if err != nil {
+		return err
+	}
+
+	b.curr = curr
+	b.datafiles = datafiles
+
+	b.keydir = keydir
+
+	b.trie = trie
+
+	return nil
+}
+
+// Merge merges all datafiles in the database. Old keys are squashed
+// and deleted keys removes. Duplicate key/value pairs are also removed.
+// Call this function periodically to reclaim disk space.
+func (b *Bitcask) Merge() error {
+	// Temporary merged database path
+	temp, err := ioutil.TempDir(b.path, "merge")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(temp)
+
+	// Create a merged database
+	mdb, err := Open(temp, b.options...)
+	if err != nil {
+		return err
+	}
+
+	// Rewrite all key/value pairs into merged database
+	// Doing this automatically strips deleted keys and
+	// old key/value pairs
+	err = b.Fold(func(key string) error {
+		value, err := b.Get(key)
+		if err != nil {
+			return err
+		}
+
+		if err := mdb.Put(key, value); err != nil {
+			return err
+		}
+
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	err = mdb.Close()
+	if err != nil {
+		return err
+	}
+
+	// Close the database
+	err = b.Close()
+	if err != nil {
+		return err
+	}
+
+	// Remove all data files
+	files, err := ioutil.ReadDir(b.path)
+	if err != nil {
+		return err
+	}
+	for _, file := range files {
+		if !file.IsDir() {
+			err := os.RemoveAll(path.Join([]string{b.path, file.Name()}...))
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	// Rename all merged data files
+	files, err = ioutil.ReadDir(mdb.path)
+	if err != nil {
+		return err
+	}
+	for _, file := range files {
+		err := os.Rename(
+			path.Join([]string{mdb.path, file.Name()}...),
+			path.Join([]string{b.path, file.Name()}...),
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	// And finally reopen the database
+	return b.reopen()
+}
+
+// Open opens the database at the given path with optional options.
+// Options can be provided with the `WithXXX` functions that provide
+// configuration options as functions.
+func Open(path string, options ...Option) (*Bitcask, error) {
+	if err := os.MkdirAll(path, 0755); err != nil {
 		return nil, err
 	}
 
 	bitcask := &Bitcask{
-		Flock:     flock.New(filepath.Join(path, "lock")),
-		config:    newDefaultConfig(),
-		path:      path,
-		curr:      curr,
-		keydir:    keydir,
-		datafiles: datafiles,
-		trie:      trie,
+		Flock:   flock.New(filepath.Join(path, "lock")),
+		config:  newDefaultConfig(),
+		options: options,
+		path:    path,
 	}
 
 	for _, opt := range options {
-		err = opt(bitcask.config)
-		if err != nil {
+		if err := opt(bitcask.config); err != nil {
 			return nil, err
 		}
 	}
@@ -427,5 +427,22 @@ func Open(path string, options ...Option) (*Bitcask, error) {
 		return nil, ErrDatabaseLocked
 	}
 
+	if err := bitcask.reopen(); err != nil {
+		return nil, err
+	}
+
 	return bitcask, nil
+}
+
+// Merge calls Bitcask.Merge()
+// XXX: Deprecated; Please use the `.Merge()` method
+// XXX: This is only kept here for backwards compatibility
+//      it will be removed in future releases at some point
+func Merge(path string, force bool) error {
+	db, err := Open(path)
+	if err != nil {
+		return err
+	}
+
+	return db.Merge()
 }
