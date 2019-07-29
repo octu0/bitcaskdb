@@ -50,7 +50,7 @@ type Bitcask struct {
 	path      string
 	curr      *internal.Datafile
 	keydir    *internal.Keydir
-	datafiles []*internal.Datafile
+	datafiles map[int]*internal.Datafile
 	trie      *trie.Trie
 }
 
@@ -220,14 +220,16 @@ func (b *Bitcask) put(key string, value []byte) (int64, int64, error) {
 			return -1, 0, err
 		}
 
-		df, err := internal.NewDatafile(b.path, b.curr.FileID(), true)
+		id := b.curr.FileID()
+
+		df, err := internal.NewDatafile(b.path, id, true)
 		if err != nil {
 			return -1, 0, err
 		}
 
-		b.datafiles = append(b.datafiles, df)
+		b.datafiles[id] = df
 
-		id := b.curr.FileID() + 1
+		id = b.curr.FileID() + 1
 		curr, err := internal.NewDatafile(b.path, id, false)
 		if err != nil {
 			return -1, 0, err
@@ -253,14 +255,14 @@ func (b *Bitcask) reopen() error {
 		return err
 	}
 
-	var datafiles []*internal.Datafile
+	datafiles := make(map[int]*internal.Datafile, len(ids))
 
 	for _, id := range ids {
 		df, err := internal.NewDatafile(b.path, id, true)
 		if err != nil {
 			return err
 		}
-		datafiles = append(datafiles, df)
+		datafiles[id] = df
 	}
 
 	keydir := internal.NewKeydir()
