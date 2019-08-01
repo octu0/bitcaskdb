@@ -42,17 +42,15 @@ func (k *Keydir) Add(key string, fileid int, offset, size int64) Item {
 
 func (k *Keydir) Get(key string) (Item, bool) {
 	k.RLock()
-	defer k.RUnlock()
-
 	item, ok := k.kv[key]
+	k.RUnlock()
 	return item, ok
 }
 
 func (k *Keydir) Delete(key string) {
 	k.Lock()
-	defer k.Unlock()
-
 	delete(k.kv, key)
+	k.Unlock()
 }
 
 func (k *Keydir) Len() int {
@@ -63,11 +61,11 @@ func (k *Keydir) Keys() chan string {
 	ch := make(chan string)
 	go func() {
 		k.RLock()
-		defer k.RUnlock()
 		for key := range k.kv {
 			ch <- key
 		}
 		close(ch)
+		k.RUnlock()
 	}()
 	return ch
 }
