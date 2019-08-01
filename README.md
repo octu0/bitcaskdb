@@ -21,7 +21,7 @@ For a more feature-complete Redis-compatible server, distributed key/value store
 * Builtin CLI (`bitcask`)
 * Builtin Redis-compatible server (`bitcaskd`)
 * Predictable read/write performance
-* Low latecny
+* Low latency
 * High throughput (See: [Performance](README.md#Performance) )
 
 ## Development
@@ -37,6 +37,7 @@ $ git clone https://github.com/prologic/bitcask.git
 This library uses [Protobuf](https://github.com/protocolbuffers/protobuf) to serialize data on disk. Please follow the
 instructions for installing `protobuf` on your system. You will also need the
 following Go libraries/tools to generate Go code from Protobuf defs:
+- [protoc-gen-go](https://github.com/golang/protobuf)
 
 3. Build the project
 
@@ -45,8 +46,6 @@ $ make
 ```
 
 This will invoke `go generate` and `go build`.
-
-- [protoc-gen-go](https://github.com/golang/protobuf)
 
 ## Install
 
