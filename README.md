@@ -4,12 +4,7 @@
 [![CodeCov](https://codecov.io/gh/prologic/bitcask/branch/master/graph/badge.svg)](https://codecov.io/gh/prologic/bitcask)
 [![Go Report Card](https://goreportcard.com/badge/prologic/bitcask)](https://goreportcard.com/report/prologic/bitcask)
 [![GoDoc](https://godoc.org/github.com/prologic/bitcask?status.svg)](https://godoc.org/github.com/prologic/bitcask) 
-[![Sourcegraph](https://sourcegraph.com/github.com/prologic/bitcask/-/badge.svg)](https://sourcegraph.com/github.com/prologic/bitcask?badge)
-[![Github all releases](https://img.shields.io/github/downloads/prologic/bitcask/total.svg)](https://github.com/prologic/bitcask/releases)
 [![GitHub license](https://img.shields.io/github/license/prologic/bitcask.svg)](https://github.com/prologic/bitcask)
-
-[![](https://images.microbadger.com/badges/version/prologic/bitcask.svg)](https://microbadger.com/images/prologic/bitcask)
-[![](https://images.microbadger.com/badges/image/prologic/bitcask.svg)](https://microbadger.com/images/prologic/bitcask)
 
 A high performance Key/Value store written in [Go](https://golang.org) with a predictable read/write performance and high throughput. Uses a [Bitcask](https://en.wikipedia.org/wiki/Bitcask) on-disk layout (LSM+WAL) similar to [Riak](https://riak.com/). 🗃️
 
