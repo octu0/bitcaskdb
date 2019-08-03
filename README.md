@@ -23,7 +23,7 @@ For a more feature-complete Redis-compatible server, distributed key/value store
 
 1. Get the source
 
-```#!bash
+```#!sh
 $ git clone https://github.com/prologic/bitcask.git
 ```
 
@@ -36,7 +36,7 @@ following Go libraries/tools to generate Go code from Protobuf defs:
 
 3. Build the project
 
-```#!bash
+```#!sh
 $ make
 ```
 
@@ -44,7 +44,7 @@ This will invoke `go generate` and `go build`.
 
 ## Install
 
-```#!bash
+```#!sh
 $ go get github.com/prologic/bitcask
 ```
 
@@ -52,7 +52,7 @@ $ go get github.com/prologic/bitcask
 
 Install the package into your project:
 
-```#!bash
+```#!sh
 $ go get github.com/prologic/bitcask
 ```
 
@@ -74,7 +74,7 @@ documentation and other examples.
 
 ## Usage (tool)
 
-```#!bash
+```#!sh
 $ bitcask -p /tmp/db set Hello World
 $ bitcask -p /tmp/db get Hello
 World
@@ -84,14 +84,14 @@ World
 
 There is also a builtin very  simple Redis-compatible server called `bitcaskd`:
 
-```#!bash
+```#!sh
 $ ./bitcaskd ./tmp
 INFO[0000] starting bitcaskd v0.0.7@146f777              bind=":6379" path=./tmp
 ```
 
 Example session:
 
-```
+```#!sh
 $ telnet localhost 6379
 Trying ::1...
 Connected to localhost.
@@ -116,7 +116,7 @@ Connection closed by foreign host.
 
 You can also use the [Bitcask Docker Image](https://cloud.docker.com/u/prologic/repository/docker/prologic/bitcask):
 
-```#!bash
+```#!sh
 $ docker pull prologic/bitcask
 $ docker run -d -p 6379:6379 prologic/bitcask
 ```
@@ -125,7 +125,7 @@ $ docker run -d -p 6379:6379 prologic/bitcask
 
 Benchmarks run on a 11" Macbook with a 1.4Ghz Intel Core i7:
 
-```
+```#!sh
 $ make bench
 ...
 BenchmarkGet/128B-4         	  300000	      4071 ns/op	  31.43 MB/s	     608 B/op	       7 allocs/op
