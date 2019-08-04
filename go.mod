@@ -6,6 +6,7 @@ require (
 	github.com/golang/protobuf v1.3.2
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
 	github.com/magiconair/properties v1.8.1 // indirect
+	github.com/oxtoacart/bpool v0.0.0-20190530202638-03653db5a59c
 	github.com/pelletier/go-toml v1.4.0 // indirect
 	github.com/pkg/errors v0.8.1
 	github.com/prologic/trie v0.0.0-20190322091023-3972df81f9b5

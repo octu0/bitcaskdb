@@ -1,5 +1,7 @@
 package bitcask
 
+import "errors"
+
 const (
 	// DefaultMaxDatafileSize is the default maximum datafile size in bytes
 	DefaultMaxDatafileSize = 1 << 20 // 1MB
@@ -11,6 +13,12 @@ const (
 	DefaultMaxValueSize = 1 << 16 // 65KB
 )
 
+var (
+	// ErrMaxConcurrencyLowerEqZero is the error returned for
+	// maxConcurrency option not greater than zero
+	ErrMaxConcurrencyLowerEqZero = errors.New("error: maxConcurrency must be greater than zero")
+)
+
 // Option is a function that takes a config struct and modifies it
 type Option func(*config) error
 
@@ -18,6 +26,7 @@ type config struct {
 	maxDatafileSize int
 	maxKeySize      int
 	maxValueSize    int
+	maxConcurrency  *int
 }
 
 func newDefaultConfig() *config {
@@ -48,6 +57,17 @@ func WithMaxKeySize(size int) Option {
 func WithMaxValueSize(size int) Option {
 	return func(cfg *config) error {
 		cfg.maxValueSize = size
+		return nil
+	}
+}
+
+// WithMemPool configures usage of a memory pool to avoid allocations
+func WithMemPool(maxConcurrency int) Option {
+	return func(cfg *config) error {
+		if maxConcurrency <= 0 {
+			return ErrMaxConcurrencyLowerEqZero
+		}
+		cfg.maxConcurrency = &maxConcurrency
 		return nil
 	}
 }

@@ -35,6 +35,10 @@ var (
 	// ErrDatabaseLocked is the error returned if the database is locked
 	// (typically opened by another process)
 	ErrDatabaseLocked = errors.New("error: database locked")
+
+	// ErrCreatingMemPool is the error returned when trying to configurate
+	// the mempool fails
+	ErrCreatingMemPool = errors.New("error: creating the mempool failed")
 )
 
 // Bitcask is a struct that represents a on-disk LSM and WAL data structure
@@ -419,6 +423,8 @@ func Open(path string, options ...Option) (*Bitcask, error) {
 			return nil, err
 		}
 	}
+
+	internal.ConfigureMemPool(bitcask.config.maxConcurrency)
 
 	locked, err := bitcask.Flock.TryLock()
 	if err != nil {
