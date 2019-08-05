@@ -11,7 +11,7 @@ import (
 	"sync"
 
 	"github.com/gofrs/flock"
-	"github.com/prologic/trie"
+	"github.com/derekparker/trie"
 
 	"github.com/prologic/bitcask/internal"
 )
