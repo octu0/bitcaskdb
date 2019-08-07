@@ -8,7 +8,6 @@ func Example_withOptions() {
 	opts := []Option{
 		WithMaxKeySize(1024),
 		WithMaxValueSize(4096),
-		WithMemPool(10),
 	}
 	_, _ = Open("path/to/db", opts...)
 }

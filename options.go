@@ -31,7 +31,6 @@ type config struct {
 	maxDatafileSize int
 	maxKeySize      int
 	maxValueSize    int
-	maxConcurrency  *int
 }
 
 func (c *config) MarshalJSON() ([]byte, error) {
@@ -99,17 +98,6 @@ func WithMaxKeySize(size int) Option {
 func WithMaxValueSize(size int) Option {
 	return func(cfg *config) error {
 		cfg.maxValueSize = size
-		return nil
-	}
-}
-
-// WithMemPool configures usage of a memory pool to avoid allocations
-func WithMemPool(maxConcurrency int) Option {
-	return func(cfg *config) error {
-		if maxConcurrency <= 0 {
-			return ErrMaxConcurrencyLowerEqZero
-		}
-		cfg.maxConcurrency = &maxConcurrency
 		return nil
 	}
 }

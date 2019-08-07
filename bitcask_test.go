@@ -495,9 +495,8 @@ func TestLocking(t *testing.T) {
 }
 
 type benchmarkTestCase struct {
-	name     string
-	size     int
-	withPool bool
+	name string
+	size int
 }
 
 func BenchmarkGet(b *testing.B) {
@@ -513,24 +512,15 @@ func BenchmarkGet(b *testing.B) {
 	defer os.RemoveAll(testdir)
 
 	tests := []benchmarkTestCase{
-		{"128B", 128, false},
-		{"128BWithPool", 128, true},
-		{"256B", 256, false},
-		{"256BWithPool", 256, true},
-		{"512B", 512, false},
-		{"512BWithPool", 512, true},
-		{"1K", 1024, false},
-		{"1KWithPool", 1024, true},
-		{"2K", 2048, false},
-		{"2KWithPool", 2048, true},
-		{"4K", 4096, false},
-		{"4KWithPool", 4096, true},
-		{"8K", 8192, false},
-		{"8KWithPool", 8192, true},
-		{"16K", 16384, false},
-		{"16KWithPool", 16384, true},
-		{"32K", 32768, false},
-		{"32KWithPool", 32768, true},
+		{"128B", 128},
+		{"256B", 256},
+		{"512B", 512},
+		{"1K", 1024},
+		{"2K", 2048},
+		{"4K", 4096},
+		{"8K", 8192},
+		{"16K", 16384},
+		{"32K", 32768},
 	}
 
 	for _, tt := range tests {
@@ -543,9 +533,6 @@ func BenchmarkGet(b *testing.B) {
 			options := []Option{
 				WithMaxKeySize(len(key)),
 				WithMaxValueSize(tt.size),
-			}
-			if tt.withPool {
-				options = append(options, WithMemPool(1))
 			}
 			db, err := Open(testdir, options...)
 			if err != nil {
@@ -592,15 +579,14 @@ func BenchmarkPut(b *testing.B) {
 	defer db.Close()
 
 	tests := []benchmarkTestCase{
-		{"128B", 128, false},
-		{"256B", 256, false},
-		{"512B", 512, false},
-		{"1K", 1024, false},
-		{"2K", 2048, false},
-		{"4K", 4096, false},
-		{"8K", 8192, false},
-		{"16K", 16384, false},
-		{"32K", 32768, false},
+		{"128B", 128},
+		{"256B", 256},
+		{"1K", 1024},
+		{"2K", 2048},
+		{"4K", 4096},
+		{"8K", 8192},
+		{"16K", 16384},
+		{"32K", 32768},
 	}
 
 	for _, tt := range tests {

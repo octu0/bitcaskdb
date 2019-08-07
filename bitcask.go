@@ -15,6 +15,7 @@ import (
 	"github.com/gofrs/flock"
 
 	"github.com/prologic/bitcask/internal"
+	"github.com/prologic/bitcask/internal/model"
 )
 
 var (
@@ -36,10 +37,6 @@ var (
 	// ErrDatabaseLocked is the error returned if the database is locked
 	// (typically opened by another process)
 	ErrDatabaseLocked = errors.New("error: database locked")
-
-	// ErrCreatingMemPool is the error returned when trying to configurate
-	// the mempool fails
-	ErrCreatingMemPool = errors.New("error: creating the mempool failed")
 )
 
 // Bitcask is a struct that represents a on-disk LSM and WAL data structure
@@ -242,7 +239,7 @@ func (b *Bitcask) put(key, value []byte) (int64, int64, error) {
 		b.curr = curr
 	}
 
-	e := internal.NewEntry(key, value)
+	e := model.NewEntry(key, value)
 	return b.curr.Write(e)
 }
 
@@ -457,8 +454,6 @@ func Open(path string, options ...Option) (*Bitcask, error) {
 		}
 	}
 
-	internal.ConfigureMemPool(bitcask.config.maxConcurrency)
-
 	locked, err := bitcask.Flock.TryLock()
 	if err != nil {
 		return nil, err
@@ -491,3 +486,4 @@ func Merge(path string, force bool) error {
 
 	return db.Merge()
 }
+

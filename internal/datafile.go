@@ -6,25 +6,21 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/oxtoacart/bpool"
 	"github.com/pkg/errors"
 	"golang.org/x/exp/mmap"
 
-	"github.com/gogo/protobuf/proto"
-	pb "github.com/prologic/bitcask/internal/proto"
-	"github.com/prologic/bitcask/internal/streampb"
+	"github.com/prologic/bitcask/internal/codec"
+	"github.com/prologic/bitcask/internal/model"
 )
 
 const (
 	DefaultDatafileFilename = "%09d.data"
-	prefixSize              = 8
 )
 
 var (
 	ErrReadonly  = errors.New("error: read only datafile")
 	ErrReadError = errors.New("error: read error")
 
-	memPool   *bpool.BufferPool
 	mxMemPool sync.RWMutex
 )
 
@@ -36,8 +32,8 @@ type Datafile struct {
 	ra     *mmap.ReaderAt
 	w      *os.File
 	offset int64
-	dec    *streampb.Decoder
-	enc    *streampb.Encoder
+	dec    *codec.Decoder
+	enc    *codec.Encoder
 }
 
 func NewDatafile(path string, id int, readonly bool) (*Datafile, error) {
@@ -73,8 +69,8 @@ func NewDatafile(path string, id int, readonly bool) (*Datafile, error) {
 
 	offset := stat.Size()
 
-	dec := streampb.NewDecoder(r)
-	enc := streampb.NewEncoder(w)
+	dec := codec.NewDecoder(r)
+	enc := codec.NewEncoder(w)
 
 	return &Datafile{
 		id:     id,
@@ -126,7 +122,7 @@ func (df *Datafile) Size() int64 {
 	return df.offset
 }
 
-func (df *Datafile) Read() (e pb.Entry, n int64, err error) {
+func (df *Datafile) Read() (e model.Entry, n int64, err error) {
 	df.Lock()
 	defer df.Unlock()
 
@@ -138,20 +134,10 @@ func (df *Datafile) Read() (e pb.Entry, n int64, err error) {
 	return
 }
 
-func (df *Datafile) ReadAt(index, size int64) (e pb.Entry, err error) {
+func (df *Datafile) ReadAt(index, size int64) (e model.Entry, err error) {
 	var n int
 
-	var b []byte
-	if memPool == nil {
-		b = make([]byte, size)
-	} else {
-		poolSlice := memPool.Get()
-		if poolSlice.Cap() < int(size) {
-			poolSlice.Grow(int(size) - poolSlice.Cap())
-		}
-		defer memPool.Put(poolSlice)
-		b = poolSlice.Bytes()[:size]
-	}
+	b := make([]byte, size)
 
 	if df.w == nil {
 		n, err = df.ra.ReadAt(b, index)
@@ -166,14 +152,13 @@ func (df *Datafile) ReadAt(index, size int64) (e pb.Entry, err error) {
 		return
 	}
 
-	err = proto.Unmarshal(b[prefixSize:], &e)
-	if err != nil {
-		return
-	}
+	valueOffset, _ := codec.GetKeyValueSizes(b)
+	codec.DecodeWithoutPrefix(b[codec.KeySize+codec.ValueSize:], valueOffset, &e)
+
 	return
 }
 
-func (df *Datafile) Write(e pb.Entry) (int64, int64, error) {
+func (df *Datafile) Write(e model.Entry) (int64, int64, error) {
 	if df.w == nil {
 		return -1, 0, ErrReadonly
 	}
@@ -183,23 +168,11 @@ func (df *Datafile) Write(e pb.Entry) (int64, int64, error) {
 
 	e.Offset = df.offset
 
-	n, err := df.enc.Encode(&e)
+	n, err := df.enc.Encode(e)
 	if err != nil {
 		return -1, 0, err
 	}
 	df.offset += n
 
 	return e.Offset, n, nil
-}
-
-// ConfigureMemPool configurate the mempool accordingly
-func ConfigureMemPool(maxConcurrency *int) {
-	mxMemPool.Lock()
-	defer mxMemPool.Unlock()
-	if maxConcurrency == nil {
-		memPool = nil
-	} else {
-		memPool = bpool.NewBufferPool(*maxConcurrency)
-	}
-	return
 }

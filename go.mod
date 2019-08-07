@@ -4,7 +4,6 @@ require (
 	github.com/derekparker/trie v0.0.0-20190805173922-4e1a77fb815d
 	github.com/gofrs/flock v0.7.1
 	github.com/gogo/protobuf v1.2.1
-	github.com/golang/protobuf v1.3.2
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
 	github.com/magiconair/properties v1.8.1 // indirect
 	github.com/oxtoacart/bpool v0.0.0-20190530202638-03653db5a59c
