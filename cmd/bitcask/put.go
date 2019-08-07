@@ -13,11 +13,11 @@ import (
 	"github.com/prologic/bitcask"
 )
 
-var setCmd = &cobra.Command{
-	Use:     "set <key> [<value>]",
-	Aliases: []string{"add"},
-	Short:   "Add/Set a new Key/Value pair",
-	Long: `This adds or sets a new key/value pair.
+var putCmd = &cobra.Command{
+	Use:     "put <key> [<value>]",
+	Aliases: []string{"add", "set", "store"},
+	Short:   "Adds a new Key/Value pair",
+	Long: `This adds a new key/value pair or modifies an existing one.
 
 If the value is not specified as an argument it is read from standard input.`,
 	Args: cobra.MinimumNArgs(1),
@@ -33,15 +33,15 @@ If the value is not specified as an argument it is read from standard input.`,
 			value = os.Stdin
 		}
 
-		os.Exit(set(path, key, value))
+		os.Exit(put(path, key, value))
 	},
 }
 
 func init() {
-	RootCmd.AddCommand(setCmd)
+	RootCmd.AddCommand(putCmd)
 }
 
-func set(path, key string, value io.Reader) int {
+func put(path, key string, value io.Reader) int {
 	db, err := bitcask.Open(path)
 	if err != nil {
 		log.WithError(err).Error("error opening database")
