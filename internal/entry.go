@@ -6,7 +6,7 @@ import (
 	pb "github.com/prologic/bitcask/internal/proto"
 )
 
-func NewEntry(key string, value []byte) pb.Entry {
+func NewEntry(key, value []byte) pb.Entry {
 	checksum := crc32.ChecksumIEEE(value)
 
 	return pb.Entry{

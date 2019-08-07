@@ -40,7 +40,7 @@ func scan(path, prefix string) int {
 	}
 	defer db.Close()
 
-	err = db.Scan(prefix, func(key string) error {
+	err = db.Scan([]byte(prefix), func(key []byte) error {
 		value, err := db.Get(key)
 		if err != nil {
 			log.WithError(err).Error("error reading key")

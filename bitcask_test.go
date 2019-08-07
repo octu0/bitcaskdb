@@ -1,6 +1,7 @@
 package bitcask
 
 import (
+	"bytes"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -12,6 +13,32 @@ import (
 
 	"github.com/stretchr/testify/assert"
 )
+
+type sortByteArrays [][]byte
+
+func (b sortByteArrays) Len() int {
+	return len(b)
+}
+
+func (b sortByteArrays) Less(i, j int) bool {
+	switch bytes.Compare(b[i], b[j]) {
+	case -1:
+		return true
+	case 0, 1:
+		return false
+	}
+	return false
+}
+
+func (b sortByteArrays) Swap(i, j int) {
+	b[j], b[i] = b[i], b[j]
+}
+
+func SortByteArrays(src [][]byte) [][]byte {
+	sorted := sortByteArrays(src)
+	sort.Sort(sorted)
+	return sorted
+}
 
 func TestAll(t *testing.T) {
 	var (
@@ -31,12 +58,12 @@ func TestAll(t *testing.T) {
 	})
 
 	t.Run("Put", func(t *testing.T) {
-		err = db.Put("foo", []byte("bar"))
+		err = db.Put([]byte([]byte("foo")), []byte("bar"))
 		assert.NoError(err)
 	})
 
 	t.Run("Get", func(t *testing.T) {
-		val, err := db.Get("foo")
+		val, err := db.Get([]byte("foo"))
 		assert.NoError(err)
 		assert.Equal([]byte("bar"), val)
 	})
@@ -46,24 +73,24 @@ func TestAll(t *testing.T) {
 	})
 
 	t.Run("Has", func(t *testing.T) {
-		assert.True(db.Has("foo"))
+		assert.True(db.Has([]byte("foo")))
 	})
 
 	t.Run("Keys", func(t *testing.T) {
-		keys := make([]string, 0)
+		keys := make([][]byte, 0)
 		for key := range db.Keys() {
 			keys = append(keys, key)
 		}
-		assert.Equal([]string{"foo"}, keys)
+		assert.Equal([][]byte{[]byte("foo")}, keys)
 	})
 
 	t.Run("Fold", func(t *testing.T) {
 		var (
-			keys   []string
+			keys   [][]byte
 			values [][]byte
 		)
 
-		err := db.Fold(func(key string) error {
+		err := db.Fold(func(key []byte) error {
 			value, err := db.Get(key)
 			if err != nil {
 				return err
@@ -73,14 +100,14 @@ func TestAll(t *testing.T) {
 			return nil
 		})
 		assert.NoError(err)
-		assert.Equal([]string{"foo"}, keys)
+		assert.Equal([][]byte{[]byte("foo")}, keys)
 		assert.Equal([][]byte{[]byte("bar")}, values)
 	})
 
 	t.Run("Delete", func(t *testing.T) {
-		err := db.Delete("foo")
+		err := db.Delete([]byte("foo"))
 		assert.NoError(err)
-		_, err = db.Get("foo")
+		_, err = db.Get([]byte("foo"))
 		assert.Error(err)
 		assert.Equal(ErrKeyNotFound, err)
 	})
@@ -114,20 +141,20 @@ func TestDeletedKeys(t *testing.T) {
 		})
 
 		t.Run("Put", func(t *testing.T) {
-			err = db.Put("foo", []byte("bar"))
+			err = db.Put([]byte("foo"), []byte("bar"))
 			assert.NoError(err)
 		})
 
 		t.Run("Get", func(t *testing.T) {
-			val, err := db.Get("foo")
+			val, err := db.Get([]byte("foo"))
 			assert.NoError(err)
 			assert.Equal([]byte("bar"), val)
 		})
 
 		t.Run("Delete", func(t *testing.T) {
-			err := db.Delete("foo")
+			err := db.Delete([]byte("foo"))
 			assert.NoError(err)
-			_, err = db.Get("foo")
+			_, err = db.Get([]byte("foo"))
 			assert.Error(err)
 			assert.Equal(ErrKeyNotFound, err)
 		})
@@ -155,7 +182,7 @@ func TestDeletedKeys(t *testing.T) {
 		})
 
 		t.Run("Get", func(t *testing.T) {
-			_, err = db.Get("foo")
+			_, err = db.Get([]byte("foo"))
 			assert.Error(err)
 			assert.Equal(ErrKeyNotFound, err)
 		})
@@ -181,7 +208,7 @@ func TestMaxKeySize(t *testing.T) {
 	})
 
 	t.Run("Put", func(t *testing.T) {
-		key := strings.Repeat(" ", 17)
+		key := []byte(strings.Repeat(" ", 17))
 		value := []byte("foobar")
 		err = db.Put(key, value)
 		assert.Error(err)
@@ -203,7 +230,7 @@ func TestMaxValueSize(t *testing.T) {
 	})
 
 	t.Run("Put", func(t *testing.T) {
-		key := "foo"
+		key := []byte("foo")
 		value := []byte(strings.Repeat(" ", 17))
 		err = db.Put(key, value)
 		assert.Error(err)
@@ -229,12 +256,12 @@ func TestStats(t *testing.T) {
 		})
 
 		t.Run("Put", func(t *testing.T) {
-			err := db.Put("foo", []byte("bar"))
+			err := db.Put([]byte("foo"), []byte("bar"))
 			assert.NoError(err)
 		})
 
 		t.Run("Get", func(t *testing.T) {
-			val, err := db.Get("foo")
+			val, err := db.Get([]byte("foo"))
 			assert.NoError(err)
 			assert.Equal([]byte("bar"), val)
 		})
@@ -276,7 +303,7 @@ func TestMerge(t *testing.T) {
 		})
 
 		t.Run("Put", func(t *testing.T) {
-			err := db.Put("foo", []byte("bar"))
+			err := db.Put([]byte("foo"), []byte("bar"))
 			assert.NoError(err)
 		})
 
@@ -287,7 +314,7 @@ func TestMerge(t *testing.T) {
 
 		t.Run("Put", func(t *testing.T) {
 			for i := 0; i < 10; i++ {
-				err := db.Put("foo", []byte("bar"))
+				err := db.Put([]byte("foo"), []byte("bar"))
 				assert.NoError(err)
 			}
 		})
@@ -340,7 +367,7 @@ func TestConcurrent(t *testing.T) {
 		})
 
 		t.Run("Put", func(t *testing.T) {
-			err = db.Put("foo", []byte("bar"))
+			err = db.Put([]byte("foo"), []byte("bar"))
 			assert.NoError(err)
 		})
 	})
@@ -353,7 +380,7 @@ func TestConcurrent(t *testing.T) {
 				}()
 				for i := 0; i <= 100; i++ {
 					if i%x == 0 {
-						key := fmt.Sprintf("k%d", i)
+						key := []byte(fmt.Sprintf("k%d", i))
 						value := []byte(fmt.Sprintf("v%d", i))
 						err := db.Put(key, value)
 						assert.NoError(err)
@@ -377,7 +404,7 @@ func TestConcurrent(t *testing.T) {
 					wg.Done()
 				}()
 				for i := 0; i <= N; i++ {
-					value, err := db.Get("foo")
+					value, err := db.Get([]byte("foo"))
 					assert.NoError(err)
 					assert.Equal([]byte("bar"), value)
 				}
@@ -420,12 +447,12 @@ func TestScan(t *testing.T) {
 				"2":     []byte("2"),
 				"3":     []byte("3"),
 				"food":  []byte("pizza"),
-				"foo":   []byte("foo"),
+				"foo":   []byte([]byte("foo")),
 				"fooz":  []byte("fooz ball"),
 				"hello": []byte("world"),
 			}
 			for k, v := range items {
-				err = db.Put(k, v)
+				err = db.Put([]byte(k), v)
 				assert.NoError(err)
 			}
 		})
@@ -433,21 +460,21 @@ func TestScan(t *testing.T) {
 
 	t.Run("Scan", func(t *testing.T) {
 		var (
-			vals     []string
-			expected = []string{
-				"foo",
-				"fooz ball",
-				"pizza",
+			vals     [][]byte
+			expected = [][]byte{
+				[]byte("foo"),
+				[]byte("fooz ball"),
+				[]byte("pizza"),
 			}
 		)
 
-		err = db.Scan("fo", func(key string) error {
+		err = db.Scan([]byte("fo"), func(key []byte) error {
 			val, err := db.Get(key)
 			assert.NoError(err)
-			vals = append(vals, string(val))
+			vals = append(vals, val)
 			return nil
 		})
-		sort.Strings(vals)
+		vals = SortByteArrays(vals)
 		assert.Equal(expected, vals)
 	})
 }
@@ -510,7 +537,7 @@ func BenchmarkGet(b *testing.B) {
 		b.Run(tt.name, func(b *testing.B) {
 			b.SetBytes(int64(tt.size))
 
-			key := "foo"
+			key := []byte("foo")
 			value := []byte(strings.Repeat(" ", tt.size))
 
 			options := []Option{
@@ -536,7 +563,7 @@ func BenchmarkGet(b *testing.B) {
 				if err != nil {
 					b.Fatal(err)
 				}
-				if string(val) != string(value) {
+				if !bytes.Equal(val, value) {
 					b.Errorf("unexpected value")
 				}
 			}
@@ -580,7 +607,7 @@ func BenchmarkPut(b *testing.B) {
 		b.Run(tt.name, func(b *testing.B) {
 			b.SetBytes(int64(tt.size))
 
-			key := "foo"
+			key := []byte("foo")
 			value := []byte(strings.Repeat(" ", tt.size))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
@@ -616,30 +643,30 @@ func BenchmarkScan(b *testing.B) {
 		"2":     []byte("2"),
 		"3":     []byte("3"),
 		"food":  []byte("pizza"),
-		"foo":   []byte("foo"),
+		"foo":   []byte([]byte("foo")),
 		"fooz":  []byte("fooz ball"),
 		"hello": []byte("world"),
 	}
 	for k, v := range items {
-		err := db.Put(k, v)
+		err := db.Put([]byte(k), v)
 		if err != nil {
 			b.Fatal(err)
 		}
 	}
 
-	var expected = []string{"foo", "food", "fooz"}
+	var expected = [][]byte{[]byte("foo"), []byte("food"), []byte("fooz")}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		var keys []string
-		err = db.Scan("fo", func(key string) error {
+		var keys [][]byte
+		err = db.Scan([]byte("fo"), func(key []byte) error {
 			keys = append(keys, key)
 			return nil
 		})
 		if err != nil {
 			b.Fatal(err)
 		}
-		sort.Strings(keys)
+		keys = SortByteArrays(keys)
 		if !reflect.DeepEqual(expected, keys) {
 			b.Fatal(fmt.Errorf("expected keys=#%v got=%#v", expected, keys))
 		}

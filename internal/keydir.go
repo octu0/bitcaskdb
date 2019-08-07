@@ -17,51 +17,58 @@ type Item struct {
 
 type Keydir struct {
 	sync.RWMutex
-	kv map[string]Item
+	keys  map[uint64][]byte
+	items map[uint64]Item
 }
 
 func NewKeydir() *Keydir {
 	return &Keydir{
-		kv: make(map[string]Item),
+		keys:  make(map[uint64][]byte),
+		items: make(map[uint64]Item),
 	}
 }
 
-func (k *Keydir) Add(key string, fileid int, offset, size int64) Item {
+func (k *Keydir) Add(key []byte, fileid int, offset, size int64) Item {
 	item := Item{
 		FileID: fileid,
 		Offset: offset,
 		Size:   size,
 	}
 
+	hash := Hash(key)
+
 	k.Lock()
-	k.kv[key] = item
+	k.keys[hash] = key
+	k.items[hash] = item
 	k.Unlock()
 
 	return item
 }
 
-func (k *Keydir) Get(key string) (Item, bool) {
+func (k *Keydir) Get(key []byte) (Item, bool) {
 	k.RLock()
-	item, ok := k.kv[key]
+	item, ok := k.items[Hash(key)]
 	k.RUnlock()
 	return item, ok
 }
 
-func (k *Keydir) Delete(key string) {
+func (k *Keydir) Delete(key []byte) {
+	hash := Hash(key)
 	k.Lock()
-	delete(k.kv, key)
+	delete(k.keys, hash)
+	delete(k.items, hash)
 	k.Unlock()
 }
 
 func (k *Keydir) Len() int {
-	return len(k.kv)
+	return len(k.keys)
 }
 
-func (k *Keydir) Keys() chan string {
-	ch := make(chan string)
+func (k *Keydir) Keys() chan []byte {
+	ch := make(chan []byte)
 	go func() {
 		k.RLock()
-		for key := range k.kv {
+		for _, key := range k.keys {
 			ch <- key
 		}
 		close(ch)
@@ -73,8 +80,10 @@ func (k *Keydir) Keys() chan string {
 func (k *Keydir) Bytes() ([]byte, error) {
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
-	err := enc.Encode(k.kv)
-	if err != nil {
+	if err := enc.Encode(k.keys); err != nil {
+		return nil, err
+	}
+	if err := enc.Encode(k.items); err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil
@@ -88,7 +97,10 @@ func (k *Keydir) Load(fn string) error {
 	defer f.Close()
 
 	dec := gob.NewDecoder(f)
-	if err := dec.Decode(&k.kv); err != nil {
+	if err := dec.Decode(&k.keys); err != nil {
+		return err
+	}
+	if err := dec.Decode(&k.items); err != nil {
 		return err
 	}
 
@@ -107,8 +119,10 @@ func (k *Keydir) Save(fn string) error {
 func NewKeydirFromBytes(r io.Reader) (*Keydir, error) {
 	k := NewKeydir()
 	dec := gob.NewDecoder(r)
-	err := dec.Decode(&k.kv)
-	if err != nil {
+	if err := dec.Decode(&k.keys); err != nil {
+		return nil, err
+	}
+	if err := dec.Decode(&k.items); err != nil {
 		return nil, err
 	}
 	return k, nil
