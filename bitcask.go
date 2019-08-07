@@ -11,8 +11,8 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/gofrs/flock"
 	"github.com/derekparker/trie"
+	"github.com/gofrs/flock"
 
 	"github.com/prologic/bitcask/internal"
 )
@@ -430,18 +430,23 @@ func (b *Bitcask) Merge() error {
 // Options can be provided with the `WithXXX` functions that provide
 // configuration options as functions.
 func Open(path string, options ...Option) (*Bitcask, error) {
+	var (
+		cfg *config
+		err error
+	)
+
 	if err := os.MkdirAll(path, 0755); err != nil {
 		return nil, err
 	}
 
-	config, err := getConfig(path)
+	cfg, err = getConfig(path)
 	if err != nil {
-		return nil, err
+		cfg = newDefaultConfig()
 	}
 
 	bitcask := &Bitcask{
 		Flock:   flock.New(filepath.Join(path, "lock")),
-		config:  config,
+		config:  cfg,
 		options: options,
 		path:    path,
 	}
