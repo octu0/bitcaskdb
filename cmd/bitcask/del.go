@@ -37,7 +37,7 @@ func del(path, key string) int {
 	}
 	defer db.Close()
 
-	err = db.Delete(key)
+	err = db.Delete([]byte(key))
 	if err != nil {
 		log.WithError(err).Error("error deleting key")
 		return 1

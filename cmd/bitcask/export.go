@@ -90,7 +90,7 @@ func export(path, output string) int {
 		}
 	}
 
-	err = db.Fold(func(key string) error {
+	err = db.Fold(func(key []byte) error {
 		value, err := db.Get(key)
 		if err != nil {
 			log.WithError(err).

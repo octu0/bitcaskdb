@@ -89,7 +89,7 @@ func _import(path, input string) int {
 			return 2
 		}
 
-		if err := db.Put(string(key), value); err != nil {
+		if err := db.Put(key, value); err != nil {
 			log.WithError(err).Error("error writing key/value")
 			return 2
 		}
