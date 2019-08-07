@@ -172,6 +172,12 @@ For 128B values:
 
 The full benchmark above shows linear performance as you increase key/value sizes. Memory pooling starts to become advantageous for larger values.
 
+## Contributors
+
+Thank you to all those that have contributed to this project, battle-tested it, used it in their own projects or pdocuts, fixed bugs, improved performance and even fix tiny tpyos in documentation! Thank you and keep contirbuting!
+
+You can find an [AUTHORS](/AUTHORS) file where we keep a list of contributors to the project. If you contriibute a PR please consider adding your name there. There is also Github's own [Contributors](https://github.com/prologic/bitcask/graphs/contributors) statistics.
+
 ## License
 
-bitcask is licensed under the [MIT License](https://github.com/prologic/bitcask/blob/master/LICENSE)
+bitcask is licensed under the term of the [MIT License](https://github.com/prologic/bitcask/blob/master/LICENSE)
