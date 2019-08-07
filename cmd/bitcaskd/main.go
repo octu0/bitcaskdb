@@ -76,7 +76,7 @@ func main() {
 					conn.WriteError("ERR wrong number of arguments for '" + string(cmd.Args[0]) + "' command")
 					return
 				}
-				key := cmd.Args[1]
+				key := string(cmd.Args[1])
 				value := cmd.Args[2]
 				err = db.Put(key, value)
 				if err != nil {
@@ -89,7 +89,7 @@ func main() {
 					conn.WriteError("ERR wrong number of arguments for '" + string(cmd.Args[0]) + "' command")
 					return
 				}
-				key := cmd.Args[1]
+				key := string(cmd.Args[1])
 				value, err := db.Get(key)
 				if err != nil {
 					conn.WriteNull()
@@ -106,7 +106,7 @@ func main() {
 					conn.WriteError("ERR wrong number of arguments for '" + string(cmd.Args[0]) + "' command")
 					return
 				}
-				key := cmd.Args[1]
+				key := string(cmd.Args[1])
 				if db.Has(key) {
 					conn.WriteInt(1)
 				} else {
@@ -117,7 +117,7 @@ func main() {
 					conn.WriteError("ERR wrong number of arguments for '" + string(cmd.Args[0]) + "' command")
 					return
 				}
-				key := cmd.Args[1]
+				key := string(cmd.Args[1])
 				err := db.Delete(key)
 				if err != nil {
 					conn.WriteInt(0)

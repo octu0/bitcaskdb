@@ -36,8 +36,8 @@ func keys(path string) int {
 	}
 	defer db.Close()
 
-	err = db.Fold(func(key []byte) error {
-		fmt.Printf("%s\n", string(key))
+	err = db.Fold(func(key string) error {
+		fmt.Printf("%s\n", key)
 		return nil
 	})
 	if err != nil {

@@ -2,19 +2,12 @@ package internal
 
 import (
 	"fmt"
-	"hash/fnv"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 )
-
-func Hash(key []byte) uint64 {
-	h := fnv.New64a()
-	h.Write(key)
-	return h.Sum64()
-}
 
 func Exists(path string) bool {
 	_, err := os.Stat(path)

@@ -112,7 +112,7 @@ func (b *Bitcask) Sync() error {
 
 // Get retrieves the value of the given key. If the key is not found or an/I/O
 // error occurs a null byte slice is returned along with the error.
-func (b *Bitcask) Get(key []byte) ([]byte, error) {
+func (b *Bitcask) Get(key string) ([]byte, error) {
 	var df *internal.Datafile
 
 	item, ok := b.keydir.Get(key)
@@ -140,13 +140,13 @@ func (b *Bitcask) Get(key []byte) ([]byte, error) {
 }
 
 // Has returns true if the key exists in the database, false otherwise.
-func (b *Bitcask) Has(key []byte) bool {
+func (b *Bitcask) Has(key string) bool {
 	_, ok := b.keydir.Get(key)
 	return ok
 }
 
 // Put stores the key and value in the database.
-func (b *Bitcask) Put(key, value []byte) error {
+func (b *Bitcask) Put(key string, value []byte) error {
 	if len(key) > b.config.maxKeySize {
 		return ErrKeyTooLarge
 	}
@@ -160,21 +160,21 @@ func (b *Bitcask) Put(key, value []byte) error {
 	}
 
 	item := b.keydir.Add(key, b.curr.FileID(), offset, n)
-	b.trie.Add(string(key), item)
+	b.trie.Add(key, item)
 
 	return nil
 }
 
 // Delete deletes the named key. If the key doesn't exist or an I/O error
 // occurs the error is returned.
-func (b *Bitcask) Delete(key []byte) error {
+func (b *Bitcask) Delete(key string) error {
 	_, _, err := b.put(key, []byte{})
 	if err != nil {
 		return err
 	}
 
 	b.keydir.Delete(key)
-	b.trie.Remove(string(key))
+	b.trie.Remove(key)
 
 	return nil
 }
@@ -182,10 +182,10 @@ func (b *Bitcask) Delete(key []byte) error {
 // Scan performs a prefix scan of keys matching the given prefix and calling
 // the function `f` with the keys found. If the function returns an error
 // no further keys are processed and the first error returned.
-func (b *Bitcask) Scan(prefix []byte, f func(key []byte) error) error {
-	keys := b.trie.PrefixSearch(string(prefix))
+func (b *Bitcask) Scan(prefix string, f func(key string) error) error {
+	keys := b.trie.PrefixSearch(prefix)
 	for _, key := range keys {
-		if err := f([]byte(key)); err != nil {
+		if err := f(key); err != nil {
 			return err
 		}
 	}
@@ -198,14 +198,14 @@ func (b *Bitcask) Len() int {
 }
 
 // Keys returns all keys in the database as a channel of string(s)
-func (b *Bitcask) Keys() chan []byte {
+func (b *Bitcask) Keys() chan string {
 	return b.keydir.Keys()
 }
 
 // Fold iterates over all keys in the database calling the function `f` for
 // each key. If the function returns an error, no further keys are processed
 // and the error returned.
-func (b *Bitcask) Fold(f func(key []byte) error) error {
+func (b *Bitcask) Fold(f func(key string) error) error {
 	for key := range b.keydir.Keys() {
 		if err := f(key); err != nil {
 			return err
@@ -214,7 +214,7 @@ func (b *Bitcask) Fold(f func(key []byte) error) error {
 	return nil
 }
 
-func (b *Bitcask) put(key, value []byte) (int64, int64, error) {
+func (b *Bitcask) put(key string, value []byte) (int64, int64, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -301,7 +301,7 @@ func (b *Bitcask) reopen() error {
 		}
 		for key := range keydir.Keys() {
 			item, _ := keydir.Get(key)
-			trie.Add(string(key), item)
+			trie.Add(key, item)
 		}
 	} else {
 		for i, df := range datafiles {
@@ -321,7 +321,7 @@ func (b *Bitcask) reopen() error {
 				}
 
 				item := keydir.Add(e.Key, ids[i], e.Offset, n)
-				trie.Add(string(e.Key), item)
+				trie.Add(e.Key, item)
 			}
 		}
 	}
@@ -366,7 +366,7 @@ func (b *Bitcask) Merge() error {
 	// Rewrite all key/value pairs into merged database
 	// Doing this automatically strips deleted keys and
 	// old key/value pairs
-	err = b.Fold(func(key []byte) error {
+	err = b.Fold(func(key string) error {
 		value, err := b.Get(key)
 		if err != nil {
 			return err

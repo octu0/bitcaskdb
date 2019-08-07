@@ -38,7 +38,7 @@ func get(path, key string) int {
 	}
 	defer db.Close()
 
-	value, err := db.Get([]byte(key))
+	value, err := db.Get(key)
 	if err != nil {
 		log.WithError(err).Error("error reading key")
 		return 1
