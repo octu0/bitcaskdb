@@ -1,6 +1,7 @@
 package bitcask
 
 import (
+	"encoding/json"
 	"errors"
 	"hash/crc32"
 	"io"
@@ -245,6 +246,28 @@ func (b *Bitcask) put(key string, value []byte) (int64, int64, error) {
 	return b.curr.Write(e)
 }
 
+func (b *Bitcask) readConfig() error {
+	if internal.Exists(filepath.Join(b.path, "config.json")) {
+		data, err := ioutil.ReadFile(filepath.Join(b.path, "config.json"))
+		if err != nil {
+			return err
+		}
+
+		if err := json.Unmarshal(data, &b.config); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (b *Bitcask) writeConfig() error {
+	data, err := json.Marshal(b.config)
+	if err != nil {
+		return err
+	}
+	return ioutil.WriteFile(filepath.Join(b.path, "config.json"), data, 0600)
+}
+
 func (b *Bitcask) reopen() error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -411,9 +434,14 @@ func Open(path string, options ...Option) (*Bitcask, error) {
 		return nil, err
 	}
 
+	config, err := getConfig(path)
+	if err != nil {
+		return nil, err
+	}
+
 	bitcask := &Bitcask{
 		Flock:   flock.New(filepath.Join(path, "lock")),
-		config:  newDefaultConfig(),
+		config:  config,
 		options: options,
 		path:    path,
 	}
@@ -433,6 +461,10 @@ func Open(path string, options ...Option) (*Bitcask, error) {
 
 	if !locked {
 		return nil, ErrDatabaseLocked
+	}
+
+	if err := bitcask.writeConfig(); err != nil {
+		return nil, err
 	}
 
 	if err := bitcask.reopen(); err != nil {

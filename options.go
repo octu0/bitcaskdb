@@ -1,6 +1,11 @@
 package bitcask
 
-import "errors"
+import (
+	"encoding/json"
+	"errors"
+	"io/ioutil"
+	"path/filepath"
+)
 
 const (
 	// DefaultMaxDatafileSize is the default maximum datafile size in bytes
@@ -27,6 +32,43 @@ type config struct {
 	maxKeySize      int
 	maxValueSize    int
 	maxConcurrency  *int
+}
+
+func (c *config) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		MaxDatafileSize int `json:"max_datafile_size"`
+		MaxKeySize      int `json:"max_key_size"`
+		MaxValueSize    int `json:"max_value_size"`
+	}{
+		MaxDatafileSize: c.maxDatafileSize,
+		MaxKeySize:      c.maxKeySize,
+		MaxValueSize:    c.maxValueSize,
+	})
+}
+
+func getConfig(path string) (*config, error) {
+	type Config struct {
+		MaxDatafileSize int `json:"max_datafile_size"`
+		MaxKeySize      int `json:"max_key_size"`
+		MaxValueSize    int `json:"max_value_size"`
+	}
+
+	var cfg Config
+
+	data, err := ioutil.ReadFile(filepath.Join(path, "config.json"))
+	if err != nil {
+		return nil, err
+	}
+
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return nil, err
+	}
+
+	return &config{
+		maxDatafileSize: cfg.MaxDatafileSize,
+		maxKeySize:      cfg.MaxKeySize,
+		maxValueSize:    cfg.MaxValueSize,
+	}, nil
 }
 
 func newDefaultConfig() *config {
