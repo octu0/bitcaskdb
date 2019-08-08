@@ -15,7 +15,6 @@ import (
 	"github.com/gofrs/flock"
 
 	"github.com/prologic/bitcask/internal"
-	"github.com/prologic/bitcask/internal/model"
 )
 
 var (
@@ -239,7 +238,7 @@ func (b *Bitcask) put(key, value []byte) (int64, int64, error) {
 		b.curr = curr
 	}
 
-	e := model.NewEntry(key, value)
+	e := internal.NewEntry(key, value)
 	return b.curr.Write(e)
 }
 

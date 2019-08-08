@@ -6,8 +6,6 @@ import (
 	"io"
 
 	"github.com/pkg/errors"
-
-	"github.com/prologic/bitcask/internal/model"
 )
 
 const (
@@ -29,7 +27,7 @@ type Encoder struct {
 
 // Encode takes any Entry and streams it to the underlying writer.
 // Messages are framed with a key-length and value-length prefix.
-func (e *Encoder) Encode(msg model.Entry) (int64, error) {
+func (e *Encoder) Encode(msg Entry) (int64, error) {
 	var bufKeyValue = make([]byte, ValueSize)
 
 	bufKeySize := bufKeyValue[:KeySize]
@@ -75,7 +73,7 @@ type Decoder struct {
 	r io.Reader
 }
 
-func (d *Decoder) Decode(v *model.Entry) (int64, error) {
+func (d *Decoder) Decode(v *Entry) (int64, error) {
 	prefixBuf := make([]byte, KeySize+ValueSize)
 
 	_, err := io.ReadFull(d.r, prefixBuf)
@@ -100,7 +98,7 @@ func GetKeyValueSizes(buf []byte) (uint64, uint64) {
 	return uint64(actualKeySize), actualValueSize
 }
 
-func DecodeWithoutPrefix(buf []byte, valueOffset uint64, v *model.Entry) {
+func DecodeWithoutPrefix(buf []byte, valueOffset uint64, v *Entry) {
 	v.Key = buf[:valueOffset]
 	v.Value = buf[valueOffset : len(buf)-checksumSize]
 	v.Checksum = binary.BigEndian.Uint32(buf[len(buf)-checksumSize:])

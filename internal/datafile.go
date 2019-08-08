@@ -8,9 +8,6 @@ import (
 
 	"github.com/pkg/errors"
 	"golang.org/x/exp/mmap"
-
-	"github.com/prologic/bitcask/internal/codec"
-	"github.com/prologic/bitcask/internal/model"
 )
 
 const (
@@ -32,8 +29,8 @@ type Datafile struct {
 	ra     *mmap.ReaderAt
 	w      *os.File
 	offset int64
-	dec    *codec.Decoder
-	enc    *codec.Encoder
+	dec    *Decoder
+	enc    *Encoder
 }
 
 func NewDatafile(path string, id int, readonly bool) (*Datafile, error) {
@@ -69,8 +66,8 @@ func NewDatafile(path string, id int, readonly bool) (*Datafile, error) {
 
 	offset := stat.Size()
 
-	dec := codec.NewDecoder(r)
-	enc := codec.NewEncoder(w)
+	dec := NewDecoder(r)
+	enc := NewEncoder(w)
 
 	return &Datafile{
 		id:     id,
@@ -122,7 +119,7 @@ func (df *Datafile) Size() int64 {
 	return df.offset
 }
 
-func (df *Datafile) Read() (e model.Entry, n int64, err error) {
+func (df *Datafile) Read() (e Entry, n int64, err error) {
 	df.Lock()
 	defer df.Unlock()
 
@@ -134,7 +131,7 @@ func (df *Datafile) Read() (e model.Entry, n int64, err error) {
 	return
 }
 
-func (df *Datafile) ReadAt(index, size int64) (e model.Entry, err error) {
+func (df *Datafile) ReadAt(index, size int64) (e Entry, err error) {
 	var n int
 
 	b := make([]byte, size)
@@ -152,13 +149,13 @@ func (df *Datafile) ReadAt(index, size int64) (e model.Entry, err error) {
 		return
 	}
 
-	valueOffset, _ := codec.GetKeyValueSizes(b)
-	codec.DecodeWithoutPrefix(b[codec.KeySize+codec.ValueSize:], valueOffset, &e)
+	valueOffset, _ := GetKeyValueSizes(b)
+	DecodeWithoutPrefix(b[KeySize+ValueSize:], valueOffset, &e)
 
 	return
 }
 
-func (df *Datafile) Write(e model.Entry) (int64, int64, error) {
+func (df *Datafile) Write(e Entry) (int64, int64, error) {
 	if df.w == nil {
 		return -1, 0, ErrReadonly
 	}
