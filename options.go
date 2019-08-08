@@ -2,7 +2,6 @@ package bitcask
 
 import (
 	"encoding/json"
-	"errors"
 	"io/ioutil"
 	"path/filepath"
 )
@@ -16,12 +15,6 @@ const (
 
 	// DefaultMaxValueSize is the default value size in bytes
 	DefaultMaxValueSize = 1 << 16 // 65KB
-)
-
-var (
-	// ErrMaxConcurrencyLowerEqZero is the error returned for
-	// maxConcurrency option not greater than zero
-	ErrMaxConcurrencyLowerEqZero = errors.New("error: maxConcurrency must be greater than zero")
 )
 
 // Option is a function that takes a config struct and modifies it

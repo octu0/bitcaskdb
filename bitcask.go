@@ -473,17 +473,3 @@ func Open(path string, options ...Option) (*Bitcask, error) {
 
 	return bitcask, nil
 }
-
-// Merge calls Bitcask.Merge()
-// XXX: Deprecated; Please use the `.Merge()` method
-// XXX: This is only kept here for backwards compatibility
-//      it will be removed in future releases at some point
-func Merge(path string, force bool) error {
-	db, err := Open(path)
-	if err != nil {
-		return err
-	}
-
-	return db.Merge()
-}
-
