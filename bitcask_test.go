@@ -566,18 +566,6 @@ func BenchmarkPut(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	testdir, err := ioutil.TempDir(currentDir, "bitcask_bench")
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer os.RemoveAll(testdir)
-
-	db, err := Open(testdir)
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer db.Close()
-
 	tests := []benchmarkTestCase{
 		{"128B", 128},
 		{"256B", 256},
@@ -589,20 +577,43 @@ func BenchmarkPut(b *testing.B) {
 		{"32K", 32768},
 	}
 
-	for _, tt := range tests {
-		b.Run(tt.name, func(b *testing.B) {
-			b.SetBytes(int64(tt.size))
+	variants := map[string][]Option{
+		"NoSync": []Option{
+			WithSync(false),
+		},
+		"Sync": []Option{
+			WithSync(true),
+		},
+	}
 
-			key := []byte("foo")
-			value := []byte(strings.Repeat(" ", tt.size))
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				err := db.Put(key, value)
-				if err != nil {
-					b.Fatal(err)
+	for name, options := range variants {
+		testdir, err := ioutil.TempDir(currentDir, "bitcask_bench")
+		if err != nil {
+			b.Fatal(err)
+		}
+		defer os.RemoveAll(testdir)
+
+		db, err := Open(testdir, options...)
+		if err != nil {
+			b.Fatal(err)
+		}
+		defer db.Close()
+
+		for _, tt := range tests {
+			b.Run(tt.name+name, func(b *testing.B) {
+				b.SetBytes(int64(tt.size))
+
+				key := []byte("foo")
+				value := []byte(strings.Repeat(" ", tt.size))
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					err := db.Put(key, value)
+					if err != nil {
+						b.Fatal(err)
+					}
 				}
-			}
-		})
+			})
+		}
 	}
 }
 

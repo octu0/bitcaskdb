@@ -155,6 +155,12 @@ func (b *Bitcask) Put(key, value []byte) error {
 		return err
 	}
 
+	if b.config.sync {
+		if err := b.curr.Sync(); err != nil {
+			return err
+		}
+	}
+
 	item := b.keydir.Add(key, b.curr.FileID(), offset, n)
 	b.trie.Add(string(key), item)
 

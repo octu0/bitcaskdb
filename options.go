@@ -24,25 +24,29 @@ type config struct {
 	maxDatafileSize int
 	maxKeySize      int
 	maxValueSize    int
+	sync            bool
 }
 
 func (c *config) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
-		MaxDatafileSize int `json:"max_datafile_size"`
-		MaxKeySize      int `json:"max_key_size"`
-		MaxValueSize    int `json:"max_value_size"`
+		MaxDatafileSize int  `json:"max_datafile_size"`
+		MaxKeySize      int  `json:"max_key_size"`
+		MaxValueSize    int  `json:"max_value_size"`
+		Sync            bool `json:"sync"`
 	}{
 		MaxDatafileSize: c.maxDatafileSize,
 		MaxKeySize:      c.maxKeySize,
 		MaxValueSize:    c.maxValueSize,
+		Sync:            c.sync,
 	})
 }
 
 func getConfig(path string) (*config, error) {
 	type Config struct {
-		MaxDatafileSize int `json:"max_datafile_size"`
-		MaxKeySize      int `json:"max_key_size"`
-		MaxValueSize    int `json:"max_value_size"`
+		MaxDatafileSize int  `json:"max_datafile_size"`
+		MaxKeySize      int  `json:"max_key_size"`
+		MaxValueSize    int  `json:"max_value_size"`
+		Sync            bool `json:"sync"`
 	}
 
 	var cfg Config
@@ -60,6 +64,7 @@ func getConfig(path string) (*config, error) {
 		maxDatafileSize: cfg.MaxDatafileSize,
 		maxKeySize:      cfg.MaxKeySize,
 		maxValueSize:    cfg.MaxValueSize,
+		sync:            cfg.Sync,
 	}, nil
 }
 
@@ -91,6 +96,15 @@ func WithMaxKeySize(size int) Option {
 func WithMaxValueSize(size int) Option {
 	return func(cfg *config) error {
 		cfg.maxValueSize = size
+		return nil
+	}
+}
+
+// WithSync causes Sync() to be called on every key/value written increasing
+// durability and saftey at the expense of performance
+func WithSync(sync bool) Option {
+	return func(cfg *config) error {
+		cfg.sync = sync
 		return nil
 	}
 }
