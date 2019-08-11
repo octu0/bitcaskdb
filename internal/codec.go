@@ -28,28 +28,21 @@ type Encoder struct {
 // Encode takes any Entry and streams it to the underlying writer.
 // Messages are framed with a key-length and value-length prefix.
 func (e *Encoder) Encode(msg Entry) (int64, error) {
-	var bufKeyValue = make([]byte, ValueSize)
-
-	bufKeySize := bufKeyValue[:KeySize]
-	binary.BigEndian.PutUint32(bufKeySize, uint32(len(msg.Key)))
-	if _, err := e.w.Write(bufKeySize); err != nil {
-		return 0, errors.Wrap(err, "failed writing key length prefix")
+	var bufKeyValue = make([]byte, KeySize+ValueSize)
+	binary.BigEndian.PutUint32(bufKeyValue[:KeySize], uint32(len(msg.Key)))
+	binary.BigEndian.PutUint64(bufKeyValue[KeySize:KeySize+ValueSize], uint64(len(msg.Value)))
+	if _, err := e.w.Write(bufKeyValue); err != nil {
+		return 0, errors.Wrap(err, "failed writing key & value length prefix")
 	}
 
-	bufValueSize := bufKeyValue[:ValueSize]
-	binary.BigEndian.PutUint64(bufValueSize, uint64(len(msg.Value)))
-	if _, err := e.w.Write(bufValueSize); err != nil {
-		return 0, errors.Wrap(err, "failed writing value length prefix")
-	}
-
-	if _, err := e.w.Write([]byte(msg.Key)); err != nil {
+	if _, err := e.w.Write(msg.Key); err != nil {
 		return 0, errors.Wrap(err, "failed writing key data")
 	}
 	if _, err := e.w.Write(msg.Value); err != nil {
 		return 0, errors.Wrap(err, "failed writing value data")
 	}
 
-	bufChecksumSize := make([]byte, checksumSize)
+	bufChecksumSize := bufKeyValue[:checksumSize]
 	binary.BigEndian.PutUint32(bufChecksumSize, msg.Checksum)
 	if _, err := e.w.Write(bufChecksumSize); err != nil {
 		return 0, errors.Wrap(err, "failed writing checksum data")
