@@ -14,7 +14,7 @@ import (
 var scanCmd = &cobra.Command{
 	Use:     "scan <prefix>",
 	Aliases: []string{"search", "find"},
-	Short:   "Perform a prefis scan for keys",
+	Short:   "Perform a prefix scan for keys",
 	Long: `This performa a prefix scan for keys  starting with the given
 prefix. This uses a Trie to search for matching keys and returns all matched
 keys.`,

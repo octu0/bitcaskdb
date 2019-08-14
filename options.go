@@ -101,7 +101,7 @@ func WithMaxValueSize(size int) Option {
 }
 
 // WithSync causes Sync() to be called on every key/value written increasing
-// durability and saftey at the expense of performance
+// durability and safety at the expense of performance
 func WithSync(sync bool) Option {
 	return func(cfg *config) error {
 		cfg.sync = sync
