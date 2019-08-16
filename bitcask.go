@@ -1,6 +1,7 @@
 package bitcask
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"hash/crc32"
@@ -162,7 +163,10 @@ func (b *Bitcask) Put(key, value []byte) error {
 	}
 
 	item := b.keydir.Add(key, b.curr.FileID(), offset, n)
-	b.trie.Add(string(key), item)
+
+	if b.config.greedyScan {
+		b.trie.Add(string(key), item)
+	}
 
 	return nil
 }
@@ -176,7 +180,10 @@ func (b *Bitcask) Delete(key []byte) error {
 	}
 
 	b.keydir.Delete(key)
-	b.trie.Remove(string(key))
+
+	if b.config.greedyScan {
+		b.trie.Remove(string(key))
+	}
 
 	return nil
 }
@@ -185,12 +192,25 @@ func (b *Bitcask) Delete(key []byte) error {
 // the function `f` with the keys found. If the function returns an error
 // no further keys are processed and the first error returned.
 func (b *Bitcask) Scan(prefix []byte, f func(key []byte) error) error {
-	keys := b.trie.PrefixSearch(string(prefix))
-	for _, key := range keys {
-		if err := f([]byte(key)); err != nil {
-			return err
+	if b.config.greedyScan {
+		keys := b.trie.PrefixSearch(string(prefix))
+		for _, key := range keys {
+			if err := f([]byte(key)); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	keys := b.Keys()
+	for key := range keys {
+		if bytes.Equal(prefix, key[:len(prefix)]) {
+			if err := f([]byte(key)); err != nil {
+				return err
+			}
 		}
 	}
+
 	return nil
 }
 
@@ -295,7 +315,11 @@ func (b *Bitcask) reopen() error {
 	}
 
 	keydir := internal.NewKeydir()
-	trie := trie.New()
+
+	var t *trie.Trie
+	if b.config.greedyScan {
+		t = trie.New()
+	}
 
 	if internal.Exists(path.Join(b.path, "index")) {
 		if err := keydir.Load(path.Join(b.path, "index")); err != nil {
@@ -303,7 +327,9 @@ func (b *Bitcask) reopen() error {
 		}
 		for key := range keydir.Keys() {
 			item, _ := keydir.Get(key)
-			trie.Add(string(key), item)
+			if b.config.greedyScan {
+				t.Add(string(key), item)
+			}
 		}
 	} else {
 		for i, df := range datafiles {
@@ -323,7 +349,9 @@ func (b *Bitcask) reopen() error {
 				}
 
 				item := keydir.Add(e.Key, ids[i], e.Offset, n)
-				trie.Add(string(e.Key), item)
+				if b.config.greedyScan {
+					t.Add(string(e.Key), item)
+				}
 			}
 		}
 	}
@@ -343,7 +371,9 @@ func (b *Bitcask) reopen() error {
 
 	b.keydir = keydir
 
-	b.trie = trie
+	if b.config.greedyScan {
+		b.trie = t
+	}
 
 	return nil
 }
