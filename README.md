@@ -21,19 +21,10 @@ For a more feature-complete Redis-compatible server, distributed key/value store
 
 ## Development
 
-1. Get the source
-
 ```#!sh
 $ git clone https://github.com/prologic/bitcask.git
-```
-
-2. Build the project
-
-```#!sh
 $ make
 ```
-
-This will invoke `go generate` and `go build`.
 
 ## Install
 
