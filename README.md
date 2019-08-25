@@ -156,6 +156,18 @@ For 128B values:
 
 The full benchmark above shows linear performance as you increase key/value sizes. Memory pooling starts to become advantageous for larger values.
 
+## Stargazers over time
+
+[![Stargazers over time](https://starcharts.herokuapp.com/prologic/bitcask.svg)](https://starcharts.herokuapp.com/glauth/glauth)
+
+## Support
+
+Support the ongoing development of Bitcask!
+
+**Sponser**
+
+- Become a [Sponser](https://www.patreon.com/prologic)
+
 ## Contributors
 
 Thank you to all those that have contributed to this project, battle-tested it, used it in their own projects or pdocuts, fixed bugs, improved performance and even fix tiny tpyos in documentation! Thank you and keep contirbuting!
