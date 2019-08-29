@@ -12,8 +12,8 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/derekparker/trie"
 	"github.com/gofrs/flock"
+	"github.com/plar/go-adaptive-radix-tree"
 
 	"github.com/prologic/bitcask/internal"
 )
@@ -53,7 +53,7 @@ type Bitcask struct {
 	curr      *internal.Datafile
 	keydir    *internal.Keydir
 	datafiles map[int]*internal.Datafile
-	trie      *trie.Trie
+	trie      art.Tree
 }
 
 // Stats is a struct returned by Stats() on an open Bitcask instance
@@ -165,7 +165,7 @@ func (b *Bitcask) Put(key, value []byte) error {
 	item := b.keydir.Add(key, b.curr.FileID(), offset, n)
 
 	if b.config.greedyScan {
-		b.trie.Add(string(key), item)
+		b.trie.Insert(key, item)
 	}
 
 	return nil
@@ -182,7 +182,7 @@ func (b *Bitcask) Delete(key []byte) error {
 	b.keydir.Delete(key)
 
 	if b.config.greedyScan {
-		b.trie.Remove(string(key))
+		b.trie.Delete(key)
 	}
 
 	return nil
@@ -193,12 +193,12 @@ func (b *Bitcask) Delete(key []byte) error {
 // no further keys are processed and the first error returned.
 func (b *Bitcask) Scan(prefix []byte, f func(key []byte) error) error {
 	if b.config.greedyScan {
-		keys := b.trie.PrefixSearch(string(prefix))
-		for _, key := range keys {
-			if err := f([]byte(key)); err != nil {
-				return err
+		b.trie.ForEachPrefix(prefix, func(node art.Node) bool {
+			if err := f(node.Key()); err != nil {
+				return false
 			}
-		}
+			return true
+		})
 		return nil
 	}
 
@@ -316,9 +316,9 @@ func (b *Bitcask) reopen() error {
 
 	keydir := internal.NewKeydir()
 
-	var t *trie.Trie
+	var t art.Tree
 	if b.config.greedyScan {
-		t = trie.New()
+		t = art.New()
 	}
 
 	if internal.Exists(path.Join(b.path, "index")) {
@@ -328,7 +328,7 @@ func (b *Bitcask) reopen() error {
 		for key := range keydir.Keys() {
 			item, _ := keydir.Get(key)
 			if b.config.greedyScan {
-				t.Add(string(key), item)
+				t.Insert(key, item)
 			}
 		}
 	} else {
@@ -350,7 +350,7 @@ func (b *Bitcask) reopen() error {
 
 				item := keydir.Add(e.Key, ids[i], e.Offset, n)
 				if b.config.greedyScan {
-					t.Add(string(e.Key), item)
+					t.Insert(e.Key, item)
 				}
 			}
 		}
