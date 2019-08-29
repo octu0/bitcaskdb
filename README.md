@@ -158,7 +158,7 @@ The full benchmark above shows linear performance as you increase key/value size
 
 ## Stargazers over time
 
-[![Stargazers over time](https://starcharts.herokuapp.com/prologic/bitcask.svg)](https://starcharts.herokuapp.com/glauth/glauth)
+[![Stargazers over time](https://starcharts.herokuapp.com/prologic/bitcask.svg)](https://starcharts.herokuapp.com/prologic/bitcask)
 
 ## Support
 
