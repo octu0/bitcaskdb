@@ -80,7 +80,7 @@ func (d *Decoder) Decode(v *Entry) (int64, error) {
 		return 0, errors.Wrap(translateError(err), "failed reading saved data")
 	}
 
-	DecodeWithoutPrefix(buf, actualValueSize, v)
+	DecodeWithoutPrefix(buf, actualKeySize, v)
 	return int64(KeySize + ValueSize + actualKeySize + actualValueSize + checksumSize), nil
 }
 
