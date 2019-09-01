@@ -9,20 +9,6 @@ import (
 	"strings"
 )
 
-const (
-	offset64 = 14695981039346656037
-	prime64  = 1099511628211
-)
-
-func Hash(key []byte) uint64 {
-	var s uint64 = offset64
-	for _, c := range key {
-		s ^= uint64(c)
-		s *= prime64
-	}
-	return s
-}
-
 func Exists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil

@@ -1,7 +1,6 @@
 package bitcask
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"hash/crc32"
@@ -13,8 +12,7 @@ import (
 	"sync"
 
 	"github.com/gofrs/flock"
-	"github.com/plar/go-adaptive-radix-tree"
-
+	art "github.com/plar/go-adaptive-radix-tree"
 	"github.com/prologic/bitcask/internal"
 )
 
@@ -51,7 +49,6 @@ type Bitcask struct {
 	options   []Option
 	path      string
 	curr      *internal.Datafile
-	keydir    *internal.Keydir
 	datafiles map[int]*internal.Datafile
 	trie      art.Tree
 }
@@ -74,7 +71,9 @@ func (b *Bitcask) Stats() (stats Stats, err error) {
 	}
 
 	stats.Datafiles = len(b.datafiles)
-	stats.Keys = b.keydir.Len()
+	b.mu.RLock()
+	stats.Keys = b.trie.Size()
+	b.mu.RUnlock()
 	stats.Size = size
 
 	return
@@ -89,7 +88,16 @@ func (b *Bitcask) Close() error {
 		os.Remove(b.Flock.Path())
 	}()
 
-	if err := b.keydir.Save(path.Join(b.path, "index")); err != nil {
+	f, err := os.OpenFile(filepath.Join(b.path, "index"), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	if err := internal.WriteIndex(b.trie, f); err != nil {
+		return err
+	}
+	if err := f.Sync(); err != nil {
 		return err
 	}
 
@@ -112,10 +120,14 @@ func (b *Bitcask) Sync() error {
 func (b *Bitcask) Get(key []byte) ([]byte, error) {
 	var df *internal.Datafile
 
-	item, ok := b.keydir.Get(key)
-	if !ok {
+	b.mu.RLock()
+	value, found := b.trie.Search(key)
+	b.mu.RUnlock()
+	if !found {
 		return nil, ErrKeyNotFound
 	}
+
+	item := value.(internal.Item)
 
 	if item.FileID == b.curr.FileID() {
 		df = b.curr
@@ -138,8 +150,10 @@ func (b *Bitcask) Get(key []byte) ([]byte, error) {
 
 // Has returns true if the key exists in the database, false otherwise.
 func (b *Bitcask) Has(key []byte) bool {
-	_, ok := b.keydir.Get(key)
-	return ok
+	b.mu.RLock()
+	_, found := b.trie.Search(key)
+	b.mu.RUnlock()
+	return found
 }
 
 // Put stores the key and value in the database.
@@ -162,11 +176,10 @@ func (b *Bitcask) Put(key, value []byte) error {
 		}
 	}
 
-	item := b.keydir.Add(key, b.curr.FileID(), offset, n)
-
-	if b.config.greedyScan {
-		b.trie.Insert(key, item)
-	}
+	item := internal.Item{b.curr.FileID(), offset, n}
+	b.mu.Lock()
+	b.trie.Insert(key, item)
+	b.mu.Unlock()
 
 	return nil
 }
@@ -179,11 +192,9 @@ func (b *Bitcask) Delete(key []byte) error {
 		return err
 	}
 
-	b.keydir.Delete(key)
-
-	if b.config.greedyScan {
-		b.trie.Delete(key)
-	}
+	b.mu.Lock()
+	b.trie.Delete(key)
+	b.mu.Unlock()
 
 	return nil
 }
@@ -191,48 +202,65 @@ func (b *Bitcask) Delete(key []byte) error {
 // Scan performs a prefix scan of keys matching the given prefix and calling
 // the function `f` with the keys found. If the function returns an error
 // no further keys are processed and the first error returned.
-func (b *Bitcask) Scan(prefix []byte, f func(key []byte) error) error {
-	if b.config.greedyScan {
-		b.trie.ForEachPrefix(prefix, func(node art.Node) bool {
-			if err := f(node.Key()); err != nil {
-				return false
-			}
+func (b *Bitcask) Scan(prefix []byte, f func(key []byte) error) (err error) {
+	b.trie.ForEachPrefix(prefix, func(node art.Node) bool {
+		// Skip the root node
+		if len(node.Key()) == 0 {
 			return true
-		})
-		return nil
-	}
-
-	keys := b.Keys()
-	for key := range keys {
-		if bytes.Equal(prefix, key[:len(prefix)]) {
-			if err := f([]byte(key)); err != nil {
-				return err
-			}
 		}
-	}
 
-	return nil
+		if err = f(node.Key()); err != nil {
+			return false
+		}
+		return true
+	})
+	return
 }
 
 // Len returns the total number of keys in the database
 func (b *Bitcask) Len() int {
-	return b.keydir.Len()
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return b.trie.Size()
 }
 
-// Keys returns all keys in the database as a channel of string(s)
+// Keys returns all keys in the database as a channel of keys
 func (b *Bitcask) Keys() chan []byte {
-	return b.keydir.Keys()
+	ch := make(chan []byte)
+	go func() {
+		b.mu.RLock()
+		defer b.mu.RUnlock()
+
+		for it := b.trie.Iterator(); it.HasNext(); {
+			node, _ := it.Next()
+
+			// Skip the root node
+			if len(node.Key()) == 0 {
+				continue
+			}
+
+			ch <- node.Key()
+		}
+		close(ch)
+	}()
+
+	return ch
 }
 
 // Fold iterates over all keys in the database calling the function `f` for
 // each key. If the function returns an error, no further keys are processed
 // and the error returned.
 func (b *Bitcask) Fold(f func(key []byte) error) error {
-	for key := range b.keydir.Keys() {
-		if err := f(key); err != nil {
-			return err
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	b.trie.ForEach(func(node art.Node) bool {
+		if err := f(node.Key()); err != nil {
+			return false
 		}
-	}
+		return true
+	})
+
 	return nil
 }
 
@@ -314,22 +342,17 @@ func (b *Bitcask) reopen() error {
 		datafiles[id] = df
 	}
 
-	keydir := internal.NewKeydir()
-
-	var t art.Tree
-	if b.config.greedyScan {
-		t = art.New()
-	}
+	t := art.New()
 
 	if internal.Exists(path.Join(b.path, "index")) {
-		if err := keydir.Load(path.Join(b.path, "index")); err != nil {
+		f, err := os.Open(path.Join(b.path, "index"))
+		if err != nil {
 			return err
 		}
-		for key := range keydir.Keys() {
-			item, _ := keydir.Get(key)
-			if b.config.greedyScan {
-				t.Insert(key, item)
-			}
+		defer f.Close()
+
+		if err := internal.ReadIndex(f, t); err != nil {
+			return err
 		}
 	} else {
 		for i, df := range datafiles {
@@ -344,14 +367,12 @@ func (b *Bitcask) reopen() error {
 
 				// Tombstone value  (deleted key)
 				if len(e.Value) == 0 {
-					keydir.Delete(e.Key)
+					t.Delete(e.Key)
 					continue
 				}
 
-				item := keydir.Add(e.Key, ids[i], e.Offset, n)
-				if b.config.greedyScan {
-					t.Insert(e.Key, item)
-				}
+				item := internal.Item{ids[i], e.Offset, n}
+				t.Insert(e.Key, item)
 			}
 		}
 	}
@@ -366,14 +387,9 @@ func (b *Bitcask) reopen() error {
 		return err
 	}
 
+	b.trie = t
 	b.curr = curr
 	b.datafiles = datafiles
-
-	b.keydir = keydir
-
-	if b.config.greedyScan {
-		b.trie = t
-	}
 
 	return nil
 }

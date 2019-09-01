@@ -25,7 +25,6 @@ type config struct {
 	maxKeySize      int
 	maxValueSize    int
 	sync            bool
-	greedyScan      bool
 }
 
 func (c *config) MarshalJSON() ([]byte, error) {
@@ -34,13 +33,11 @@ func (c *config) MarshalJSON() ([]byte, error) {
 		MaxKeySize      int  `json:"max_key_size"`
 		MaxValueSize    int  `json:"max_value_size"`
 		Sync            bool `json:"sync"`
-		GreedyScan      bool `json:"greedy_scan"`
 	}{
 		MaxDatafileSize: c.maxDatafileSize,
 		MaxKeySize:      c.maxKeySize,
 		MaxValueSize:    c.maxValueSize,
 		Sync:            c.sync,
-		GreedyScan:      c.greedyScan,
 	})
 }
 
@@ -50,7 +47,6 @@ func getConfig(path string) (*config, error) {
 		MaxKeySize      int  `json:"max_key_size"`
 		MaxValueSize    int  `json:"max_value_size"`
 		Sync            bool `json:"sync"`
-		GreedyScan      bool `json:"greedy_scan"`
 	}
 
 	var cfg Config
@@ -69,7 +65,6 @@ func getConfig(path string) (*config, error) {
 		maxKeySize:      cfg.MaxKeySize,
 		maxValueSize:    cfg.MaxValueSize,
 		sync:            cfg.Sync,
-		greedyScan:      cfg.GreedyScan,
 	}, nil
 }
 
@@ -110,15 +105,6 @@ func WithMaxValueSize(size int) Option {
 func WithSync(sync bool) Option {
 	return func(cfg *config) error {
 		cfg.sync = sync
-		return nil
-	}
-}
-
-// WithGreedyScan enables faster Scan performance.
-// This is disabled by default because it causes high memory usage.
-func WithGreedyScan(enabled bool) Option {
-	return func(cfg *config) error {
-		cfg.greedyScan = enabled
 		return nil
 	}
 }
