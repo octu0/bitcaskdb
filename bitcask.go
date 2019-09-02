@@ -176,7 +176,7 @@ func (b *Bitcask) Put(key, value []byte) error {
 		}
 	}
 
-	item := internal.Item{b.curr.FileID(), offset, n}
+	item := internal.Item{FileID: b.curr.FileID(), Offset: offset, Size: n}
 	b.mu.Lock()
 	b.trie.Insert(key, item)
 	b.mu.Unlock()
@@ -371,7 +371,7 @@ func (b *Bitcask) reopen() error {
 					continue
 				}
 
-				item := internal.Item{ids[i], e.Offset, n}
+				item := internal.Item{FileID: ids[i], Offset: e.Offset, Size: n}
 				t.Insert(e.Key, item)
 			}
 		}
