@@ -356,6 +356,7 @@ func (b *Bitcask) reopen() error {
 		}
 	} else {
 		for i, df := range datafiles {
+			var offset int64
 			for {
 				e, n, err := df.Read()
 				if err != nil {
@@ -368,11 +369,13 @@ func (b *Bitcask) reopen() error {
 				// Tombstone value  (deleted key)
 				if len(e.Value) == 0 {
 					t.Delete(e.Key)
+					offset += n
 					continue
 				}
 
-				item := internal.Item{FileID: ids[i], Offset: e.Offset, Size: n}
+				item := internal.Item{FileID: ids[i], Offset: offset, Size: n}
 				t.Insert(e.Key, item)
+				offset += n
 			}
 		}
 	}
