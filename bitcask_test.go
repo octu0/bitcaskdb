@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
@@ -191,6 +192,170 @@ func TestDeletedKeys(t *testing.T) {
 			err = db.Close()
 			assert.NoError(err)
 		})
+	})
+}
+
+func TestReIndex(t *testing.T) {
+	assert := assert.New(t)
+
+	testdir, err := ioutil.TempDir("", "bitcask")
+	assert.NoError(err)
+
+	t.Run("Setup", func(t *testing.T) {
+		var (
+			db  *Bitcask
+			err error
+		)
+
+		t.Run("Open", func(t *testing.T) {
+			db, err = Open(testdir)
+			assert.NoError(err)
+		})
+
+		t.Run("Put", func(t *testing.T) {
+			err = db.Put([]byte("foo"), []byte("bar"))
+			assert.NoError(err)
+		})
+
+		t.Run("Get", func(t *testing.T) {
+			val, err := db.Get([]byte("foo"))
+			assert.NoError(err)
+			assert.Equal([]byte("bar"), val)
+		})
+
+		t.Run("Sync", func(t *testing.T) {
+			err = db.Sync()
+			assert.NoError(err)
+		})
+
+		t.Run("Close", func(t *testing.T) {
+			err = db.Close()
+			assert.NoError(err)
+		})
+
+		t.Run("DeleteIndex", func(t *testing.T) {
+			err := os.Remove(filepath.Join(testdir, "index"))
+			assert.NoError(err)
+		})
+	})
+
+	t.Run("Reopen", func(t *testing.T) {
+		var (
+			db  *Bitcask
+			err error
+		)
+
+		t.Run("Open", func(t *testing.T) {
+			db, err = Open(testdir)
+			assert.NoError(err)
+		})
+
+		t.Run("Get", func(t *testing.T) {
+			val, err := db.Get([]byte("foo"))
+			assert.NoError(err)
+			assert.Equal([]byte("bar"), val)
+		})
+
+		t.Run("Close", func(t *testing.T) {
+			err = db.Close()
+			assert.NoError(err)
+		})
+	})
+}
+
+func TestReIndexDeletedKeys(t *testing.T) {
+	assert := assert.New(t)
+
+	testdir, err := ioutil.TempDir("", "bitcask")
+	assert.NoError(err)
+
+	t.Run("Setup", func(t *testing.T) {
+		var (
+			db  *Bitcask
+			err error
+		)
+
+		t.Run("Open", func(t *testing.T) {
+			db, err = Open(testdir)
+			assert.NoError(err)
+		})
+
+		t.Run("Put", func(t *testing.T) {
+			err = db.Put([]byte("foo"), []byte("bar"))
+			assert.NoError(err)
+		})
+
+		t.Run("Get", func(t *testing.T) {
+			val, err := db.Get([]byte("foo"))
+			assert.NoError(err)
+			assert.Equal([]byte("bar"), val)
+		})
+
+		t.Run("Delete", func(t *testing.T) {
+			err := db.Delete([]byte("foo"))
+			assert.NoError(err)
+			_, err = db.Get([]byte("foo"))
+			assert.Error(err)
+			assert.Equal(ErrKeyNotFound, err)
+		})
+
+		t.Run("Sync", func(t *testing.T) {
+			err = db.Sync()
+			assert.NoError(err)
+		})
+
+		t.Run("Close", func(t *testing.T) {
+			err = db.Close()
+			assert.NoError(err)
+		})
+
+		t.Run("DeleteIndex", func(t *testing.T) {
+			err := os.Remove(filepath.Join(testdir, "index"))
+			assert.NoError(err)
+		})
+	})
+
+	t.Run("Reopen", func(t *testing.T) {
+		var (
+			db  *Bitcask
+			err error
+		)
+
+		t.Run("Open", func(t *testing.T) {
+			db, err = Open(testdir)
+			assert.NoError(err)
+		})
+
+		t.Run("Get", func(t *testing.T) {
+			_, err := db.Get([]byte("foo"))
+			assert.Error(err)
+			assert.Equal(ErrKeyNotFound, err)
+		})
+
+		t.Run("Close", func(t *testing.T) {
+			err = db.Close()
+			assert.NoError(err)
+		})
+	})
+}
+
+func TestSync(t *testing.T) {
+	assert := assert.New(t)
+
+	testdir, err := ioutil.TempDir("", "bitcask")
+	assert.NoError(err)
+
+	var db *Bitcask
+
+	t.Run("Open", func(t *testing.T) {
+		db, err = Open(testdir, WithSync(true))
+		assert.NoError(err)
+	})
+
+	t.Run("Put", func(t *testing.T) {
+		key := []byte(strings.Repeat(" ", 17))
+		value := []byte("foobar")
+		err = db.Put(key, value)
 	})
 }
 
