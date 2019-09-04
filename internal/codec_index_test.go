@@ -3,6 +3,7 @@ package internal
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/binary"
 	"testing"
 
 	"github.com/pkg/errors"
@@ -35,7 +36,7 @@ func TestReadIndex(t *testing.T) {
 	b := bytes.NewBuffer(sampleTreeBytes)
 
 	at := art.New()
-	err := ReadIndex(b, at)
+	err := ReadIndex(b, at, 1024, 1024)
 	if err != nil {
 		t.Fatalf("error while deserializing correct sample tree: %v", err)
 	}
@@ -55,27 +56,62 @@ func TestReadIndex(t *testing.T) {
 
 func TestReadCorruptedData(t *testing.T) {
 	sampleBytes, _ := base64.StdEncoding.DecodeString(base64SampleTree)
-	table := []struct {
-		name string
-		err  error
-		data []byte
-	}{
-		{name: "truncated-key-size-first-item", err: errTruncatedKeySize, data: sampleBytes[:2]},
-		{name: "truncated-key-data-second-item", err: errTruncatedKeyData, data: sampleBytes[:6]},
-		{name: "truncated-key-size-second-item", err: errTruncatedKeySize, data: sampleBytes[:(int32Size+4+fileIDSize+offsetSize+sizeSize)+2]},
-		{name: "truncated-key-data-second-item", err: errTruncatedKeyData, data: sampleBytes[:(int32Size+4+fileIDSize+offsetSize+sizeSize)+6]},
-		{name: "truncated-data", err: errTruncatedData, data: sampleBytes[:int32Size+4+(fileIDSize+offsetSize+sizeSize-3)]},
-	}
 
-	for i := range table {
-		t.Run(table[i].name, func(t *testing.T) {
-			bf := bytes.NewBuffer(table[i].data)
+	t.Run("truncated", func(t *testing.T) {
+		table := []struct {
+			name string
+			err  error
+			data []byte
+		}{
+			{name: "key-size-first-item", err: errTruncatedKeySize, data: sampleBytes[:2]},
+			{name: "key-data-second-item", err: errTruncatedKeyData, data: sampleBytes[:6]},
+			{name: "key-size-second-item", err: errTruncatedKeySize, data: sampleBytes[:(int32Size+4+fileIDSize+offsetSize+sizeSize)+2]},
+			{name: "key-data-second-item", err: errTruncatedKeyData, data: sampleBytes[:(int32Size+4+fileIDSize+offsetSize+sizeSize)+6]},
+			{name: "data", err: errTruncatedData, data: sampleBytes[:int32Size+4+(fileIDSize+offsetSize+sizeSize-3)]},
+		}
 
-			if err := ReadIndex(bf, art.New()); errors.Cause(err) != table[i].err {
-				t.Fatalf("expected %v, got %v", table[i].err, err)
-			}
-		})
-	}
+		for i := range table {
+			t.Run(table[i].name, func(t *testing.T) {
+				bf := bytes.NewBuffer(table[i].data)
+
+				if err := ReadIndex(bf, art.New(), 1024, 1024); errors.Cause(err) != table[i].err {
+					t.Fatalf("expected %v, got %v", table[i].err, err)
+				}
+			})
+		}
+	})
+
+	t.Run("overflow", func(t *testing.T) {
+		overflowKeySize := make([]byte, len(sampleBytes))
+		copy(overflowKeySize, sampleBytes)
+		binary.BigEndian.PutUint32(overflowKeySize, 1025)
+
+		overflowDataSize := make([]byte, len(sampleBytes))
+		copy(overflowDataSize, sampleBytes)
+		binary.BigEndian.PutUint32(overflowDataSize[int32Size+4+fileIDSize+offsetSize:], 1025)
+
+		table := []struct {
+			name         string
+			err          error
+			maxKeySize   int
+			maxValueSize int
+			data         []byte
+		}{
+			{name: "key-data-overflow", err: errKeySizeTooLarge, maxKeySize: 1024, maxValueSize: 1024, data: overflowKeySize},
+			{name: "item-data-overflow", err: errDataSizeTooLarge, maxKeySize: 1024, maxValueSize: 1024, data: overflowDataSize},
+		}
+
+		for i := range table {
+			t.Run(table[i].name, func(t *testing.T) {
+				bf := bytes.NewBuffer(table[i].data)
+
+				if err := ReadIndex(bf, art.New(), table[i].maxKeySize, table[i].maxValueSize); errors.Cause(err) != table[i].err {
+					t.Fatalf("expected %v, got %v", table[i].err, err)
+				}
+			})
+		}
+	})
+
 }
 
 func getSampleTree() (art.Tree, int) {

@@ -12,6 +12,8 @@ var (
 	errTruncatedKeySize = errors.New("key size is truncated")
 	errTruncatedKeyData = errors.New("key data is truncated")
 	errTruncatedData    = errors.New("data is truncated")
+	errKeySizeTooLarge  = errors.New("key size too large")
+	errDataSizeTooLarge = errors.New("data size too large")
 )
 
 const (
@@ -22,7 +24,7 @@ const (
 	sizeSize   = int64Size
 )
 
-func readKeyBytes(r io.Reader) ([]byte, error) {
+func readKeyBytes(r io.Reader, maxKeySize int) ([]byte, error) {
 	s := make([]byte, int32Size)
 	_, err := io.ReadFull(r, s)
 	if err != nil {
@@ -32,6 +34,10 @@ func readKeyBytes(r io.Reader) ([]byte, error) {
 		return nil, errors.Wrap(errTruncatedKeySize, err.Error())
 	}
 	size := binary.BigEndian.Uint32(s)
+	if size > uint32(maxKeySize) {
+		return nil, errKeySizeTooLarge
+	}
+
 	b := make([]byte, size)
 	_, err = io.ReadFull(r, b)
 	if err != nil {
@@ -40,50 +46,54 @@ func readKeyBytes(r io.Reader) ([]byte, error) {
 	return b, nil
 }
 
-func writeBytes(b []byte, w io.Writer) (int, error) {
+func writeBytes(b []byte, w io.Writer) error {
 	s := make([]byte, int32Size)
 	binary.BigEndian.PutUint32(s, uint32(len(b)))
-	n, err := w.Write(s)
+	_, err := w.Write(s)
 	if err != nil {
-		return n, err
+		return err
 	}
-	m, err := w.Write(b)
+	_, err = w.Write(b)
 	if err != nil {
-		return (n + m), err
+		return err
 	}
-	return (n + m), nil
+	return nil
 }
 
-func readItem(r io.Reader) (Item, error) {
+func readItem(r io.Reader, maxValueSize int) (Item, error) {
 	buf := make([]byte, (fileIDSize + offsetSize + sizeSize))
 	_, err := io.ReadFull(r, buf)
 	if err != nil {
 		return Item{}, errors.Wrap(errTruncatedData, err.Error())
 	}
 
+	size := int64(binary.BigEndian.Uint64(buf[(fileIDSize + offsetSize):]))
+	if size > int64(maxValueSize) {
+		return Item{}, errDataSizeTooLarge
+	}
 	return Item{
 		FileID: int(binary.BigEndian.Uint32(buf[:fileIDSize])),
 		Offset: int64(binary.BigEndian.Uint64(buf[fileIDSize:(fileIDSize + offsetSize)])),
-		Size:   int64(binary.BigEndian.Uint64(buf[(fileIDSize + offsetSize):])),
+		Size:   size,
 	}, nil
 }
 
-func writeItem(item Item, w io.Writer) (int, error) {
+func writeItem(item Item, w io.Writer) error {
 	buf := make([]byte, (fileIDSize + offsetSize + sizeSize))
 	binary.BigEndian.PutUint32(buf[:fileIDSize], uint32(item.FileID))
 	binary.BigEndian.PutUint64(buf[fileIDSize:(fileIDSize+offsetSize)], uint64(item.Offset))
 	binary.BigEndian.PutUint64(buf[(fileIDSize+offsetSize):], uint64(item.Size))
-	n, err := w.Write(buf)
+	_, err := w.Write(buf)
 	if err != nil {
-		return 0, err
+		return err
 	}
-	return n, nil
+	return nil
 }
 
-// ReadIndex reads a persisted tree from a io.Reader into a Tree
-func ReadIndex(r io.Reader, t art.Tree) error {
+// ReadIndex reads a persisted from a io.Reader into a Tree
+func ReadIndex(r io.Reader, t art.Tree, maxKeySize, maxValueSize int) error {
 	for {
-		key, err := readKeyBytes(r)
+		key, err := readKeyBytes(r, maxKeySize)
 		if err != nil {
 			if err == io.EOF {
 				break
@@ -91,7 +101,7 @@ func ReadIndex(r io.Reader, t art.Tree) error {
 			return err
 		}
 
-		item, err := readItem(r)
+		item, err := readItem(r, maxValueSize)
 		if err != nil {
 			return err
 		}
@@ -105,13 +115,13 @@ func ReadIndex(r io.Reader, t art.Tree) error {
 // WriteIndex persists a Tree into a io.Writer
 func WriteIndex(t art.Tree, w io.Writer) (err error) {
 	t.ForEach(func(node art.Node) bool {
-		_, err = writeBytes(node.Key(), w)
+		err = writeBytes(node.Key(), w)
 		if err != nil {
 			return false
 		}
 
 		item := node.Value().(Item)
-		_, err := writeItem(item, w)
+		err := writeItem(item, w)
 		if err != nil {
 			return false
 		}

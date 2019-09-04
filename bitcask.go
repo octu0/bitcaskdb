@@ -351,7 +351,7 @@ func (b *Bitcask) reopen() error {
 		}
 		defer f.Close()
 
-		if err := internal.ReadIndex(f, t); err != nil {
+		if err := internal.ReadIndex(f, t, b.config.maxKeySize, b.config.maxValueSize); err != nil {
 			return err
 		}
 	} else {
