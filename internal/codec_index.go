@@ -13,7 +13,6 @@ var (
 	errTruncatedKeyData = errors.New("key data is truncated")
 	errTruncatedData    = errors.New("data is truncated")
 	errKeySizeTooLarge  = errors.New("key size too large")
-	errDataSizeTooLarge = errors.New("data size too large")
 )
 
 const (
@@ -60,21 +59,17 @@ func writeBytes(b []byte, w io.Writer) error {
 	return nil
 }
 
-func readItem(r io.Reader, maxValueSize int) (Item, error) {
+func readItem(r io.Reader) (Item, error) {
 	buf := make([]byte, (fileIDSize + offsetSize + sizeSize))
 	_, err := io.ReadFull(r, buf)
 	if err != nil {
 		return Item{}, errors.Wrap(errTruncatedData, err.Error())
 	}
 
-	size := int64(binary.BigEndian.Uint64(buf[(fileIDSize + offsetSize):]))
-	if size > int64(maxValueSize) {
-		return Item{}, errDataSizeTooLarge
-	}
 	return Item{
 		FileID: int(binary.BigEndian.Uint32(buf[:fileIDSize])),
 		Offset: int64(binary.BigEndian.Uint64(buf[fileIDSize:(fileIDSize + offsetSize)])),
-		Size:   size,
+		Size:   int64(binary.BigEndian.Uint64(buf[(fileIDSize + offsetSize):])),
 	}, nil
 }
 
@@ -91,7 +86,7 @@ func writeItem(item Item, w io.Writer) error {
 }
 
 // ReadIndex reads a persisted from a io.Reader into a Tree
-func ReadIndex(r io.Reader, t art.Tree, maxKeySize, maxValueSize int) error {
+func ReadIndex(r io.Reader, t art.Tree, maxKeySize int) error {
 	for {
 		key, err := readKeyBytes(r, maxKeySize)
 		if err != nil {
@@ -101,7 +96,7 @@ func ReadIndex(r io.Reader, t art.Tree, maxKeySize, maxValueSize int) error {
 			return err
 		}
 
-		item, err := readItem(r, maxValueSize)
+		item, err := readItem(r)
 		if err != nil {
 			return err
 		}

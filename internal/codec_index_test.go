@@ -36,7 +36,7 @@ func TestReadIndex(t *testing.T) {
 	b := bytes.NewBuffer(sampleTreeBytes)
 
 	at := art.New()
-	err := ReadIndex(b, at, 1024, 1024)
+	err := ReadIndex(b, at, 1024)
 	if err != nil {
 		t.Fatalf("error while deserializing correct sample tree: %v", err)
 	}
@@ -74,7 +74,7 @@ func TestReadCorruptedData(t *testing.T) {
 			t.Run(table[i].name, func(t *testing.T) {
 				bf := bytes.NewBuffer(table[i].data)
 
-				if err := ReadIndex(bf, art.New(), 1024, 1024); errors.Cause(err) != table[i].err {
+				if err := ReadIndex(bf, art.New(), 1024); errors.Cause(err) != table[i].err {
 					t.Fatalf("expected %v, got %v", table[i].err, err)
 				}
 			})
@@ -91,21 +91,19 @@ func TestReadCorruptedData(t *testing.T) {
 		binary.BigEndian.PutUint32(overflowDataSize[int32Size+4+fileIDSize+offsetSize:], 1025)
 
 		table := []struct {
-			name         string
-			err          error
-			maxKeySize   int
-			maxValueSize int
-			data         []byte
+			name       string
+			err        error
+			maxKeySize int
+			data       []byte
 		}{
-			{name: "key-data-overflow", err: errKeySizeTooLarge, maxKeySize: 1024, maxValueSize: 1024, data: overflowKeySize},
-			{name: "item-data-overflow", err: errDataSizeTooLarge, maxKeySize: 1024, maxValueSize: 1024, data: overflowDataSize},
+			{name: "key-data-overflow", err: errKeySizeTooLarge, maxKeySize: 1024, data: overflowKeySize},
 		}
 
 		for i := range table {
 			t.Run(table[i].name, func(t *testing.T) {
 				bf := bytes.NewBuffer(table[i].data)
 
-				if err := ReadIndex(bf, art.New(), table[i].maxKeySize, table[i].maxValueSize); errors.Cause(err) != table[i].err {
+				if err := ReadIndex(bf, art.New(), table[i].maxKeySize); errors.Cause(err) != table[i].err {
 					t.Fatalf("expected %v, got %v", table[i].err, err)
 				}
 			})
