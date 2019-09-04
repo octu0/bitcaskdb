@@ -296,20 +296,6 @@ func (b *Bitcask) put(key, value []byte) (int64, int64, error) {
 	return b.curr.Write(e)
 }
 
-func (b *Bitcask) readConfig() error {
-	if internal.Exists(filepath.Join(b.path, "config.json")) {
-		data, err := ioutil.ReadFile(filepath.Join(b.path, "config.json"))
-		if err != nil {
-			return err
-		}
-
-		if err := json.Unmarshal(data, &b.config); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func (b *Bitcask) writeConfig() error {
 	data, err := json.Marshal(b.config)
 	if err != nil {
