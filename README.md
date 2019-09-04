@@ -118,45 +118,45 @@ goos: darwin
 goarch: amd64
 pkg: github.com/prologic/bitcask
 
-BenchmarkGet/128B-4         	  300000	      3913 ns/op	  32.71 MB/s	     387 B/op	       4 allocs/op
-BenchmarkGet/128BWithPool-4 	  300000	      4143 ns/op	  30.89 MB/s	     227 B/op	       3 allocs/op
-BenchmarkGet/256B-4         	  300000	      3919 ns/op	  65.31 MB/s	     643 B/op	       4 allocs/op
-BenchmarkGet/256BWithPool-4 	  300000	      4270 ns/op	  59.95 MB/s	     355 B/op	       3 allocs/op
-BenchmarkGet/512B-4         	  300000	      4248 ns/op	 120.52 MB/s	    1187 B/op	       4 allocs/op
-BenchmarkGet/512BWithPool-4 	  300000	      4676 ns/op	 109.48 MB/s	     611 B/op	       3 allocs/op
-BenchmarkGet/1K-4           	  200000	      5248 ns/op	 195.10 MB/s	    2275 B/op	       4 allocs/op
-BenchmarkGet/1KWithPool-4   	  200000	      5270 ns/op	 194.28 MB/s	    1123 B/op	       3 allocs/op
-BenchmarkGet/2K-4           	  200000	      6229 ns/op	 328.74 MB/s	    4451 B/op	       4 allocs/op
-BenchmarkGet/2KWithPool-4   	  200000	      6282 ns/op	 325.99 MB/s	    2147 B/op	       3 allocs/op
-BenchmarkGet/4K-4           	  200000	      9027 ns/op	 453.74 MB/s	    9059 B/op	       4 allocs/op
-BenchmarkGet/4KWithPool-4   	  200000	      8906 ns/op	 459.87 MB/s	    4195 B/op	       3 allocs/op
-BenchmarkGet/8K-4           	  100000	     12024 ns/op	 681.28 MB/s	   17763 B/op	       4 allocs/op
-BenchmarkGet/8KWithPool-4   	  200000	     11103 ns/op	 737.79 MB/s	    8291 B/op	       3 allocs/op
-BenchmarkGet/16K-4          	  100000	     16844 ns/op	 972.65 MB/s	   34915 B/op	       4 allocs/op
-BenchmarkGet/16KWithPool-4  	  100000	     14575 ns/op	1124.10 MB/s	   16483 B/op	       3 allocs/op
-BenchmarkGet/32K-4          	   50000	     27770 ns/op	1179.97 MB/s	   73827 B/op	       4 allocs/op
-BenchmarkGet/32KWithPool-4  	  100000	     24495 ns/op	1337.74 MB/s	   32867 B/op	       3 allocs/op
+BenchmarkGet/128B-4         	  316515	      3263 ns/op	  39.22 MB/s	     160 B/op	       1 allocs/op
+BenchmarkGet/256B-4         	  382551	      3204 ns/op	  79.90 MB/s	     288 B/op	       1 allocs/op
+BenchmarkGet/512B-4         	  357216	      3835 ns/op	 133.51 MB/s	     576 B/op	       1 allocs/op
+BenchmarkGet/1K-4           	  274958	      4429 ns/op	 231.20 MB/s	    1152 B/op	       1 allocs/op
+BenchmarkGet/2K-4           	  227764	      5013 ns/op	 408.55 MB/s	    2304 B/op	       1 allocs/op
+BenchmarkGet/4K-4           	  187557	      5534 ns/op	 740.15 MB/s	    4864 B/op	       1 allocs/op
+BenchmarkGet/8K-4           	  153546	      7652 ns/op	1070.56 MB/s	    9472 B/op	       1 allocs/op
+BenchmarkGet/16K-4          	  115549	     10272 ns/op	1594.95 MB/s	   18432 B/op	       1 allocs/op
+BenchmarkGet/32K-4          	   69592	     16405 ns/op	1997.39 MB/s	   40960 B/op	       1 allocs/op
 
-BenchmarkPut/128B-4         	  100000	     17492 ns/op	   7.32 MB/s	     441 B/op	       6 allocs/op
-BenchmarkPut/256B-4         	  100000	     17234 ns/op	  14.85 MB/s	     571 B/op	       6 allocs/op
-BenchmarkPut/512B-4         	  100000	     22837 ns/op	  22.42 MB/s	     861 B/op	       6 allocs/op
-BenchmarkPut/1K-4           	   50000	     30333 ns/op	  33.76 MB/s	    1443 B/op	       6 allocs/op
-BenchmarkPut/2K-4           	   30000	     45304 ns/op	  45.21 MB/s	    2606 B/op	       6 allocs/op
-BenchmarkPut/4K-4           	   20000	     83953 ns/op	  48.79 MB/s	    5187 B/op	       6 allocs/op
-BenchmarkPut/8K-4           	   10000	    142142 ns/op	  57.63 MB/s	    9845 B/op	       6 allocs/op
-BenchmarkPut/16K-4          	    5000	    206722 ns/op	  79.26 MB/s	   18884 B/op	       6 allocs/op
-BenchmarkPut/32K-4          	    5000	    361108 ns/op	  90.74 MB/s	   41582 B/op	       7 allocs/op
+BenchmarkPut/128BNoSync-4   	  123519	     11094 ns/op	  11.54 MB/s	      49 B/op	       2 allocs/op
+BenchmarkPut/256BNoSync-4   	   84662	     13398 ns/op	  19.11 MB/s	      50 B/op	       2 allocs/op
+BenchmarkPut/1KNoSync-4     	   46345	     24855 ns/op	  41.20 MB/s	      58 B/op	       2 allocs/op
+BenchmarkPut/2KNoSync-4     	   28820	     43817 ns/op	  46.74 MB/s	      68 B/op	       2 allocs/op
+BenchmarkPut/4KNoSync-4     	   13976	     90059 ns/op	  45.48 MB/s	      89 B/op	       2 allocs/op
+BenchmarkPut/8KNoSync-4     	    7852	    155101 ns/op	  52.82 MB/s	     130 B/op	       2 allocs/op
+BenchmarkPut/16KNoSync-4    	    4848	    238113 ns/op	  68.81 MB/s	     226 B/op	       2 allocs/op
+BenchmarkPut/32KNoSync-4    	    2564	    391483 ns/op	  83.70 MB/s	     377 B/op	       3 allocs/op
 
-BenchmarkScan-4             	 1000000	      1679 ns/op	     408 B/op	      16 allocs/op
+BenchmarkPut/128BSync-4     	     260	   4611273 ns/op	   0.03 MB/s	      48 B/op	       2 allocs/op
+BenchmarkPut/256BSync-4     	     265	   4665506 ns/op	   0.05 MB/s	      48 B/op	       2 allocs/op
+BenchmarkPut/1KSync-4       	     256	   4757334 ns/op	   0.22 MB/s	      48 B/op	       2 allocs/op
+BenchmarkPut/2KSync-4       	     255	   4996788 ns/op	   0.41 MB/s	      92 B/op	       2 allocs/op
+BenchmarkPut/4KSync-4       	     222	   5136481 ns/op	   0.80 MB/s	      98 B/op	       2 allocs/op
+BenchmarkPut/8KSync-4       	     223	   5530824 ns/op	   1.48 MB/s	      99 B/op	       2 allocs/op
+BenchmarkPut/16KSync-4      	     213	   5717880 ns/op	   2.87 MB/s	     202 B/op	       2 allocs/op
+BenchmarkPut/32KSync-4      	     211	   5835948 ns/op	   5.61 MB/s	     355 B/op	       3 allocs/op
+
+BenchmarkScan-4             	  568696	      2036 ns/op	     392 B/op	      33 allocs/op
 PASS
 ```
 
 For 128B values:
 
-* ~200,000 reads/sec
-* ~50,000 writes/sec
+* ~300,000 reads/sec
+* ~90,000 writes/sec
+* ~490,000 scans/sec
 
-The full benchmark above shows linear performance as you increase key/value sizes. Memory pooling starts to become advantageous for larger values.
+The full benchmark above shows linear performance as you increase key/value sizes.
 
 ## Stargazers over time
 
