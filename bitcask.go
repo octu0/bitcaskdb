@@ -1,7 +1,6 @@
 package bitcask
 
 import (
-	"encoding/json"
 	"errors"
 	"hash/crc32"
 	"io"
@@ -125,8 +124,8 @@ func (b *Bitcask) Get(key []byte) ([]byte, error) {
 
 	b.mu.RLock()
 	value, found := b.trie.Search(key)
-	b.mu.RUnlock()
 	if !found {
+		b.mu.RUnlock()
 		return nil, ErrKeyNotFound
 	}
 
@@ -139,6 +138,7 @@ func (b *Bitcask) Get(key []byte) ([]byte, error) {
 	}
 
 	e, err := df.ReadAt(item.Offset, item.Size)
+	b.mu.RUnlock()
 	if err != nil {
 		return nil, err
 	}
@@ -168,19 +168,21 @@ func (b *Bitcask) Put(key, value []byte) error {
 		return ErrValueTooLarge
 	}
 
+	b.mu.Lock()
 	offset, n, err := b.put(key, value)
 	if err != nil {
+		b.mu.Unlock()
 		return err
 	}
 
 	if b.config.Sync {
 		if err := b.curr.Sync(); err != nil {
+			b.mu.Unlock()
 			return err
 		}
 	}
 
 	item := internal.Item{FileID: b.curr.FileID(), Offset: offset, Size: n}
-	b.mu.Lock()
 	b.trie.Insert(key, item)
 	b.mu.Unlock()
 
@@ -190,12 +192,12 @@ func (b *Bitcask) Put(key, value []byte) error {
 // Delete deletes the named key. If the key doesn't exist or an I/O error
 // occurs the error is returned.
 func (b *Bitcask) Delete(key []byte) error {
+	b.mu.Lock()
 	_, _, err := b.put(key, []byte{})
 	if err != nil {
+		b.mu.Unlock()
 		return err
 	}
-
-	b.mu.Lock()
 	b.trie.Delete(key)
 	b.mu.Unlock()
 
@@ -268,9 +270,6 @@ func (b *Bitcask) Fold(f func(key []byte) error) error {
 }
 
 func (b *Bitcask) put(key, value []byte) (int64, int64, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
 	size := b.curr.Size()
 	if size >= int64(b.config.MaxDatafileSize) {
 		err := b.curr.Close()
@@ -300,7 +299,7 @@ func (b *Bitcask) put(key, value []byte) (int64, int64, error) {
 }
 
 func (b *Bitcask) writeConfig() error {
-	data, err := json.Marshal(b.config)
+	data, err := b.config.Encode()
 	if err != nil {
 		return err
 	}
