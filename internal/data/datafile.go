@@ -1,4 +1,4 @@
-package internal
+package data
 
 import (
 	"fmt"
@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/pkg/errors"
+	"github.com/prologic/bitcask/internal"
 	"golang.org/x/exp/mmap"
 )
 
@@ -119,7 +120,7 @@ func (df *Datafile) Size() int64 {
 	return df.offset
 }
 
-func (df *Datafile) Read() (e Entry, n int64, err error) {
+func (df *Datafile) Read() (e internal.Entry, n int64, err error) {
 	df.Lock()
 	defer df.Unlock()
 
@@ -131,7 +132,7 @@ func (df *Datafile) Read() (e Entry, n int64, err error) {
 	return
 }
 
-func (df *Datafile) ReadAt(index, size int64) (e Entry, err error) {
+func (df *Datafile) ReadAt(index, size int64) (e internal.Entry, err error) {
 	var n int
 
 	b := make([]byte, size)
@@ -155,7 +156,7 @@ func (df *Datafile) ReadAt(index, size int64) (e Entry, err error) {
 	return
 }
 
-func (df *Datafile) Write(e Entry) (int64, int64, error) {
+func (df *Datafile) Write(e internal.Entry) (int64, int64, error) {
 	if df.w == nil {
 		return -1, 0, ErrReadonly
 	}

@@ -1,4 +1,4 @@
-package internal
+package index
 
 import (
 	"bytes"
@@ -8,6 +8,7 @@ import (
 
 	"github.com/pkg/errors"
 	art "github.com/plar/go-adaptive-radix-tree"
+	"github.com/prologic/bitcask/internal"
 )
 
 const (
@@ -36,7 +37,7 @@ func TestReadIndex(t *testing.T) {
 	b := bytes.NewBuffer(sampleTreeBytes)
 
 	at := art.New()
-	err := ReadIndex(b, at, 1024)
+	err := readIndex(b, at, 1024)
 	if err != nil {
 		t.Fatalf("error while deserializing correct sample tree: %v", err)
 	}
@@ -74,7 +75,7 @@ func TestReadCorruptedData(t *testing.T) {
 			t.Run(table[i].name, func(t *testing.T) {
 				bf := bytes.NewBuffer(table[i].data)
 
-				if err := ReadIndex(bf, art.New(), 1024); errors.Cause(err) != table[i].err {
+				if err := readIndex(bf, art.New(), 1024); !IsIndexCorruption(err) || errors.Cause(err) != table[i].err {
 					t.Fatalf("expected %v, got %v", table[i].err, err)
 				}
 			})
@@ -103,7 +104,7 @@ func TestReadCorruptedData(t *testing.T) {
 			t.Run(table[i].name, func(t *testing.T) {
 				bf := bytes.NewBuffer(table[i].data)
 
-				if err := ReadIndex(bf, art.New(), table[i].maxKeySize); errors.Cause(err) != table[i].err {
+				if err := readIndex(bf, art.New(), table[i].maxKeySize); !IsIndexCorruption(err) || errors.Cause(err) != table[i].err {
 					t.Fatalf("expected %v, got %v", table[i].err, err)
 				}
 			})
@@ -117,7 +118,7 @@ func getSampleTree() (art.Tree, int) {
 	keys := [][]byte{[]byte("abcd"), []byte("abce"), []byte("abcf"), []byte("abgd")}
 	expectedSerializedSize := 0
 	for i := range keys {
-		at.Insert(keys[i], Item{FileID: i, Offset: int64(i), Size: int64(i)})
+		at.Insert(keys[i], internal.Item{FileID: i, Offset: int64(i), Size: int64(i)})
 		expectedSerializedSize += int32Size + len(keys[i]) + fileIDSize + offsetSize + sizeSize
 	}
 

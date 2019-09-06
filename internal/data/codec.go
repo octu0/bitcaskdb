@@ -1,4 +1,4 @@
-package internal
+package data
 
 import (
 	"bufio"
@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"github.com/pkg/errors"
+	"github.com/prologic/bitcask/internal"
 )
 
 const (
@@ -27,7 +28,7 @@ type Encoder struct {
 
 // Encode takes any Entry and streams it to the underlying writer.
 // Messages are framed with a key-length and value-length prefix.
-func (e *Encoder) Encode(msg Entry) (int64, error) {
+func (e *Encoder) Encode(msg internal.Entry) (int64, error) {
 	var bufKeyValue = make([]byte, KeySize+ValueSize)
 	binary.BigEndian.PutUint32(bufKeyValue[:KeySize], uint32(len(msg.Key)))
 	binary.BigEndian.PutUint64(bufKeyValue[KeySize:KeySize+ValueSize], uint64(len(msg.Value)))
@@ -66,7 +67,7 @@ type Decoder struct {
 	r io.Reader
 }
 
-func (d *Decoder) Decode(v *Entry) (int64, error) {
+func (d *Decoder) Decode(v *internal.Entry) (int64, error) {
 	prefixBuf := make([]byte, KeySize+ValueSize)
 
 	_, err := io.ReadFull(d.r, prefixBuf)
@@ -91,7 +92,7 @@ func GetKeyValueSizes(buf []byte) (uint64, uint64) {
 	return uint64(actualKeySize), actualValueSize
 }
 
-func DecodeWithoutPrefix(buf []byte, valueOffset uint64, v *Entry) {
+func DecodeWithoutPrefix(buf []byte, valueOffset uint64, v *internal.Entry) {
 	v.Key = buf[:valueOffset]
 	v.Value = buf[valueOffset : len(buf)-checksumSize]
 	v.Checksum = binary.BigEndian.Uint32(buf[len(buf)-checksumSize:])
