@@ -3,7 +3,7 @@ package config
 import (
 	"encoding/json"
 	"io/ioutil"
-	"path/filepath"
+	"os"
 )
 
 // Config contains the bitcask configuration parameters
@@ -14,11 +14,11 @@ type Config struct {
 	Sync            bool `json:"sync"`
 }
 
-// Decode decodes a serialized configuration
-func Decode(path string) (*Config, error) {
+// Load loads a configuration from the given path
+func Load(path string) (*Config, error) {
 	var cfg Config
 
-	data, err := ioutil.ReadFile(filepath.Join(path, "config.json"))
+	data, err := ioutil.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
@@ -30,7 +30,25 @@ func Decode(path string) (*Config, error) {
 	return &cfg, nil
 }
 
-// Encode encodes the configuration for storage
-func (c *Config) Encode() ([]byte, error) {
-	return json.Marshal(c)
+// Save saves the configuration to the provided path
+func (c *Config) Save(path string) error {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+	if err != nil {
+		return err
+	}
+
+	data, err := json.Marshal(c)
+	if err != nil {
+		return err
+	}
+
+	if _, err = f.Write(data); err != nil {
+		return err
+	}
+
+	if err = f.Sync(); err != nil {
+		return err
+	}
+
+	return f.Close()
 }

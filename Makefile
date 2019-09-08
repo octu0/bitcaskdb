@@ -39,6 +39,9 @@ profile: build
 bench: build
 	@go test -v -benchmem -bench=. .
 
+mocks:
+	@mockery -all -case underscore -output ./internal/mocks -recursive
+
 test: build
 	@go test -v \
 		-cover -coverprofile=coverage.txt -covermode=atomic \

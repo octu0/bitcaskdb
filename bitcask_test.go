@@ -2,6 +2,7 @@ package bitcask
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -13,6 +14,14 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/prologic/bitcask/internal"
+	"github.com/prologic/bitcask/internal/config"
+	"github.com/prologic/bitcask/internal/mocks"
+)
+
+var (
+	ErrMockError = errors.New("error: mock error")
 )
 
 type sortByteArrays [][]byte
@@ -192,6 +201,36 @@ func TestDeletedKeys(t *testing.T) {
 			err = db.Close()
 			assert.NoError(err)
 		})
+	})
+}
+
+func TestConfigErrors(t *testing.T) {
+	assert := assert.New(t)
+
+	t.Run("CorruptConfig", func(t *testing.T) {
+		testdir, err := ioutil.TempDir("", "bitcask")
+		assert.NoError(err)
+		defer os.RemoveAll(testdir)
+
+		db, err := Open(testdir)
+		assert.NoError(err)
+		assert.NoError(db.Close())
+
+		assert.NoError(ioutil.WriteFile(filepath.Join(testdir, "config.json"), []byte("foo bar baz"), 0600))
+
+		_, err = Open(testdir)
+		assert.Error(err)
+	})
+
+	t.Run("BadConfigPath", func(t *testing.T) {
+		testdir, err := ioutil.TempDir("", "bitcask")
+		assert.NoError(err)
+		defer os.RemoveAll(testdir)
+
+		assert.NoError(os.Mkdir(filepath.Join(testdir, "config.json"), 0700))
+
+		_, err = Open(testdir)
+		assert.Error(err)
 	})
 }
 
@@ -450,6 +489,109 @@ func TestStats(t *testing.T) {
 	})
 }
 
+func TestStatsError(t *testing.T) {
+	var (
+		db  *Bitcask
+		err error
+	)
+
+	assert := assert.New(t)
+
+	testdir, err := ioutil.TempDir("", "bitcask")
+	assert.NoError(err)
+
+	t.Run("Setup", func(t *testing.T) {
+		t.Run("Open", func(t *testing.T) {
+			db, err = Open(testdir)
+			assert.NoError(err)
+		})
+
+		t.Run("Put", func(t *testing.T) {
+			err := db.Put([]byte("foo"), []byte("bar"))
+			assert.NoError(err)
+		})
+
+		t.Run("Get", func(t *testing.T) {
+			val, err := db.Get([]byte("foo"))
+			assert.NoError(err)
+			assert.Equal([]byte("bar"), val)
+		})
+
+		t.Run("Stats", func(t *testing.T) {
+			stats, err := db.Stats()
+			assert.NoError(err)
+			assert.Equal(stats.Datafiles, 0)
+			assert.Equal(stats.Keys, 1)
+		})
+
+		t.Run("FabricatedDestruction", func(t *testing.T) {
+			// This would never happen in reality :D
+			// Or would it? :)
+			err = os.RemoveAll(testdir)
+			assert.NoError(err)
+		})
+
+		t.Run("Stats", func(t *testing.T) {
+			_, err := db.Stats()
+			assert.Error(err)
+		})
+	})
+}
+
+func TestMaxDatafileSize(t *testing.T) {
+	var (
+		db  *Bitcask
+		err error
+	)
+
+	assert := assert.New(t)
+
+	testdir, err := ioutil.TempDir("", "bitcask")
+	assert.NoError(err)
+	defer os.RemoveAll(testdir)
+
+	t.Run("Setup", func(t *testing.T) {
+		t.Run("Open", func(t *testing.T) {
+			db, err = Open(testdir, WithMaxDatafileSize(32))
+			assert.NoError(err)
+		})
+
+		t.Run("Put", func(t *testing.T) {
+			err := db.Put([]byte("foo"), []byte("bar"))
+			assert.NoError(err)
+		})
+	})
+
+	t.Run("Put", func(t *testing.T) {
+		for i := 0; i < 10; i++ {
+			err := db.Put([]byte(fmt.Sprintf("key_%d", i)), []byte("bar"))
+			assert.NoError(err)
+		}
+	})
+
+	t.Run("Sync", func(t *testing.T) {
+		err = db.Sync()
+		assert.NoError(err)
+	})
+
+	t.Run("Get", func(t *testing.T) {
+		val, err := db.Get([]byte("foo"))
+		assert.NoError(err)
+		assert.Equal([]byte("bar"), val)
+
+		for i := 0; i < 10; i++ {
+			val, err = db.Get([]byte(fmt.Sprintf("key_%d", i)))
+			assert.NoError(err)
+			assert.Equal([]byte("bar"), val)
+		}
+	})
+
+	t.Run("Close", func(t *testing.T) {
+		err = db.Close()
+		assert.NoError(err)
+	})
+}
+
 func TestMerge(t *testing.T) {
 	var (
 		db  *Bitcask
@@ -512,6 +654,286 @@ func TestMerge(t *testing.T) {
 			assert.NoError(err)
 		})
 	})
+}
+
+func TestGetErrors(t *testing.T) {
+	assert := assert.New(t)
+
+	t.Run("ReadError", func(t *testing.T) {
+		testdir, err := ioutil.TempDir("", "bitcask")
+		assert.NoError(err)
+		defer os.RemoveAll(testdir)
+
+		db, err := Open(testdir, WithMaxDatafileSize(32))
+		assert.NoError(err)
+
+		err = db.Put([]byte("foo"), []byte("bar"))
+		assert.NoError(err)
+
+		mockDatafile := new(mocks.Datafile)
+		mockDatafile.On("FileID").Return(0)
+		mockDatafile.On("ReadAt", int64(0), int64(22)).Return(
+			internal.Entry{},
+			ErrMockError,
+		)
+		db.curr = mockDatafile
+
+		_, err = db.Get([]byte("foo"))
+		assert.Error(err)
+		assert.Equal(ErrMockError, err)
+	})
+
+	t.Run("ChecksumError", func(t *testing.T) {
+		testdir, err := ioutil.TempDir("", "bitcask")
+		assert.NoError(err)
+		defer os.RemoveAll(testdir)
+
+		db, err := Open(testdir, WithMaxDatafileSize(32))
+		assert.NoError(err)
+
+		err = db.Put([]byte("foo"), []byte("bar"))
+		assert.NoError(err)
+
+		mockDatafile := new(mocks.Datafile)
+		mockDatafile.On("FileID").Return(0)
+		mockDatafile.On("ReadAt", int64(0), int64(22)).Return(
+			internal.Entry{
+				Checksum: 0x0,
+				Key:      []byte("foo"),
+				Offset:   0,
+				Value:    []byte("bar"),
+			},
+			nil,
+		)
+		db.curr = mockDatafile
+
+		_, err = db.Get([]byte("foo"))
+		assert.Error(err)
+		assert.Equal(ErrChecksumFailed, err)
+	})
+
+}
+
+func TestPutErrors(t *testing.T) {
+	assert := assert.New(t)
+
+	t.Run("WriteError", func(t *testing.T) {
+		testdir, err := ioutil.TempDir("", "bitcask")
+		assert.NoError(err)
+
+		db, err := Open(testdir)
+		assert.NoError(err)
+
+		mockDatafile := new(mocks.Datafile)
+		mockDatafile.On("Size").Return(int64(0))
+		mockDatafile.On(
+			"Write",
+			internal.Entry{
+				Checksum: 0x76ff8caa,
+				Key:      []byte("foo"),
+				Offset:   0,
+				Value:    []byte("bar"),
+			},
+		).Return(int64(0), int64(0), ErrMockError)
+		db.curr = mockDatafile
+
+		err = db.Put([]byte("foo"), []byte("bar"))
+		assert.Error(err)
+		assert.Equal(ErrMockError, err)
+	})
+
+	t.Run("SyncError", func(t *testing.T) {
+		testdir, err := ioutil.TempDir("", "bitcask")
+		assert.NoError(err)
+		db, err := Open(testdir, WithSync(true))
+		assert.NoError(err)
+
+		mockDatafile := new(mocks.Datafile)
+		mockDatafile.On("Size").Return(int64(0))
+		mockDatafile.On(
+			"Write",
+			internal.Entry{
+				Checksum: 0x78240498,
+				Key:      []byte("bar"),
+				Offset:   0,
+				Value:    []byte("baz"),
+			},
+		).Return(int64(0), int64(0), nil)
+		mockDatafile.On("Sync").Return(ErrMockError)
+		db.curr = mockDatafile
+
+		err = db.Put([]byte("bar"), []byte("baz"))
+		assert.Error(err)
+		assert.Equal(ErrMockError, err)
+	})
+}
+
+func TestOpenErrors(t *testing.T) {
+	assert := assert.New(t)
+
+	t.Run("BadPath", func(t *testing.T) {
+		testdir, err := ioutil.TempDir("", "bitcask")
+		assert.NoError(err)
+		defer os.RemoveAll(testdir)
+
+		assert.NoError(ioutil.WriteFile(filepath.Join(testdir, "foo"), []byte("foo"), 0600))
+
+		_, err = Open(filepath.Join(testdir, "foo", "tmp.db"))
+		assert.Error(err)
+	})
+
+	t.Run("BadOption", func(t *testing.T) {
+		testdir, err := ioutil.TempDir("", "bitcask")
+		assert.NoError(err)
+		defer os.RemoveAll(testdir)
+
+		withBogusOption := func() Option {
+			return func(cfg *config.Config) error {
+				return errors.New("mocked error")
+			}
+		}
+
+		_, err = Open(testdir, withBogusOption())
+		assert.Error(err)
+	})
+}
+
+func TestCloseErrors(t *testing.T) {
+	assert := assert.New(t)
+
+	testdir, err := ioutil.TempDir("", "bitcask")
+	assert.NoError(err)
+	defer os.RemoveAll(testdir)
+
+	t.Run("CloseIndexError", func(t *testing.T) {
+		db, err := Open(testdir, WithMaxDatafileSize(32))
+		assert.NoError(err)
+
+		mockIndexer := new(mocks.Indexer)
+		mockIndexer.On("Save", db.trie, filepath.Join(db.path, "index")).Return(ErrMockError)
+		db.indexer = mockIndexer
+
+		err = db.Close()
+		assert.Error(err)
+		assert.Equal(ErrMockError, err)
+	})
+
+	t.Run("CloseDatafilesError", func(t *testing.T) {
+		db, err := Open(testdir, WithMaxDatafileSize(32))
+		assert.NoError(err)
+
+		mockDatafile := new(mocks.Datafile)
+		mockDatafile.On("Close").Return(ErrMockError)
+		db.datafiles[0] = mockDatafile
+
+		err = db.Close()
+		assert.Error(err)
+		assert.Equal(ErrMockError, err)
+	})
+
+	t.Run("CloseActiveDatafileError", func(t *testing.T) {
+		db, err := Open(testdir, WithMaxDatafileSize(32))
+		assert.NoError(err)
+
+		mockDatafile := new(mocks.Datafile)
+		mockDatafile.On("Close").Return(ErrMockError)
+		db.curr = mockDatafile
+
+		err = db.Close()
+		assert.Error(err)
+		assert.Equal(ErrMockError, err)
+	})
+}
+
+func TestDeleteErrors(t *testing.T) {
+	assert := assert.New(t)
+
+	t.Run("WriteError", func(t *testing.T) {
+		testdir, err := ioutil.TempDir("", "bitcask")
+		assert.NoError(err)
+		defer os.RemoveAll(testdir)
+
+		db, err := Open(testdir, WithMaxDatafileSize(32))
+		assert.NoError(err)
+
+		err = db.Put([]byte("foo"), []byte("bar"))
+		assert.NoError(err)
+
+		mockDatafile := new(mocks.Datafile)
+		mockDatafile.On("Size").Return(int64(0))
+		mockDatafile.On(
+			"Write",
+			internal.Entry{
+				Checksum: 0x0,
+				Key:      []byte("foo"),
+				Offset:   0,
+				Value:    []byte{},
+			},
+		).Return(int64(0), int64(0), ErrMockError)
+		db.curr = mockDatafile
+
+		err = db.Delete([]byte("foo"))
+		assert.Error(err)
+	})
+}
+
+func TestMergeErrors(t *testing.T) {
+	assert := assert.New(t)
+
+	t.Run("RemoveDatabaseDirectory", func(t *testing.T) {
+		testdir, err := ioutil.TempDir("", "bitcask")
+		assert.NoError(err)
+		defer os.RemoveAll(testdir)
+
+		db, err := Open(testdir, WithMaxDatafileSize(32))
+		assert.NoError(err)
+
+		assert.NoError(os.RemoveAll(testdir))
+
+		err = db.Merge()
+		assert.Error(err)
+	})
+
+	t.Run("EmptyCloseError", func(t *testing.T) {
+		testdir, err := ioutil.TempDir("", "bitcask")
+		assert.NoError(err)
+		defer os.RemoveAll(testdir)
+
+		db, err := Open(testdir)
+		assert.NoError(err)
+
+		mockDatafile := new(mocks.Datafile)
+		mockDatafile.On("Close").Return(ErrMockError)
+		db.curr = mockDatafile
+
+		err = db.Merge()
+		assert.Error(err)
+		assert.Equal(ErrMockError, err)
+	})
+
+	t.Run("ReadError", func(t *testing.T) {
+		testdir, err := ioutil.TempDir("", "bitcask")
+		assert.NoError(err)
+		defer os.RemoveAll(testdir)
+
+		db, err := Open(testdir)
+		assert.NoError(err)
+
+		assert.NoError(db.Put([]byte("foo"), []byte("bar")))
+
+		mockDatafile := new(mocks.Datafile)
+		mockDatafile.On("FileID").Return(0)
+		mockDatafile.On("ReadAt", int64(0), int64(22)).Return(
+			internal.Entry{},
+			ErrMockError,
+		)
+		db.curr = mockDatafile
+
+		err = db.Merge()
+		assert.Error(err)
+		assert.Equal(ErrMockError, err)
+	})
+
 }
 
 func TestConcurrent(t *testing.T) {
@@ -641,6 +1063,14 @@ func TestScan(t *testing.T) {
 		})
 		vals = SortByteArrays(vals)
 		assert.Equal(expected, vals)
+	})
+
+	t.Run("ScanErrors", func(t *testing.T) {
+		err = db.Scan([]byte("fo"), func(key []byte) error {
+			return ErrMockError
+		})
+		assert.Error(err)
+		assert.Equal(ErrMockError, err)
 	})
 }
 

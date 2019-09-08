@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"path/filepath"
 
 	"github.com/prologic/bitcask"
 	"github.com/prologic/bitcask/internal/config"
@@ -36,11 +37,11 @@ func init() {
 
 func recover(path string, dryRun bool) int {
 	maxKeySize := bitcask.DefaultMaxKeySize
-	if cfg, err := config.Decode(path); err == nil {
+	if cfg, err := config.Load(filepath.Join(path, "config.json")); err == nil {
 		maxKeySize = cfg.MaxKeySize
 	}
 
-	t, found, err := index.ReadFromFile(path, maxKeySize)
+	t, found, err := index.NewIndexer().Load(path, maxKeySize)
 	if err != nil && !index.IsIndexCorruption(err) {
 		log.WithError(err).Info("error while opening the index file")
 	}
@@ -60,23 +61,11 @@ func recover(path string, dryRun bool) int {
 		return 0
 	}
 
-	fi, err := os.OpenFile("index.recovered", os.O_WRONLY|os.O_CREATE, 0600)
-	if err != nil {
-		log.WithError(err).Info("error while creating recovered index file")
-		return 1
-	}
-
 	// Leverage that t has the partiatially read tree even on corrupted files
-	err = index.WriteIndex(t, fi)
+	err = index.NewIndexer().Save(t, "index.recovered")
 	if err != nil {
 		log.WithError(err).Info("error while writing the recovered index file")
-
-		fi.Close()
 		return 1
-	}
-	err = fi.Close()
-	if err != nil {
-		log.WithError(err).Info("the recovered file index coudn't be saved correctly")
 	}
 	log.Debug("the index was recovered in the index.recovered new file")
 

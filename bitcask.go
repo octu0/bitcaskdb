@@ -50,9 +50,10 @@ type Bitcask struct {
 	config    *config.Config
 	options   []Option
 	path      string
-	curr      *data.Datafile
-	datafiles map[int]*data.Datafile
+	curr      data.Datafile
+	datafiles map[int]data.Datafile
 	trie      art.Tree
+	indexer   index.Indexer
 }
 
 // Stats is a struct returned by Stats() on an open Bitcask instance
@@ -65,18 +66,14 @@ type Stats struct {
 // Stats returns statistics about the database including the number of
 // data files, keys and overall size on disk of the data
 func (b *Bitcask) Stats() (stats Stats, err error) {
-	var size int64
-
-	size, err = internal.DirSize(b.path)
-	if err != nil {
+	if stats.Size, err = internal.DirSize(b.path); err != nil {
 		return
 	}
 
-	stats.Datafiles = len(b.datafiles)
 	b.mu.RLock()
+	stats.Datafiles = len(b.datafiles)
 	stats.Keys = b.trie.Size()
 	b.mu.RUnlock()
-	stats.Size = size
 
 	return
 }
@@ -90,16 +87,7 @@ func (b *Bitcask) Close() error {
 		os.Remove(b.Flock.Path())
 	}()
 
-	f, err := os.OpenFile(filepath.Join(b.path, "index"), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	if err := index.WriteIndex(b.trie, f); err != nil {
-		return err
-	}
-	if err := f.Sync(); err != nil {
+	if err := b.indexer.Save(b.trie, filepath.Join(b.path, "index")); err != nil {
 		return err
 	}
 
@@ -120,7 +108,7 @@ func (b *Bitcask) Sync() error {
 // Get retrieves the value of the given key. If the key is not found or an/I/O
 // error occurs a null byte slice is returned along with the error.
 func (b *Bitcask) Get(key []byte) ([]byte, error) {
-	var df *data.Datafile
+	var df data.Datafile
 
 	b.mu.RLock()
 	value, found := b.trie.Search(key)
@@ -238,12 +226,6 @@ func (b *Bitcask) Keys() chan []byte {
 
 		for it := b.trie.Iterator(); it.HasNext(); {
 			node, _ := it.Next()
-
-			// Skip the root node
-			if len(node.Key()) == 0 {
-				continue
-			}
-
 			ch <- node.Key()
 		}
 		close(ch)
@@ -255,18 +237,18 @@ func (b *Bitcask) Keys() chan []byte {
 // Fold iterates over all keys in the database calling the function `f` for
 // each key. If the function returns an error, no further keys are processed
 // and the error returned.
-func (b *Bitcask) Fold(f func(key []byte) error) error {
+func (b *Bitcask) Fold(f func(key []byte) error) (err error) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
 	b.trie.ForEach(func(node art.Node) bool {
-		if err := f(node.Key()); err != nil {
+		if err = f(node.Key()); err != nil {
 			return false
 		}
 		return true
 	})
 
-	return nil
+	return
 }
 
 func (b *Bitcask) put(key, value []byte) (int64, int64, error) {
@@ -298,14 +280,6 @@ func (b *Bitcask) put(key, value []byte) (int64, int64, error) {
 	return b.curr.Write(e)
 }
 
-func (b *Bitcask) writeConfig() error {
-	data, err := b.config.Encode()
-	if err != nil {
-		return err
-	}
-	return ioutil.WriteFile(filepath.Join(b.path, "config.json"), data, 0600)
-}
-
 func (b *Bitcask) reopen() error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -320,7 +294,7 @@ func (b *Bitcask) reopen() error {
 		return err
 	}
 
-	datafiles := make(map[int]*data.Datafile, len(ids))
+	datafiles := make(map[int]data.Datafile, len(ids))
 
 	for _, id := range ids {
 		df, err := data.NewDatafile(b.path, id, true)
@@ -330,7 +304,7 @@ func (b *Bitcask) reopen() error {
 		datafiles[id] = df
 	}
 
-	t, found, err := index.ReadFromFile(b.path, b.config.MaxKeySize)
+	t, found, err := b.indexer.Load(filepath.Join(b.path, "index"), b.config.MaxKeySize)
 	if err != nil {
 		return err
 	}
@@ -469,8 +443,13 @@ func Open(path string, options ...Option) (*Bitcask, error) {
 		return nil, err
 	}
 
-	cfg, err = config.Decode(path)
-	if err != nil {
+	configPath := filepath.Join(path, "config.json")
+	if internal.Exists(configPath) {
+		cfg, err = config.Load(configPath)
+		if err != nil {
+			return nil, err
+		}
+	} else {
 		cfg = newDefaultConfig()
 	}
 
@@ -479,6 +458,7 @@ func Open(path string, options ...Option) (*Bitcask, error) {
 		config:  cfg,
 		options: options,
 		path:    path,
+		indexer: index.NewIndexer(),
 	}
 
 	for _, opt := range options {
@@ -496,7 +476,7 @@ func Open(path string, options ...Option) (*Bitcask, error) {
 		return nil, ErrDatabaseLocked
 	}
 
-	if err := bitcask.writeConfig(); err != nil {
+	if err := cfg.Save(configPath); err != nil {
 		return nil, err
 	}
 

@@ -22,7 +22,18 @@ var (
 	mxMemPool sync.RWMutex
 )
 
-type Datafile struct {
+type Datafile interface {
+	FileID() int
+	Name() string
+	Close() error
+	Sync() error
+	Size() int64
+	Read() (internal.Entry, int64, error)
+	ReadAt(index, size int64) (internal.Entry, error)
+	Write(internal.Entry) (int64, int64, error)
+}
+
+type datafile struct {
 	sync.RWMutex
 
 	id     int
@@ -34,7 +45,7 @@ type Datafile struct {
 	enc    *Encoder
 }
 
-func NewDatafile(path string, id int, readonly bool) (*Datafile, error) {
+func NewDatafile(path string, id int, readonly bool) (Datafile, error) {
 	var (
 		r   *os.File
 		ra  *mmap.ReaderAt
@@ -70,7 +81,7 @@ func NewDatafile(path string, id int, readonly bool) (*Datafile, error) {
 	dec := NewDecoder(r)
 	enc := NewEncoder(w)
 
-	return &Datafile{
+	return &datafile{
 		id:     id,
 		r:      r,
 		ra:     ra,
@@ -81,21 +92,21 @@ func NewDatafile(path string, id int, readonly bool) (*Datafile, error) {
 	}, nil
 }
 
-func (df *Datafile) FileID() int {
+func (df *datafile) FileID() int {
 	return df.id
 }
 
-func (df *Datafile) Name() string {
+func (df *datafile) Name() string {
 	return df.r.Name()
 }
 
-func (df *Datafile) Close() error {
+func (df *datafile) Close() error {
 	defer func() {
 		df.ra.Close()
 		df.r.Close()
 	}()
 
-	// Readonly Datafile -- Nothing further to close on the write side
+	// Readonly datafile -- Nothing further to close on the write side
 	if df.w == nil {
 		return nil
 	}
@@ -107,20 +118,20 @@ func (df *Datafile) Close() error {
 	return df.w.Close()
 }
 
-func (df *Datafile) Sync() error {
+func (df *datafile) Sync() error {
 	if df.w == nil {
 		return nil
 	}
 	return df.w.Sync()
 }
 
-func (df *Datafile) Size() int64 {
+func (df *datafile) Size() int64 {
 	df.RLock()
 	defer df.RUnlock()
 	return df.offset
 }
 
-func (df *Datafile) Read() (e internal.Entry, n int64, err error) {
+func (df *datafile) Read() (e internal.Entry, n int64, err error) {
 	df.Lock()
 	defer df.Unlock()
 
@@ -132,7 +143,7 @@ func (df *Datafile) Read() (e internal.Entry, n int64, err error) {
 	return
 }
 
-func (df *Datafile) ReadAt(index, size int64) (e internal.Entry, err error) {
+func (df *datafile) ReadAt(index, size int64) (e internal.Entry, err error) {
 	var n int
 
 	b := make([]byte, size)
@@ -156,7 +167,7 @@ func (df *Datafile) ReadAt(index, size int64) (e internal.Entry, err error) {
 	return
 }
 
-func (df *Datafile) Write(e internal.Entry) (int64, int64, error) {
+func (df *datafile) Write(e internal.Entry) (int64, int64, error) {
 	if df.w == nil {
 		return -1, 0, ErrReadonly
 	}
