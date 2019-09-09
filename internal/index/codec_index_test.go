@@ -19,7 +19,7 @@ func TestWriteIndex(t *testing.T) {
 	at, expectedSerializedSize := getSampleTree()
 
 	var b bytes.Buffer
-	err := WriteIndex(at, &b)
+	err := writeIndex(at, &b)
 	if err != nil {
 		t.Fatalf("writing index failed: %v", err)
 	}
