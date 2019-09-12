@@ -7,10 +7,10 @@ const (
 	DefaultMaxDatafileSize = 1 << 20 // 1MB
 
 	// DefaultMaxKeySize is the default maximum key size in bytes
-	DefaultMaxKeySize = 64 // 64 bytes
+	DefaultMaxKeySize = uint32(64) // 64 bytes
 
 	// DefaultMaxValueSize is the default value size in bytes
-	DefaultMaxValueSize = 1 << 16 // 65KB
+	DefaultMaxValueSize = uint64(1 << 16) // 65KB
 
 	// DefaultSync is the default file synchronization action
 	DefaultSync = false
@@ -28,7 +28,7 @@ func WithMaxDatafileSize(size int) Option {
 }
 
 // WithMaxKeySize sets the maximum key size option
-func WithMaxKeySize(size int) Option {
+func WithMaxKeySize(size uint32) Option {
 	return func(cfg *config.Config) error {
 		cfg.MaxKeySize = size
 		return nil
@@ -36,7 +36,7 @@ func WithMaxKeySize(size int) Option {
 }
 
 // WithMaxValueSize sets the maximum value size option
-func WithMaxValueSize(size int) Option {
+func WithMaxValueSize(size uint64) Option {
 	return func(cfg *config.Config) error {
 		cfg.MaxValueSize = size
 		return nil

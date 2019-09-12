@@ -10,9 +10,15 @@ import (
 )
 
 const (
-	KeySize      = 4
-	ValueSize    = 8
+	keySize      = 4
+	valueSize    = 8
 	checksumSize = 4
+)
+
+var (
+	// ErrInvalidKeyOrValueSize indicates a serialized key/value size
+	// which is greater than specified limit
+	ErrInvalidKeyOrValueSize = errors.New("key/value size is invalid")
 )
 
 // NewEncoder creates a streaming Entry encoder.
@@ -29,9 +35,9 @@ type Encoder struct {
 // Encode takes any Entry and streams it to the underlying writer.
 // Messages are framed with a key-length and value-length prefix.
 func (e *Encoder) Encode(msg internal.Entry) (int64, error) {
-	var bufKeyValue = make([]byte, KeySize+ValueSize)
-	binary.BigEndian.PutUint32(bufKeyValue[:KeySize], uint32(len(msg.Key)))
-	binary.BigEndian.PutUint64(bufKeyValue[KeySize:KeySize+ValueSize], uint64(len(msg.Value)))
+	var bufKeyValue = make([]byte, keySize+valueSize)
+	binary.BigEndian.PutUint32(bufKeyValue[:keySize], uint32(len(msg.Key)))
+	binary.BigEndian.PutUint64(bufKeyValue[keySize:keySize+valueSize], uint64(len(msg.Value)))
 	if _, err := e.w.Write(bufKeyValue); err != nil {
 		return 0, errors.Wrap(err, "failed writing key & value length prefix")
 	}
@@ -53,46 +59,73 @@ func (e *Encoder) Encode(msg internal.Entry) (int64, error) {
 		return 0, errors.Wrap(err, "failed flushing data")
 	}
 
-	return int64(KeySize + ValueSize + len(msg.Key) + len(msg.Value) + checksumSize), nil
+	return int64(keySize + valueSize + len(msg.Key) + len(msg.Value) + checksumSize), nil
 }
 
 // NewDecoder creates a streaming Entry decoder.
-func NewDecoder(r io.Reader) *Decoder {
-	return &Decoder{r: r}
+func NewDecoder(r io.Reader, maxKeySize uint32, maxValueSize uint64) *Decoder {
+	return &Decoder{
+		r:            r,
+		maxKeySize:   maxKeySize,
+		maxValueSize: maxValueSize,
+	}
 }
 
 // Decoder wraps an underlying io.Reader and allows you to stream
 // Entry decodings on it.
 type Decoder struct {
-	r io.Reader
+	r            io.Reader
+	maxKeySize   uint32
+	maxValueSize uint64
 }
 
+// Decode decodes the next Entry from the current stream
 func (d *Decoder) Decode(v *internal.Entry) (int64, error) {
-	prefixBuf := make([]byte, KeySize+ValueSize)
+	prefixBuf := make([]byte, keySize+valueSize)
 
 	_, err := io.ReadFull(d.r, prefixBuf)
 	if err != nil {
 		return 0, err
 	}
 
-	actualKeySize, actualValueSize := GetKeyValueSizes(prefixBuf)
-	buf := make([]byte, actualKeySize+actualValueSize+checksumSize)
+	actualKeySize, actualValueSize, err := getKeyValueSizes(prefixBuf, d.maxKeySize, d.maxValueSize)
+	if err != nil {
+		return 0, errors.Wrap(err, "error while getting key/value serialized sizes")
+	}
+
+	buf := make([]byte, uint64(actualKeySize)+actualValueSize+checksumSize)
 	if _, err = io.ReadFull(d.r, buf); err != nil {
 		return 0, errors.Wrap(translateError(err), "failed reading saved data")
 	}
 
-	DecodeWithoutPrefix(buf, actualKeySize, v)
-	return int64(KeySize + ValueSize + actualKeySize + actualValueSize + checksumSize), nil
+	decodeWithoutPrefix(buf, actualKeySize, v)
+	return int64(keySize + valueSize + uint64(actualKeySize) + actualValueSize + checksumSize), nil
 }
 
-func GetKeyValueSizes(buf []byte) (uint64, uint64) {
-	actualKeySize := binary.BigEndian.Uint32(buf[:KeySize])
-	actualValueSize := binary.BigEndian.Uint64(buf[KeySize:])
+// DecodeEntry decodes a serialized entry
+func DecodeEntry(b []byte, e *internal.Entry, maxKeySize uint32, maxValueSize uint64) error {
+	valueOffset, _, err := getKeyValueSizes(b, maxKeySize, maxValueSize)
+	if err != nil {
+		return errors.Wrap(err, "key/value sizes are invalid")
+	}
 
-	return uint64(actualKeySize), actualValueSize
+	decodeWithoutPrefix(b[keySize+valueSize:], valueOffset, e)
+
+	return nil
 }
 
-func DecodeWithoutPrefix(buf []byte, valueOffset uint64, v *internal.Entry) {
+func getKeyValueSizes(buf []byte, maxKeySize uint32, maxValueSize uint64) (uint32, uint64, error) {
+	actualKeySize := binary.BigEndian.Uint32(buf[:keySize])
+	actualValueSize := binary.BigEndian.Uint64(buf[keySize:])
+
+	if actualKeySize > maxKeySize || actualValueSize > maxValueSize {
+		return 0, 0, ErrInvalidKeyOrValueSize
+	}
+
+	return actualKeySize, actualValueSize, nil
+}
+
+func decodeWithoutPrefix(buf []byte, valueOffset uint32, v *internal.Entry) {
 	v.Key = buf[:valueOffset]
 	v.Value = buf[valueOffset : len(buf)-checksumSize]
 	v.Checksum = binary.BigEndian.Uint32(buf[len(buf)-checksumSize:])

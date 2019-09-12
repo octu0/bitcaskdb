@@ -24,7 +24,7 @@ const (
 	sizeSize   = int64Size
 )
 
-func readKeyBytes(r io.Reader, maxKeySize int) ([]byte, error) {
+func readKeyBytes(r io.Reader, maxKeySize uint32) ([]byte, error) {
 	s := make([]byte, int32Size)
 	_, err := io.ReadFull(r, s)
 	if err != nil {
@@ -87,7 +87,7 @@ func writeItem(item internal.Item, w io.Writer) error {
 }
 
 // ReadIndex reads a persisted from a io.Reader into a Tree
-func readIndex(r io.Reader, t art.Tree, maxKeySize int) error {
+func readIndex(r io.Reader, t art.Tree, maxKeySize uint32) error {
 	for {
 		key, err := readKeyBytes(r, maxKeySize)
 		if err != nil {

@@ -94,7 +94,7 @@ func TestReadCorruptedData(t *testing.T) {
 		table := []struct {
 			name       string
 			err        error
-			maxKeySize int
+			maxKeySize uint32
 			data       []byte
 		}{
 			{name: "key-data-overflow", err: errKeySizeTooLarge, maxKeySize: 1024, data: overflowKeySize},

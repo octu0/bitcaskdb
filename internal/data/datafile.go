@@ -36,16 +36,19 @@ type Datafile interface {
 type datafile struct {
 	sync.RWMutex
 
-	id     int
-	r      *os.File
-	ra     *mmap.ReaderAt
-	w      *os.File
-	offset int64
-	dec    *Decoder
-	enc    *Encoder
+	id           int
+	r            *os.File
+	ra           *mmap.ReaderAt
+	w            *os.File
+	offset       int64
+	dec          *Decoder
+	enc          *Encoder
+	maxKeySize   uint32
+	maxValueSize uint64
 }
 
-func NewDatafile(path string, id int, readonly bool) (Datafile, error) {
+// NewDatafile opens an existing datafile
+func NewDatafile(path string, id int, readonly bool, maxKeySize uint32, maxValueSize uint64) (Datafile, error) {
 	var (
 		r   *os.File
 		ra  *mmap.ReaderAt
@@ -78,17 +81,19 @@ func NewDatafile(path string, id int, readonly bool) (Datafile, error) {
 
 	offset := stat.Size()
 
-	dec := NewDecoder(r)
+	dec := NewDecoder(r, maxKeySize, maxValueSize)
 	enc := NewEncoder(w)
 
 	return &datafile{
-		id:     id,
-		r:      r,
-		ra:     ra,
-		w:      w,
-		offset: offset,
-		dec:    dec,
-		enc:    enc,
+		id:           id,
+		r:            r,
+		ra:           ra,
+		w:            w,
+		offset:       offset,
+		dec:          dec,
+		enc:          enc,
+		maxKeySize:   maxKeySize,
+		maxValueSize: maxValueSize,
 	}, nil
 }
 
@@ -131,6 +136,7 @@ func (df *datafile) Size() int64 {
 	return df.offset
 }
 
+// Read reads the next entry from the datafile
 func (df *datafile) Read() (e internal.Entry, n int64, err error) {
 	df.Lock()
 	defer df.Unlock()
@@ -143,6 +149,7 @@ func (df *datafile) Read() (e internal.Entry, n int64, err error) {
 	return
 }
 
+// ReadAt the entry located at index offset with expected serialized size
 func (df *datafile) ReadAt(index, size int64) (e internal.Entry, err error) {
 	var n int
 
@@ -161,8 +168,7 @@ func (df *datafile) ReadAt(index, size int64) (e internal.Entry, err error) {
 		return
 	}
 
-	valueOffset, _ := GetKeyValueSizes(b)
-	DecodeWithoutPrefix(b[KeySize+ValueSize:], valueOffset, &e)
+	DecodeEntry(b, &e, df.maxKeySize, df.maxValueSize)
 
 	return
 }

@@ -149,10 +149,10 @@ func (b *Bitcask) Has(key []byte) bool {
 
 // Put stores the key and value in the database.
 func (b *Bitcask) Put(key, value []byte) error {
-	if len(key) > b.config.MaxKeySize {
+	if uint32(len(key)) > b.config.MaxKeySize {
 		return ErrKeyTooLarge
 	}
-	if len(value) > b.config.MaxValueSize {
+	if uint64(len(value)) > b.config.MaxValueSize {
 		return ErrValueTooLarge
 	}
 
@@ -261,7 +261,7 @@ func (b *Bitcask) put(key, value []byte) (int64, int64, error) {
 
 		id := b.curr.FileID()
 
-		df, err := data.NewDatafile(b.path, id, true)
+		df, err := data.NewDatafile(b.path, id, true, b.config.MaxKeySize, b.config.MaxValueSize)
 		if err != nil {
 			return -1, 0, err
 		}
@@ -269,7 +269,7 @@ func (b *Bitcask) put(key, value []byte) (int64, int64, error) {
 		b.datafiles[id] = df
 
 		id = b.curr.FileID() + 1
-		curr, err := data.NewDatafile(b.path, id, false)
+		curr, err := data.NewDatafile(b.path, id, false, b.config.MaxKeySize, b.config.MaxValueSize)
 		if err != nil {
 			return -1, 0, err
 		}
@@ -297,7 +297,7 @@ func (b *Bitcask) reopen() error {
 	datafiles := make(map[int]data.Datafile, len(ids))
 
 	for _, id := range ids {
-		df, err := data.NewDatafile(b.path, id, true)
+		df, err := data.NewDatafile(b.path, id, true, b.config.MaxKeySize, b.config.MaxValueSize)
 		if err != nil {
 			return err
 		}
@@ -338,7 +338,7 @@ func (b *Bitcask) reopen() error {
 		id = ids[(len(ids) - 1)]
 	}
 
-	curr, err := data.NewDatafile(b.path, id, false)
+	curr, err := data.NewDatafile(b.path, id, false, b.config.MaxKeySize, b.config.MaxValueSize)
 	if err != nil {
 		return err
 	}

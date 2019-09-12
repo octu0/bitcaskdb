@@ -8,7 +8,7 @@ import (
 )
 
 type Indexer interface {
-	Load(path string, maxkeySize int) (art.Tree, bool, error)
+	Load(path string, maxkeySize uint32) (art.Tree, bool, error)
 	Save(t art.Tree, path string) error
 }
 
@@ -18,7 +18,7 @@ func NewIndexer() Indexer {
 
 type indexer struct{}
 
-func (i *indexer) Load(path string, maxKeySize int) (art.Tree, bool, error) {
+func (i *indexer) Load(path string, maxKeySize uint32) (art.Tree, bool, error) {
 	t := art.New()
 
 	if !internal.Exists(path) {

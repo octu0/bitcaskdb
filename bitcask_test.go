@@ -1126,8 +1126,8 @@ func BenchmarkGet(b *testing.B) {
 			value := []byte(strings.Repeat(" ", tt.size))
 
 			options := []Option{
-				WithMaxKeySize(len(key)),
-				WithMaxValueSize(tt.size),
+				WithMaxKeySize(uint32(len(key))),
+				WithMaxValueSize(uint64(tt.size)),
 			}
 			db, err := Open(testdir, options...)
 			if err != nil {

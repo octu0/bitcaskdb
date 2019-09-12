@@ -8,10 +8,10 @@ import (
 
 // Config contains the bitcask configuration parameters
 type Config struct {
-	MaxDatafileSize int  `json:"max_datafile_size"`
-	MaxKeySize      int  `json:"max_key_size"`
-	MaxValueSize    int  `json:"max_value_size"`
-	Sync            bool `json:"sync"`
+	MaxDatafileSize int    `json:"max_datafile_size"`
+	MaxKeySize      uint32 `json:"max_key_size"`
+	MaxValueSize    uint64 `json:"max_value_size"`
+	Sync            bool   `json:"sync"`
 }
 
 // Load loads a configuration from the given path

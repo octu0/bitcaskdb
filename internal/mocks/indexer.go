@@ -12,11 +12,11 @@ type Indexer struct {
 }
 
 // Load provides a mock function with given fields: path, maxkeySize
-func (_m *Indexer) Load(path string, maxkeySize int) (art.Tree, bool, error) {
+func (_m *Indexer) Load(path string, maxkeySize uint32) (art.Tree, bool, error) {
 	ret := _m.Called(path, maxkeySize)
 
 	var r0 art.Tree
-	if rf, ok := ret.Get(0).(func(string, int) art.Tree); ok {
+	if rf, ok := ret.Get(0).(func(string, uint32) art.Tree); ok {
 		r0 = rf(path, maxkeySize)
 	} else {
 		if ret.Get(0) != nil {
@@ -25,14 +25,14 @@ func (_m *Indexer) Load(path string, maxkeySize int) (art.Tree, bool, error) {
 	}
 
 	var r1 bool
-	if rf, ok := ret.Get(1).(func(string, int) bool); ok {
+	if rf, ok := ret.Get(1).(func(string, uint32) bool); ok {
 		r1 = rf(path, maxkeySize)
 	} else {
 		r1 = ret.Get(1).(bool)
 	}
 
 	var r2 error
-	if rf, ok := ret.Get(2).(func(string, int) error); ok {
+	if rf, ok := ret.Get(2).(func(string, uint32) error); ok {
 		r2 = rf(path, maxkeySize)
 	} else {
 		r2 = ret.Error(2)

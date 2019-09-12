@@ -1,4 +1,4 @@
-.PHONY: dev build generate install image release profile bench test clean
+.PHONY: dev build generate install image release profile bench test clean setup
 
 CGO_ENABLED=0
 VERSION=$(shell git describe --abbrev=0 --tags)
@@ -48,6 +48,9 @@ test: build
 		-coverpkg=$(shell go list) \
 		-race \
 		.
+
+setup:
+	@go install github.com/vektra/mockery/.../
 
 clean:
 	@git clean -f -d -X

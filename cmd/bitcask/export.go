@@ -50,11 +50,11 @@ func init() {
 		"with-max-datafile-size", "", bitcask.DefaultMaxDatafileSize,
 		"Maximum size of each datafile",
 	)
-	exportCmd.PersistentFlags().IntP(
+	exportCmd.PersistentFlags().Uint32P(
 		"with-max-key-size", "", bitcask.DefaultMaxKeySize,
 		"Maximum size of each key",
 	)
-	exportCmd.PersistentFlags().IntP(
+	exportCmd.PersistentFlags().Uint64P(
 		"with-max-value-size", "", bitcask.DefaultMaxValueSize,
 		"Maximum size of each value",
 	)

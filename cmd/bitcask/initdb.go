@@ -30,8 +30,8 @@ var initdbCmd = &cobra.Command{
 		path := viper.GetString("path")
 
 		maxDatafileSize := viper.GetInt("with-max-datafile-size")
-		maxKeySize := viper.GetInt("with-max-key-size")
-		maxValueSize := viper.GetInt("with-max-value-size")
+		maxKeySize := viper.GetUint32("with-max-key-size")
+		maxValueSize := viper.GetUint64("with-max-value-size")
 
 		db, err := bitcask.Open(
 			path,
@@ -56,11 +56,11 @@ func init() {
 		"with-max-datafile-size", "", bitcask.DefaultMaxDatafileSize,
 		"Maximum size of each datafile",
 	)
-	initdbCmd.PersistentFlags().IntP(
+	initdbCmd.PersistentFlags().Uint32P(
 		"with-max-key-size", "", bitcask.DefaultMaxKeySize,
 		"Maximum size of each key",
 	)
-	initdbCmd.PersistentFlags().IntP(
+	initdbCmd.PersistentFlags().Uint64P(
 		"with-max-value-size", "", bitcask.DefaultMaxValueSize,
 		"Maximum size of each value",
 	)
