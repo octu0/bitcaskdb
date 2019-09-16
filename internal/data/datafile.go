@@ -8,6 +8,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/prologic/bitcask/internal"
+	"github.com/prologic/bitcask/internal/data/codec"
 	"golang.org/x/exp/mmap"
 )
 
@@ -41,8 +42,8 @@ type datafile struct {
 	ra           *mmap.ReaderAt
 	w            *os.File
 	offset       int64
-	dec          *Decoder
-	enc          *Encoder
+	dec          *codec.Decoder
+	enc          *codec.Encoder
 	maxKeySize   uint32
 	maxValueSize uint64
 }
@@ -81,8 +82,8 @@ func NewDatafile(path string, id int, readonly bool, maxKeySize uint32, maxValue
 
 	offset := stat.Size()
 
-	dec := NewDecoder(r, maxKeySize, maxValueSize)
-	enc := NewEncoder(w)
+	dec := codec.NewDecoder(r, maxKeySize, maxValueSize)
+	enc := codec.NewEncoder(w)
 
 	return &datafile{
 		id:           id,
@@ -168,7 +169,7 @@ func (df *datafile) ReadAt(index, size int64) (e internal.Entry, err error) {
 		return
 	}
 
-	DecodeEntry(b, &e, df.maxKeySize, df.maxValueSize)
+	codec.DecodeEntry(b, &e, df.maxKeySize, df.maxValueSize)
 
 	return
 }
