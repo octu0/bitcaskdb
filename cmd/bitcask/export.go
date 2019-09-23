@@ -66,11 +66,6 @@ type kvPair struct {
 }
 
 func export(path, output string) int {
-	var (
-		err error
-		w   io.WriteCloser
-	)
-
 	db, err := bitcask.Open(path)
 	if err != nil {
 		log.WithError(err).Error("error opening database")
@@ -78,19 +73,29 @@ func export(path, output string) int {
 	}
 	defer db.Close()
 
-	if output == "-" {
-		w = os.Stdout
-	} else {
-		w, err = os.OpenFile(output, os.O_WRONLY|os.O_CREATE|os.O_EXCL|os.O_TRUNC, 0755)
-		if err != nil {
+	w := os.Stdout
+	if output != "-" {
+		if w, err = os.OpenFile(output, os.O_WRONLY|os.O_CREATE|os.O_EXCL|os.O_TRUNC, 0755); err != nil {
 			log.WithError(err).
 				WithField("output", output).
 				Error("error opening output for writing")
 			return 1
 		}
+		defer w.Close()
 	}
 
-	err = db.Fold(func(key []byte) error {
+	if err = db.Fold(exportKey(db, w)); err != nil {
+		log.WithError(err).
+			WithField("path", path).
+			WithField("output", output).
+			Error("error exporting keys")
+		return 2
+	}
+	return 0
+}
+
+func exportKey(db *bitcask.Bitcask, w io.Writer) func(key []byte) error {
+	return func(key []byte) error {
 		value, err := db.Get(key)
 		if err != nil {
 			log.WithError(err).
@@ -129,14 +134,5 @@ func export(path, output string) int {
 		}
 
 		return nil
-	})
-	if err != nil {
-		log.WithError(err).
-			WithField("path", path).
-			WithField("output", output).
-			Error("error exporting keys")
-		return 2
 	}
-
-	return 0
 }
