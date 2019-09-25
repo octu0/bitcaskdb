@@ -796,6 +796,29 @@ func TestOpenErrors(t *testing.T) {
 		_, err = Open(testdir, withBogusOption())
 		assert.Error(err)
 	})
+
+	t.Run("LoadDatafilesError", func(t *testing.T) {
+		testdir, err := ioutil.TempDir("", "bitcask")
+		assert.NoError(err)
+		defer os.RemoveAll(testdir)
+
+		db, err := Open(testdir)
+		assert.NoError(err)
+
+		err = db.Put([]byte("foo"), []byte("bar"))
+		assert.NoError(err)
+
+		err = db.Close()
+		assert.NoError(err)
+
+		// Simulate some horrible that happened to the datafiles!
+		err = os.Rename(filepath.Join(testdir, "000000000.data"), filepath.Join(testdir, "000000000xxx.data"))
+		assert.NoError(err)
+
+		_, err = Open(testdir)
+		assert.Error(err)
+		assert.Equal("strconv.ParseInt: parsing \"000000000xxx\": invalid syntax", err.Error())
+	})
 }
 
 func TestCloseErrors(t *testing.T) {
