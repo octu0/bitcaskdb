@@ -1,5 +1,6 @@
 *~*
 *.bak
+*.db
 
 /coverage.txt
 /bitcask
