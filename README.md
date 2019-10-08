@@ -168,7 +168,7 @@ Support the ongoing development of Bitcask!
 
 **Sponser**
 
-- Become a [Sponser](https://www.patreon.com/prologic)
+- Become a [Sponsor](https://www.patreon.com/prologic)
 
 ## Contributors
 
