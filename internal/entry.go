@@ -12,6 +12,7 @@ type Entry struct {
 	Value    []byte
 }
 
+// NewEntry creates a new `Entry` with the given `key` and `value`
 func NewEntry(key, value []byte) Entry {
 	checksum := crc32.ChecksumIEEE(value)
 

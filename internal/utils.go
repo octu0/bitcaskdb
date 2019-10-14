@@ -9,11 +9,14 @@ import (
 	"strings"
 )
 
+// Exists returns `true` if the given `path` on the current file system exists
 func Exists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
 }
 
+// DirSize returns the space occupied by the given `path` on disk on the current
+// file system.
 func DirSize(path string) (int64, error) {
 	var size int64
 	err := filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
@@ -28,6 +31,9 @@ func DirSize(path string) (int64, error) {
 	return size, err
 }
 
+// GetDatafiles returns a list of all data files stored in the database path
+// given by `path`. All datafiles are identified by the the glob `*.data` and
+// the basename is represented by an monotomic increasing integer.
 func GetDatafiles(path string) ([]string, error) {
 	fns, err := filepath.Glob(fmt.Sprintf("%s/*.data", path))
 	if err != nil {
@@ -37,6 +43,8 @@ func GetDatafiles(path string) ([]string, error) {
 	return fns, nil
 }
 
+// ParseIds will parse a list of datafiles as returned by `GetDatafiles` and
+// extract the id part and return a slice of ints.
 func ParseIds(fns []string) ([]int, error) {
 	var ids []int
 	for _, fn := range fns {

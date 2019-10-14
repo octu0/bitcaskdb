@@ -1196,10 +1196,10 @@ func BenchmarkPut(b *testing.B) {
 	}
 
 	variants := map[string][]Option{
-		"NoSync": []Option{
+		"NoSync": {
 			WithSync(false),
 		},
-		"Sync": []Option{
+		"Sync": {
 			WithSync(true),
 		},
 	}

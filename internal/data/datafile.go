@@ -13,16 +13,17 @@ import (
 )
 
 const (
-	DefaultDatafileFilename = "%09d.data"
+	defaultDatafileFilename = "%09d.data"
 )
 
 var (
-	ErrReadonly  = errors.New("error: read only datafile")
-	ErrReadError = errors.New("error: read error")
+	errReadonly  = errors.New("error: read only datafile")
+	errReadError = errors.New("error: read error")
 
 	mxMemPool sync.RWMutex
 )
 
+// Datafile is an interface  that represents a readable and writeable datafile
 type Datafile interface {
 	FileID() int
 	Name() string
@@ -57,7 +58,7 @@ func NewDatafile(path string, id int, readonly bool, maxKeySize uint32, maxValue
 		err error
 	)
 
-	fn := filepath.Join(path, fmt.Sprintf(DefaultDatafileFilename, id))
+	fn := filepath.Join(path, fmt.Sprintf(defaultDatafileFilename, id))
 
 	if !readonly {
 		w, err = os.OpenFile(fn, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0640)
@@ -165,7 +166,7 @@ func (df *datafile) ReadAt(index, size int64) (e internal.Entry, err error) {
 		return
 	}
 	if int64(n) != size {
-		err = ErrReadError
+		err = errReadError
 		return
 	}
 
@@ -176,7 +177,7 @@ func (df *datafile) ReadAt(index, size int64) (e internal.Entry, err error) {
 
 func (df *datafile) Write(e internal.Entry) (int64, int64, error) {
 	if df.w == nil {
-		return -1, 0, ErrReadonly
+		return -1, 0, errReadonly
 	}
 
 	df.Lock()

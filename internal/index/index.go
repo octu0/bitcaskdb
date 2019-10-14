@@ -7,11 +7,14 @@ import (
 	"github.com/prologic/bitcask/internal"
 )
 
+// Indexer is an interface for loading and saving the index (an Adaptive Radix Tree)
 type Indexer interface {
 	Load(path string, maxkeySize uint32) (art.Tree, bool, error)
 	Save(t art.Tree, path string) error
 }
 
+// NewIndexer returns an instance of the default `Indexer` implemtnation
+// which perists the index (an Adaptive Radix Tree) as a binary blob on file
 func NewIndexer() Indexer {
 	return &indexer{}
 }
