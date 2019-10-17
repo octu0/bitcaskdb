@@ -50,7 +50,7 @@ test: build
 		.
 
 setup:
-	@go install github.com/vektra/mockery/.../
+	@go get github.com/vektra/mockery/...
 
 clean:
 	@git clean -f -d -X
