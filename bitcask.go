@@ -280,7 +280,7 @@ func (b *Bitcask) put(key, value []byte) (int64, int64, error) {
 	return b.curr.Write(e)
 }
 
-func (b *Bitcask) reopen() error {
+func (b *Bitcask) Reopen() error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -383,7 +383,7 @@ func (b *Bitcask) Merge() error {
 	}
 
 	// And finally reopen the database
-	return b.reopen()
+	return b.Reopen()
 }
 
 // Open opens the database at the given path with optional options.
@@ -436,7 +436,7 @@ func Open(path string, options ...Option) (*Bitcask, error) {
 		return nil, err
 	}
 
-	if err := bitcask.reopen(); err != nil {
+	if err := bitcask.Reopen(); err != nil {
 		return nil, err
 	}
 

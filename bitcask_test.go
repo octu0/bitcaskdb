@@ -133,6 +133,63 @@ func TestAll(t *testing.T) {
 	})
 }
 
+func TestReopen(t *testing.T) {
+	assert := assert.New(t)
+
+	testdir, err := ioutil.TempDir("", "bitcask")
+	assert.NoError(err)
+
+	t.Run("Reopen", func(t *testing.T) {
+		var (
+			db  *Bitcask
+			err error
+		)
+
+		t.Run("Open", func(t *testing.T) {
+			db, err = Open(testdir)
+			assert.NoError(err)
+		})
+
+		t.Run("Put", func(t *testing.T) {
+			err = db.Put([]byte("foo"), []byte("bar"))
+			assert.NoError(err)
+		})
+
+		t.Run("Get", func(t *testing.T) {
+			val, err := db.Get([]byte("foo"))
+			assert.NoError(err)
+			assert.Equal([]byte("bar"), val)
+		})
+
+		t.Run("Reopen", func(t *testing.T) {
+			err = db.Reopen()
+			assert.NoError(err)
+		})
+
+		t.Run("GetAfterReopen", func(t *testing.T) {
+			val, err := db.Get([]byte("foo"))
+			assert.NoError(err)
+			assert.Equal([]byte("bar"), val)
+		})
+
+		t.Run("PutAfterReopen", func(t *testing.T) {
+			err = db.Put([]byte("zzz"), []byte("foo"))
+			assert.NoError(err)
+		})
+
+		t.Run("GetAfterReopenAndPut", func(t *testing.T) {
+			val, err := db.Get([]byte("zzz"))
+			assert.NoError(err)
+			assert.Equal([]byte("foo"), val)
+		})
+
+		t.Run("Close", func(t *testing.T) {
+			err = db.Close()
+			assert.NoError(err)
+		})
+	})
+}
+
 func TestDeletedKeys(t *testing.T) {
 	assert := assert.New(t)
 
