@@ -133,6 +133,23 @@ func TestAll(t *testing.T) {
 	})
 }
 
+func TestReopen1(t *testing.T) {
+	assert := assert.New(t)
+	for i := 0; i < 10; i ++ {
+		testdir, _ := ioutil.TempDir("", "bitcask")
+		db, _ := Open(testdir, WithMaxDatafileSize(1))
+		_ = db.Put([]byte("foo"), []byte("bar"))
+		_ = db.Put([]byte("foo"), []byte("bar1"))
+		_ = db.Put([]byte("foo"), []byte("bar2"))
+		_ = db.Put([]byte("foo"), []byte("bar3"))
+		_ = db.Put([]byte("foo"), []byte("bar4"))
+		_ = db.Put([]byte("foo"), []byte("bar5"))
+		_ = db.Reopen()
+		val, _ := db.Get([]byte("foo"))
+		assert.Equal("bar5", string(val))
+	}
+}
+
 func TestReopen(t *testing.T) {
 	assert := assert.New(t)
 

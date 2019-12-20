@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"sync"
 
 	"github.com/gofrs/flock"
@@ -468,13 +469,27 @@ func loadDatafiles(path string, maxKeySize uint32, maxValueSize uint64) (datafil
 	return
 }
 
+func getSortedDatafiles(datafiles map[int]data.Datafile) []data.Datafile {
+	out := make([]data.Datafile, len(datafiles))
+	idx := 0
+	for _, df := range datafiles {
+		out[idx] = df
+		idx++
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].FileID() < out[j].FileID()
+	})
+	return out
+}
+
 func loadIndex(path string, indexer index.Indexer, maxKeySize uint32, datafiles map[int]data.Datafile) (art.Tree, error) {
 	t, found, err := indexer.Load(filepath.Join(path, "index"), maxKeySize)
 	if err != nil {
 		return nil, err
 	}
 	if !found {
-		for _, df := range datafiles {
+		sortedDatafiles := getSortedDatafiles(datafiles)
+		for _, df := range sortedDatafiles {
 			var offset int64
 			for {
 				e, n, err := df.Read()
