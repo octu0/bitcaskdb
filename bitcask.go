@@ -193,6 +193,23 @@ func (b *Bitcask) Delete(key []byte) error {
 	return nil
 }
 
+// DeleteAll deletes all the keys. If an I/O error occurs the error is returned.
+func (b *Bitcask) DeleteAll() (err error) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	b.trie.ForEach(func(node art.Node) bool {
+		_, _, err = b.put(node.Key(), []byte{})
+		if err != nil {
+			return false
+		}
+		return true
+	})
+	b.trie = art.New()
+
+	return
+}
+
 // Scan performs a prefix scan of keys matching the given prefix and calling
 // the function `f` with the keys found. If the function returns an error
 // no further keys are processed and the first error returned.

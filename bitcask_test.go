@@ -133,6 +133,25 @@ func TestAll(t *testing.T) {
 	})
 }
 
+func TestDeleteAll(t *testing.T) {
+	assert := assert.New(t)
+	testdir, _ := ioutil.TempDir("", "bitcask")
+	db, _ := Open(testdir)
+	_ = db.Put([]byte("foo"), []byte("foo"))
+	_ = db.Put([]byte("bar"), []byte("bar"))
+	_ = db.Put([]byte("baz"), []byte("baz"))
+	assert.Equal(3, db.Len())
+	err := db.DeleteAll()
+	assert.NoError(err)
+	assert.Equal(0, db.Len())
+	_, err = db.Get([]byte("foo"))
+	assert.Equal(ErrKeyNotFound, err)
+	_, err = db.Get([]byte("bar"))
+	assert.Equal(ErrKeyNotFound, err)
+	_, err = db.Get([]byte("baz"))
+	assert.Equal(ErrKeyNotFound, err)
+}
+
 func TestReopen1(t *testing.T) {
 	assert := assert.New(t)
 	for i := 0; i < 10; i ++ {
