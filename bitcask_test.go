@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -48,6 +49,12 @@ func SortByteArrays(src [][]byte) [][]byte {
 	sorted := sortByteArrays(src)
 	sort.Sort(sorted)
 	return sorted
+}
+
+func skipIfWindows(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping this test on Windows")
+	}
 }
 
 func TestAll(t *testing.T) {
@@ -154,7 +161,7 @@ func TestDeleteAll(t *testing.T) {
 
 func TestReopen1(t *testing.T) {
 	assert := assert.New(t)
-	for i := 0; i < 10; i ++ {
+	for i := 0; i < 10; i++ {
 		testdir, _ := ioutil.TempDir("", "bitcask")
 		db, _ := Open(testdir, WithMaxDatafileSize(1))
 		_ = db.Put([]byte("foo"), []byte("bar"))
@@ -616,6 +623,10 @@ func TestStatsError(t *testing.T) {
 			assert.Equal(stats.Datafiles, 0)
 			assert.Equal(stats.Keys, 1)
 		})
+	})
+
+	t.Run("Test", func(t *testing.T) {
+		skipIfWindows(t)
 
 		t.Run("FabricatedDestruction", func(t *testing.T) {
 			// This would never happen in reality :D
@@ -997,6 +1008,8 @@ func TestMergeErrors(t *testing.T) {
 	assert := assert.New(t)
 
 	t.Run("RemoveDatabaseDirectory", func(t *testing.T) {
+		skipIfWindows(t)
+
 		testdir, err := ioutil.TempDir("", "bitcask")
 		assert.NoError(err)
 		defer os.RemoveAll(testdir)
