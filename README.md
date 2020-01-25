@@ -1,6 +1,10 @@
 # bitcask
 
-[![Build Status](https://cloud.drone.io/api/badges/prologic/bitcask/status.svg)](https://cloud.drone.io/prologic/bitcask)
+![](https://github.com/prologic/bitcask/workflows/.github/workflows/codecov.yml/badge.svg)
+![](https://github.com/prologic/bitcask/workflows/.github/workflows/docker.yml/badge.svg)
+![](https://github.com/prologic/bitcask/workflows/.github/workflows/go.yml/badge.svg)
+![](https://github.com/prologic/bitcask/workflows/.github/workflows/reviewdog.yml/badge.svg)
+
 [![CodeCov](https://codecov.io/gh/prologic/bitcask/branch/master/graph/badge.svg)](https://codecov.io/gh/prologic/bitcask)
 [![Go Report Card](https://goreportcard.com/badge/prologic/bitcask)](https://goreportcard.com/report/prologic/bitcask)
 [![codebeat badge](https://codebeat.co/badges/15fba8a5-3044-4f40-936f-9e0f5d5d1fd9)](https://codebeat.co/projects/github-com-prologic-bitcask-master)
