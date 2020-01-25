@@ -1,9 +1,9 @@
 # bitcask
 
-![](https://github.com/prologic/bitcask/workflows/.github/workflows/codecov.yml/badge.svg)
-![](https://github.com/prologic/bitcask/workflows/.github/workflows/docker.yml/badge.svg)
-![](https://github.com/prologic/bitcask/workflows/.github/workflows/go.yml/badge.svg)
-![](https://github.com/prologic/bitcask/workflows/.github/workflows/reviewdog.yml/badge.svg)
+![](https://github.com/prologic/bitcask/workflows/Coverage/badge.svg)
+![](https://github.com/prologic/bitcask/workflows/Docker/badge.svg)
+![](https://github.com/prologic/bitcask/workflows/Go/badge.svg)
+![](https://github.com/prologic/bitcask/workflows/ReviewDog/badge.svg)
 
 [![CodeCov](https://codecov.io/gh/prologic/bitcask/branch/master/graph/badge.svg)](https://codecov.io/gh/prologic/bitcask)
 [![Go Report Card](https://goreportcard.com/badge/prologic/bitcask)](https://goreportcard.com/report/prologic/bitcask)
