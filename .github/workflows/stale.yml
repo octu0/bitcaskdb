@@ -12,13 +12,13 @@ jobs:
       with:
         repo-token: ${{ secrets.GITHUB_TOKEN }}
         stale-issue-message: |-
-          This Issue has gone stale and has been automatically closed.
+          This Issue has gone stale and will be closed automatically.
           
           If this is incorrect, please reopen and add the label `on hold`.
           
           Thank you.
         stale-pr-message: |-
-          This Pull Request has gone stale and has been automatically closed.
+          This Pull Request has gone stale and will be closed automatically.
           
           If this is incorrect, please reopen and add the label `on hold`.
           
