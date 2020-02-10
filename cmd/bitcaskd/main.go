@@ -55,5 +55,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	log.Fatal(server.Run())
+	if err = server.Run(); err != nil {
+		log.Fatal(err)
+	}
 }

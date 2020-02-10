@@ -2,7 +2,10 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/tidwall/redcon"
@@ -89,8 +92,13 @@ func (s *server) handleDel(cmd redcon.Command, conn redcon.Conn) {
 	}
 }
 
+func (s *server) Shutdown() (err error) {
+	err = s.db.Close()
+	return
+}
+
 func (s *server) Run() (err error) {
-	err = redcon.ListenAndServe(s.bind,
+	redServer := redcon.NewServerNetwork("tcp", s.bind,
 		func(conn redcon.Conn, cmd redcon.Command) {
 			switch strings.ToLower(string(cmd.Args[0])) {
 			case "ping":
@@ -118,5 +126,17 @@ func (s *server) Run() (err error) {
 		func(conn redcon.Conn, err error) {
 		},
 	)
+
+	go func() {
+		signals := make(chan os.Signal, 1)
+		signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
+		s := <-signals
+		log.Infof("Shutdown server on signal %s", s)
+		redServer.Close()
+	}()
+
+	if err := redServer.ListenAndServe(); err == nil {
+		return s.Shutdown()
+	}
 	return
 }
