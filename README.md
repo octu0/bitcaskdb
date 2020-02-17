@@ -180,6 +180,15 @@ Thank you to all those that have contributed to this project, battle-tested it, 
 
 You can find an [AUTHORS](/AUTHORS) file where we keep a list of contributors to the project. If you contriibute a PR please consider adding your name there. There is also Github's own [Contributors](https://github.com/prologic/bitcask/graphs/contributors) statistics.
 
+[![](https://sourcerer.io/fame/prologic/prologic/bitcask/images/0)](https://sourcerer.io/fame/prologic/prologic/bitcask/links/0)
+[![](https://sourcerer.io/fame/prologic/prologic/bitcask/images/1)](https://sourcerer.io/fame/prologic/prologic/bitcask/links/1)
+[![](https://sourcerer.io/fame/prologic/prologic/bitcask/images/2)](https://sourcerer.io/fame/prologic/prologic/bitcask/links/2)
+[![](https://sourcerer.io/fame/prologic/prologic/bitcask/images/3)](https://sourcerer.io/fame/prologic/prologic/bitcask/links/3)
+[![](https://sourcerer.io/fame/prologic/prologic/bitcask/images/4)](https://sourcerer.io/fame/prologic/prologic/bitcask/links/4)
+[![](https://sourcerer.io/fame/prologic/prologic/bitcask/images/5)](https://sourcerer.io/fame/prologic/prologic/bitcask/links/5)
+[![](https://sourcerer.io/fame/prologic/prologic/bitcask/images/6)](https://sourcerer.io/fame/prologic/prologic/bitcask/links/6)
+[![](https://sourcerer.io/fame/prologic/prologic/bitcask/images/7)](https://sourcerer.io/fame/prologic/prologic/bitcask/links/7)
+
 ## License
 
 bitcask is licensed under the term of the [MIT License](https://github.com/prologic/bitcask/blob/master/LICENSE)
