@@ -38,6 +38,14 @@ func (s *server) handleSet(cmd redcon.Command, conn redcon.Conn) {
 	}
 	key := cmd.Args[1]
 	value := cmd.Args[2]
+
+	err := s.db.Lock()
+	if err != nil {
+		conn.WriteError("ERR " + fmt.Errorf("failed to lock db: %v", err).Error() + "")
+		return
+	}
+	defer s.db.Unlock()
+
 	if err := s.db.Put(key, value); err != nil {
 		conn.WriteString(fmt.Sprintf("ERR: %s", err))
 	} else {
@@ -50,7 +58,16 @@ func (s *server) handleGet(cmd redcon.Command, conn redcon.Conn) {
 		conn.WriteError("ERR wrong number of arguments for '" + string(cmd.Args[0]) + "' command")
 		return
 	}
+
 	key := cmd.Args[1]
+
+	err := s.db.Lock()
+	if err != nil {
+		conn.WriteError("ERR " + fmt.Errorf("failed to lock db: %v", err).Error() + "")
+		return
+	}
+	defer s.db.Unlock()
+
 	value, err := s.db.Get(key)
 	if err != nil {
 		conn.WriteNull()
@@ -60,9 +77,16 @@ func (s *server) handleGet(cmd redcon.Command, conn redcon.Conn) {
 }
 
 func (s *server) handleKeys(cmd redcon.Command, conn redcon.Conn) {
+	err := s.db.Lock()
+	if err != nil {
+		conn.WriteError("ERR " + fmt.Errorf("failed to lock db: %v", err).Error() + "")
+		return
+	}
+	defer s.db.Unlock()
+
 	conn.WriteArray(s.db.Len())
 	for key := range s.db.Keys() {
-		conn.WriteBulk([]byte(key))
+		conn.WriteBulk(key)
 	}
 }
 
@@ -71,7 +95,16 @@ func (s *server) handleExists(cmd redcon.Command, conn redcon.Conn) {
 		conn.WriteError("ERR wrong number of arguments for '" + string(cmd.Args[0]) + "' command")
 		return
 	}
+
 	key := cmd.Args[1]
+
+	err := s.db.Lock()
+	if err != nil {
+		conn.WriteError("ERR " + fmt.Errorf("failed to lock db: %v", err).Error() + "")
+		return
+	}
+	defer s.db.Unlock()
+
 	if s.db.Has(key) {
 		conn.WriteInt(1)
 	} else {
@@ -84,7 +117,16 @@ func (s *server) handleDel(cmd redcon.Command, conn redcon.Conn) {
 		conn.WriteError("ERR wrong number of arguments for '" + string(cmd.Args[0]) + "' command")
 		return
 	}
+
 	key := cmd.Args[1]
+
+	err := s.db.Lock()
+	if err != nil {
+		conn.WriteError("ERR " + fmt.Errorf("failed to lock db: %v", err).Error() + "")
+		return
+	}
+	defer s.db.Unlock()
+
 	if err := s.db.Delete(key); err != nil {
 		conn.WriteInt(0)
 	} else {
