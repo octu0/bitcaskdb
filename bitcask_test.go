@@ -1105,11 +1105,11 @@ func TestConcurrent(t *testing.T) {
 			}
 
 			wg := &sync.WaitGroup{}
+			wg.Add(3)
 
 			go f(wg, 2)
 			go f(wg, 3)
 			go f(wg, 5)
-			wg.Add(3)
 
 			wg.Wait()
 		})
@@ -1127,11 +1127,10 @@ func TestConcurrent(t *testing.T) {
 			}
 
 			wg := &sync.WaitGroup{}
-
-			go f(wg, 100)
-			go f(wg, 100)
-			go f(wg, 100)
 			wg.Add(3)
+			go f(wg, 100)
+			go f(wg, 100)
+			go f(wg, 100)
 
 			wg.Wait()
 		})
