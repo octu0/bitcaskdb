@@ -4,7 +4,6 @@ go 1.13
 
 require (
 	github.com/gofrs/flock v0.7.1
-	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
 	github.com/pelletier/go-toml v1.6.0 // indirect
 	github.com/pkg/errors v0.9.1
 	github.com/plar/go-adaptive-radix-tree v1.0.1

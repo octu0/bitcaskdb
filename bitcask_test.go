@@ -818,6 +818,24 @@ func TestGetErrors(t *testing.T) {
 
 }
 
+func TestPutBorderCases(t *testing.T) {
+	assert := assert.New(t)
+
+	t.Run("EmptyValue", func(t *testing.T) {
+		testdir, err := ioutil.TempDir("", "bitcask")
+		assert.NoError(err)
+
+		db, err := Open(testdir)
+		assert.NoError(err)
+
+		err = db.Put([]byte("alice"), nil)
+		assert.NoError(err)
+		z, err := db.Get([]byte("alice"))
+		assert.NoError(err)
+		assert.Empty(z)
+	})
+}
+
 func TestPutErrors(t *testing.T) {
 	assert := assert.New(t)
 
@@ -870,6 +888,18 @@ func TestPutErrors(t *testing.T) {
 		assert.Error(err)
 		assert.Equal(ErrMockError, err)
 	})
+
+	t.Run("EmptyKey", func(t *testing.T) {
+		testdir, err := ioutil.TempDir("", "bitcask")
+		assert.NoError(err)
+
+		db, err := Open(testdir)
+		assert.NoError(err)
+		err = db.Put(nil, []byte("hello"))
+		assert.Equal(ErrEmptyKey, err)
+
+	})
+
 }
 
 func TestOpenErrors(t *testing.T) {

@@ -19,8 +19,6 @@ const (
 var (
 	errReadonly  = errors.New("error: read only datafile")
 	errReadError = errors.New("error: read error")
-
-	mxMemPool sync.RWMutex
 )
 
 // Datafile is an interface  that represents a readable and writeable datafile

@@ -27,6 +27,9 @@ var (
 	// maximum allowed key size (configured with WithMaxKeySize).
 	ErrKeyTooLarge = errors.New("error: key too large")
 
+	// ErrEmptyKey is the error returned for a value with an empty key.
+	ErrEmptyKey = errors.New("error: empty key")
+
 	// ErrValueTooLarge is the error returned for a value that exceeds the
 	// maximum allowed value size (configured with WithMaxValueSize).
 	ErrValueTooLarge = errors.New("error: value too large")
@@ -150,6 +153,9 @@ func (b *Bitcask) Has(key []byte) bool {
 
 // Put stores the key and value in the database.
 func (b *Bitcask) Put(key, value []byte) error {
+	if len(key) == 0 {
+		return ErrEmptyKey
+	}
 	if uint32(len(key)) > b.config.MaxKeySize {
 		return ErrKeyTooLarge
 	}
@@ -200,10 +206,7 @@ func (b *Bitcask) DeleteAll() (err error) {
 
 	b.trie.ForEach(func(node art.Node) bool {
 		_, _, err = b.put(node.Key(), []byte{})
-		if err != nil {
-			return false
-		}
-		return true
+		return err == nil
 	})
 	b.trie = art.New()
 
@@ -269,6 +272,7 @@ func (b *Bitcask) Fold(f func(key []byte) error) (err error) {
 	return
 }
 
+// put inserts a new (key, value). Both key and value are valid inputs.
 func (b *Bitcask) put(key, value []byte) (int64, int64, error) {
 	size := b.curr.Size()
 	if size >= int64(b.config.MaxDatafileSize) {

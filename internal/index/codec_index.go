@@ -117,11 +117,7 @@ func writeIndex(t art.Tree, w io.Writer) (err error) {
 
 		item := node.Value().(internal.Item)
 		err := writeItem(item, w)
-		if err != nil {
-			return false
-		}
-
-		return true
+		return err == nil
 	})
 	return
 }
