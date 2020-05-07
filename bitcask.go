@@ -2,6 +2,7 @@ package bitcask
 
 import (
 	"errors"
+	"fmt"
 	"hash/crc32"
 	"io"
 	"io/ioutil"
@@ -310,7 +311,6 @@ func (b *Bitcask) Reopen() error {
 	if err != nil {
 		return err
 	}
-
 	t, err := loadIndex(b.path, b.indexer, b.config.MaxKeySize, datafiles)
 	if err != nil {
 		return err
@@ -458,6 +458,11 @@ func Open(path string, options ...Option) (*Bitcask, error) {
 		return nil, err
 	}
 
+	if cfg.AutoRecovery {
+		if err := data.CheckAndRecover(path, cfg); err != nil {
+			return nil, fmt.Errorf("recovering database: %s", err)
+		}
+	}
 	if err := bitcask.Reopen(); err != nil {
 		return nil, err
 	}
@@ -520,7 +525,6 @@ func loadIndex(path string, indexer index.Indexer, maxKeySize uint32, datafiles 
 					}
 					return nil, err
 				}
-
 				// Tombstone value  (deleted key)
 				if len(e.Value) == 0 {
 					t.Delete(e.Key)

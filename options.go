@@ -14,10 +14,22 @@ const (
 
 	// DefaultSync is the default file synchronization action
 	DefaultSync = false
+
+	// DefaultAutoRecovery is the default auto-recovery action.
 )
 
 // Option is a function that takes a config struct and modifies it
 type Option func(*config.Config) error
+
+// WithAutoRecovery sets auto recovery of data and index file recreation.
+// IMPORTANT: This flag MUST BE used only if a proper backup was made of all
+// the existing datafiles.
+func WithAutoRecovery(enabled bool) Option {
+	return func(cfg *config.Config) error {
+		cfg.AutoRecovery = enabled
+		return nil
+	}
+}
 
 // WithMaxDatafileSize sets the maximum datafile size option
 func WithMaxDatafileSize(size int) Option {

@@ -33,7 +33,8 @@ func DirSize(path string) (int64, error) {
 
 // GetDatafiles returns a list of all data files stored in the database path
 // given by `path`. All datafiles are identified by the the glob `*.data` and
-// the basename is represented by an monotomic increasing integer.
+// the basename is represented by a monotonic increasing integer.
+// The returned files are *sorted* in increasing order.
 func GetDatafiles(path string) ([]string, error) {
 	fns, err := filepath.Glob(fmt.Sprintf("%s/*.data", path))
 	if err != nil {
