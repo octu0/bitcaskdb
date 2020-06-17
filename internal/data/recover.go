@@ -43,7 +43,10 @@ func recoverDatafile(path string, cfg *config.Config) (recovered bool, err error
 		return false, fmt.Errorf("opening the datafile: %s", err)
 	}
 	defer func() {
-		err = f.Close()
+		closeErr := f.Close()
+		if err == nil {
+			err = closeErr
+		}
 	}()
 	_, file := filepath.Split(path)
 	rPath := fmt.Sprintf("%s.recovered", file)
@@ -52,7 +55,10 @@ func recoverDatafile(path string, cfg *config.Config) (recovered bool, err error
 		return false, fmt.Errorf("creating the recovered datafile: %w", err)
 	}
 	defer func() {
-		err = fr.Close()
+		closeErr := fr.Close()
+		if err == nil {
+			err = closeErr
+		}
 	}()
 
 	dec := codec.NewDecoder(f, cfg.MaxKeySize, cfg.MaxValueSize)
