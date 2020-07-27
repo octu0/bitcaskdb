@@ -10,6 +10,7 @@
 
 ### Features
 
+* Add empty changelog
 * Add DependaBot config
 * Add DeleteAll function ([#116](https://github.com/prologic/bitcask/issues/116))
 
@@ -106,6 +107,10 @@
 
 * Fix issue(db file Merge issue in windows env): ([#15](https://github.com/prologic/bitcask/issues/15))
 
+### Updates
+
+* Update generated protobuf code
+
 
 <a name="v0.1.7"></a>
 ## [v0.1.7](https://github.com/prologic/bitcask/compare/v0.1.6...v0.1.7) (2019-07-19)
@@ -118,7 +123,6 @@
 
 ### Updates
 
-* Update generated protobuf code
 * Update README.md
 
 
