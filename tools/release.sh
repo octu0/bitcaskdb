@@ -1,16 +1,19 @@
-#!/bin/sh
+#!/bin/bash
 
 # Get the highest tag number
 VERSION="$(git describe --abbrev=0 --tags)"
 VERSION=${VERSION:-'0.0.0'}
 
 # Get number parts
-MAJOR="${VERSION%%.*}"; VERSION="${VERSION#*.}"
-MINOR="${VERSION%%.*}"; VERSION="${VERSION#*.}"
-PATCH="${VERSION%%.*}"; VERSION="${VERSION#*.}"
+MAJOR="${VERSION%%.*}"
+VERSION="${VERSION#*.}"
+MINOR="${VERSION%%.*}"
+VERSION="${VERSION#*.}"
+PATCH="${VERSION%%.*}"
+VERSION="${VERSION#*.}"
 
 # Increase version
-PATCH=$((PATCH+1))
+PATCH=$((PATCH + 1))
 
 TAG="${1}"
 
@@ -20,6 +23,10 @@ fi
 
 echo "Releasing ${TAG} ..."
 
+git-chglog --next-tag="${TAG}" --output CHANGELOG.md
+git commit -a -m "Update CHANGELOG for ${TAG}"
 git tag -a -s -m "Release ${TAG}" "${TAG}"
 git push --tags
-goreleaser release --rm-dist
+goreleaser release \
+  --rm-dist \
+  --release-notes <(git-chglog "${TAG}" | tail -n+5)
