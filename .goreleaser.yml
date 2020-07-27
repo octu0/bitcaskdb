@@ -1,6 +1,7 @@
 ---
 builds:
   -
+    id: bitcask
     binary: bitcask
     main: ./cmd/bitcask
     flags: -tags "static_build"
@@ -8,6 +9,7 @@ builds:
     env:
       - CGO_ENABLED=0
   -
+    id: bitcaskd
     binary: bitcaskd
     main: ./cmd/bitcaskd
     flags: -tags "static_build"
