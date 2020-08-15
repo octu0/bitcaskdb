@@ -163,10 +163,6 @@ For 128B values:
 
 The full benchmark above shows linear performance as you increase key/value sizes.
 
-## Stargazers over time
-
-[![Stargazers over time](https://starcharts.herokuapp.com/prologic/bitcask.svg)](https://starcharts.herokuapp.com/prologic/bitcask)
-
 ## Support
 
 Support the ongoing development of Bitcask!
