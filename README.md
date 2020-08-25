@@ -171,6 +171,10 @@ Support the ongoing development of Bitcask!
 
 - Become a [Sponsor](https://www.patreon.com/prologic)
 
+## Stargazers over time
+
+[![Stargazers over time](https://starcharts.herokuapp.com/prologic/bitcask.svg)](https://starcharts.herokuapp.com/prologic/bitcask)
+
 ## Contributors
 
 Thank you to all those that have contributed to this project, battle-tested it, used it in their own projects or products, fixed bugs, improved performance and even fix tiny typos in documentation! Thank you and keep contributing!
