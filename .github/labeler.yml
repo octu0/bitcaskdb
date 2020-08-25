@@ -5,5 +5,5 @@ tests:
   - "**/*_test.go"
 
 dependencies:
-  - g0.mod
+  - go.mod
   - go.sum
