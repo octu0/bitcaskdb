@@ -3,7 +3,7 @@ module github.com/prologic/bitcask
 go 1.13
 
 require (
-	github.com/gofrs/flock v0.7.3
+	github.com/gofrs/flock v0.8.0
 	github.com/pelletier/go-toml v1.6.0 // indirect
 	github.com/pkg/errors v0.9.1
 	github.com/plar/go-adaptive-radix-tree v1.0.4
