@@ -3,7 +3,6 @@ package config
 import (
 	"encoding/json"
 	"io/ioutil"
-	"os"
 )
 
 // Config contains the bitcask configuration parameters
@@ -33,23 +32,16 @@ func Load(path string) (*Config, error) {
 
 // Save saves the configuration to the provided path
 func (c *Config) Save(path string) error {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
-	if err != nil {
-		return err
-	}
 
 	data, err := json.Marshal(c)
 	if err != nil {
 		return err
 	}
 
-	if _, err = f.Write(data); err != nil {
+	err = ioutil.WriteFile(path, data, 0600)
+	if err != nil {
 		return err
 	}
-
-	if err = f.Sync(); err != nil {
-		return err
-	}
-
-	return f.Close()
+	
+	return nil
 }
