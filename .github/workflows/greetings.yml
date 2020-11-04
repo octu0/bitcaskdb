@@ -16,8 +16,8 @@ jobs:
           and [Code of Conduct](https://github.com/prologic/bitcask/blob/master/CODE_OF_CONDUCT.md)
           documents.
           
-          if possible please also make sure your Bug Report or Feature Request is clearly defined
-          with either examples or a reprodicible case (_if a bug_).
+          If possible please also make sure your Bug Report or Feature Request is clearly defined
+          with either examples or a reproducible case (_if a bug_).
           
           Thank you 😃
         pr-message: |-

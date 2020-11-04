@@ -284,7 +284,7 @@ func (b *Bitcask) put(key, value []byte) (int64, int64, error) {
 
 		id := b.curr.FileID()
 
-		df, err := data.NewDatafile(b.path, id, true, b.config.MaxKeySize, b.config.MaxValueSize)
+		df, err := data.NewDatafile(b.path, id, true, b.config.MaxKeySize, b.config.MaxValueSize, b.config.FileFileModeBeforeUmask)
 		if err != nil {
 			return -1, 0, err
 		}
@@ -292,7 +292,7 @@ func (b *Bitcask) put(key, value []byte) (int64, int64, error) {
 		b.datafiles[id] = df
 
 		id = b.curr.FileID() + 1
-		curr, err := data.NewDatafile(b.path, id, false, b.config.MaxKeySize, b.config.MaxValueSize)
+		curr, err := data.NewDatafile(b.path, id, false, b.config.MaxKeySize, b.config.MaxValueSize, b.config.FileFileModeBeforeUmask)
 		if err != nil {
 			return -1, 0, err
 		}
@@ -307,7 +307,7 @@ func (b *Bitcask) Reopen() error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	datafiles, lastID, err := loadDatafiles(b.path, b.config.MaxKeySize, b.config.MaxValueSize)
+	datafiles, lastID, err := loadDatafiles(b.path, b.config.MaxKeySize, b.config.MaxValueSize, b.config.FileFileModeBeforeUmask)
 	if err != nil {
 		return err
 	}
@@ -316,7 +316,7 @@ func (b *Bitcask) Reopen() error {
 		return err
 	}
 
-	curr, err := data.NewDatafile(b.path, lastID, false, b.config.MaxKeySize, b.config.MaxValueSize)
+	curr, err := data.NewDatafile(b.path, lastID, false, b.config.MaxKeySize, b.config.MaxValueSize, b.config.FileFileModeBeforeUmask)
 	if err != nil {
 		return err
 	}
@@ -417,10 +417,6 @@ func Open(path string, options ...Option) (*Bitcask, error) {
 		err error
 	)
 
-	if err := os.MkdirAll(path, 0755); err != nil {
-		return nil, err
-	}
-
 	configPath := filepath.Join(path, "config.json")
 	if internal.Exists(configPath) {
 		cfg, err = config.Load(configPath)
@@ -431,18 +427,22 @@ func Open(path string, options ...Option) (*Bitcask, error) {
 		cfg = newDefaultConfig()
 	}
 
+	for _, opt := range options {
+		if err := opt(cfg); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := os.MkdirAll(path, cfg.DirFileModeBeforeUmask); err != nil {
+		return nil, err
+	}
+
 	bitcask := &Bitcask{
 		Flock:   flock.New(filepath.Join(path, "lock")),
 		config:  cfg,
 		options: options,
 		path:    path,
 		indexer: index.NewIndexer(),
-	}
-
-	for _, opt := range options {
-		if err := opt(bitcask.config); err != nil {
-			return nil, err
-		}
 	}
 
 	locked, err := bitcask.Flock.TryLock()
@@ -470,7 +470,7 @@ func Open(path string, options ...Option) (*Bitcask, error) {
 	return bitcask, nil
 }
 
-func loadDatafiles(path string, maxKeySize uint32, maxValueSize uint64) (datafiles map[int]data.Datafile, lastID int, err error) {
+func loadDatafiles(path string, maxKeySize uint32, maxValueSize uint64, fileModeBeforeUmask os.FileMode) (datafiles map[int]data.Datafile, lastID int, err error) {
 	fns, err := internal.GetDatafiles(path)
 	if err != nil {
 		return nil, 0, err
@@ -483,7 +483,7 @@ func loadDatafiles(path string, maxKeySize uint32, maxValueSize uint64) (datafil
 
 	datafiles = make(map[int]data.Datafile, len(ids))
 	for _, id := range ids {
-		datafiles[id], err = data.NewDatafile(path, id, true, maxKeySize, maxValueSize)
+		datafiles[id], err = data.NewDatafile(path, id, true, maxKeySize, maxValueSize, fileModeBeforeUmask)
 		if err != nil {
 			return
 		}

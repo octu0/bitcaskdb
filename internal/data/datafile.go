@@ -48,7 +48,7 @@ type datafile struct {
 }
 
 // NewDatafile opens an existing datafile
-func NewDatafile(path string, id int, readonly bool, maxKeySize uint32, maxValueSize uint64) (Datafile, error) {
+func NewDatafile(path string, id int, readonly bool, maxKeySize uint32, maxValueSize uint64, fileMode os.FileMode) (Datafile, error) {
 	var (
 		r   *os.File
 		ra  *mmap.ReaderAt
@@ -59,7 +59,7 @@ func NewDatafile(path string, id int, readonly bool, maxKeySize uint32, maxValue
 	fn := filepath.Join(path, fmt.Sprintf(defaultDatafileFilename, id))
 
 	if !readonly {
-		w, err = os.OpenFile(fn, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0640)
+		w, err = os.OpenFile(fn, os.O_WRONLY|os.O_APPEND|os.O_CREATE, fileMode)
 		if err != nil {
 			return nil, err
 		}

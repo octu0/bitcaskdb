@@ -1,8 +1,18 @@
 package bitcask
 
-import "github.com/prologic/bitcask/internal/config"
+import (
+	"os"
+
+	"github.com/prologic/bitcask/internal/config"
+)
 
 const (
+	// DefaultDirFileModeBeforeUmask is the default os.FileMode used when creating directories
+	DefaultDirFileModeBeforeUmask = os.FileMode(0700)
+
+	// DefaultFileFileModeBeforeUmask is the default os.FileMode used when creating files
+	DefaultFileFileModeBeforeUmask = os.FileMode(0600)
+
 	// DefaultMaxDatafileSize is the default maximum datafile size in bytes
 	DefaultMaxDatafileSize = 1 << 20 // 1MB
 
@@ -27,6 +37,22 @@ type Option func(*config.Config) error
 func WithAutoRecovery(enabled bool) Option {
 	return func(cfg *config.Config) error {
 		cfg.AutoRecovery = enabled
+		return nil
+	}
+}
+
+// WithDirFileModeBeforeUmask sets the FileMode used for each new file created.
+func WithDirFileModeBeforeUmask(mode os.FileMode) Option {
+	return func(cfg *config.Config) error {
+		cfg.DirFileModeBeforeUmask = mode
+		return nil
+	}
+}
+
+// WithFileFileModeBeforeUmask sets the FileMode used for each new file created.
+func WithFileFileModeBeforeUmask(mode os.FileMode) Option {
+	return func(cfg *config.Config) error {
+		cfg.FileFileModeBeforeUmask = mode
 		return nil
 	}
 }
@@ -66,9 +92,11 @@ func WithSync(sync bool) Option {
 
 func newDefaultConfig() *config.Config {
 	return &config.Config{
-		MaxDatafileSize: DefaultMaxDatafileSize,
-		MaxKeySize:      DefaultMaxKeySize,
-		MaxValueSize:    DefaultMaxValueSize,
-		Sync:            DefaultSync,
+		MaxDatafileSize:         DefaultMaxDatafileSize,
+		MaxKeySize:              DefaultMaxKeySize,
+		MaxValueSize:            DefaultMaxValueSize,
+		Sync:                    DefaultSync,
+		DirFileModeBeforeUmask:  DefaultDirFileModeBeforeUmask,
+		FileFileModeBeforeUmask: DefaultFileFileModeBeforeUmask,
 	}
 }
