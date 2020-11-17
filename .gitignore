@@ -2,8 +2,11 @@
 *.bak
 *.db
 
-/coverage.txt
-/bitcask
-/bitcaskd
 /tmp
 /dist
+/coverage.txt
+
+/bitcask
+/bitcaskd
+/cmd/bitcask/bitcask
+/cmd/bitcaskd/bitcaskd
