@@ -87,7 +87,10 @@ func (b *Bitcask) Stats() (stats Stats, err error) {
 // Close() as this is the only way to cleanup the lock held by the open
 // database.
 func (b *Bitcask) Close() error {
+	b.mu.RLock()
+
 	defer func() {
+		b.mu.RUnlock()
 		b.Flock.Unlock()
 		os.Remove(b.Flock.Path())
 	}()
@@ -107,6 +110,8 @@ func (b *Bitcask) Close() error {
 
 // Sync flushes all buffers to disk ensuring all data is written
 func (b *Bitcask) Sync() error {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
 	return b.curr.Sync()
 }
 
