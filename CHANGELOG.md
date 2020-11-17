@@ -1,6 +1,14 @@
 
+<a name="v0.3.8"></a>
+## [v0.3.8](https://github.com/prologic/bitcask/compare/v0.3.7...v0.3.8) (0001-01-01)
+
+
 <a name="v0.3.7"></a>
 ## [v0.3.7](https://github.com/prologic/bitcask/compare/v0.3.6...v0.3.7) (2020-11-17)
+
+### Updates
+
+* Update CHANGELOG for v0.3.7
 
 
 <a name="v0.3.6"></a>
