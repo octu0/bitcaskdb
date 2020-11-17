@@ -1,9 +1,11 @@
 
 <a name="v0.3.6"></a>
-## [v0.3.6](https://github.com/prologic/bitcask/compare/v0.3.5...v0.3.6) (2020-07-27)
+## [v0.3.6](https://github.com/prologic/bitcask/compare/v0.3.5...v0.3.6) (2020-11-17)
 
 ### Bug Fixes
 
+* Fix typo in labeler ([#172](https://github.com/prologic/bitcask/issues/172))
+* Fix builds configuration for goreleaser
 * Fix (again) goreleaser config
 * Fix goreleaser config and improve release notes / changelog
 * Fix recoverDatafile error covering ([#162](https://github.com/prologic/bitcask/issues/162))
@@ -11,12 +13,16 @@
 
 ### Features
 
+* Add configuration options for FileMode ([#183](https://github.com/prologic/bitcask/issues/183))
+* Add imports and log in example code ([#182](https://github.com/prologic/bitcask/issues/182))
 * Add empty changelog
 * Add DependaBot config
 * Add DeleteAll function ([#116](https://github.com/prologic/bitcask/issues/116))
 
 ### Updates
 
+* Update README.md
+* Update CHANGELOG for v0.3.6
 * Update CHANGELOG for v0.3.6
 * Update deps ([#140](https://github.com/prologic/bitcask/issues/140))
 * Update README.md
@@ -109,10 +115,6 @@
 
 * Fix issue(db file Merge issue in windows env): ([#15](https://github.com/prologic/bitcask/issues/15))
 
-### Updates
-
-* Update generated protobuf code
-
 
 <a name="v0.1.7"></a>
 ## [v0.1.7](https://github.com/prologic/bitcask/compare/v0.1.6...v0.1.7) (2019-07-19)
@@ -125,6 +127,7 @@
 
 ### Updates
 
+* Update generated protobuf code
 * Update README.md
 
 
