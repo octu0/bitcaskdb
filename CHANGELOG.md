@@ -1,4 +1,8 @@
 
+<a name="v0.3.7"></a>
+## [v0.3.7](https://github.com/prologic/bitcask/compare/v0.3.6...v0.3.7) (2020-11-17)
+
+
 <a name="v0.3.6"></a>
 ## [v0.3.6](https://github.com/prologic/bitcask/compare/v0.3.5...v0.3.6) (2020-11-17)
 
@@ -21,6 +25,7 @@
 
 ### Updates
 
+* Update CHANGELOG for v0.3.6
 * Update README.md
 * Update CHANGELOG for v0.3.6
 * Update CHANGELOG for v0.3.6
