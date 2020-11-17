@@ -1,6 +1,18 @@
 
+<a name="v0.3.9"></a>
+## [v0.3.9](https://github.com/prologic/bitcask/compare/v0.3.8...v0.3.9) (2020-11-17)
+
+### Bug Fixes
+
+* Fix a race condition around .Close() and .Sync()
+
+
 <a name="v0.3.8"></a>
-## [v0.3.8](https://github.com/prologic/bitcask/compare/v0.3.7...v0.3.8) (0001-01-01)
+## [v0.3.8](https://github.com/prologic/bitcask/compare/v0.3.7...v0.3.8) (2020-11-17)
+
+### Updates
+
+* Update CHANGELOG for v0.3.8
 
 
 <a name="v0.3.7"></a>
