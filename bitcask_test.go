@@ -1406,6 +1406,92 @@ func TestConcurrent(t *testing.T) {
 			wg.Wait()
 		})
 
+		// Test concurrent Put() with concurrent Scan()
+		t.Run("PutScan", func(t *testing.T) {
+			doPut := func(wg *sync.WaitGroup, x int) {
+				defer func() {
+					wg.Done()
+				}()
+				for i := 0; i <= 100; i++ {
+					if i%x == 0 {
+						key := []byte(fmt.Sprintf("k%d", i))
+						value := []byte(fmt.Sprintf("v%d", i))
+						err := db.Put(key, value)
+						assert.NoError(err)
+					}
+				}
+			}
+
+			doScan := func(wg *sync.WaitGroup, x int) {
+				defer func() {
+					wg.Done()
+				}()
+				for i := 0; i <= 100; i++ {
+					if i%x == 0 {
+						err := db.Scan([]byte("k"), func(key []byte) error {
+							return nil
+						})
+						assert.NoError(err)
+					}
+				}
+			}
+
+			wg := &sync.WaitGroup{}
+			wg.Add(6)
+
+			go doPut(wg, 2)
+			go doPut(wg, 3)
+			go doPut(wg, 5)
+			go doScan(wg, 1)
+			go doScan(wg, 2)
+			go doScan(wg, 4)
+
+			wg.Wait()
+		})
+
+		// XXX: This has data races
+		/* Test concurrent Scan() with concurrent Merge()
+		t.Run("ScanMerge", func(t *testing.T) {
+			doScan := func(wg *sync.WaitGroup, x int) {
+				defer func() {
+					wg.Done()
+				}()
+				for i := 0; i <= 100; i++ {
+					if i%x == 0 {
+						err := db.Scan([]byte("k"), func(key []byte) error {
+							return nil
+						})
+						assert.NoError(err)
+					}
+				}
+			}
+
+			doMerge := func(wg *sync.WaitGroup, x int) {
+				defer func() {
+					wg.Done()
+				}()
+				for i := 0; i <= 100; i++ {
+					if i%x == 0 {
+						err := db.Merge()
+						assert.NoError(err)
+					}
+				}
+			}
+
+			wg := &sync.WaitGroup{}
+			wg.Add(6)
+
+			go doScan(wg, 2)
+			go doScan(wg, 3)
+			go doScan(wg, 5)
+			go doMerge(wg, 1)
+			go doMerge(wg, 2)
+			go doMerge(wg, 4)
+
+			wg.Wait()
+		})
+		*/
+
 		t.Run("Close", func(t *testing.T) {
 			err = db.Close()
 			assert.NoError(err)
