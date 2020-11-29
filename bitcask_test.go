@@ -136,6 +136,14 @@ func TestAll(t *testing.T) {
 		assert.NoError(err)
 	})
 
+	t.Run("Backup", func(t *testing.T) {
+		path, err := ioutil.TempDir("", "backup")
+		defer os.RemoveAll(path)
+		assert.NoError(err)
+		err = db.Backup(filepath.Join(path, "db-backup"))
+		assert.NoError(err)
+	})
+
 	t.Run("Close", func(t *testing.T) {
 		err = db.Close()
 		assert.NoError(err)
@@ -1208,7 +1216,7 @@ func TestCloseErrors(t *testing.T) {
 		assert.NoError(err)
 
 		mockIndexer := new(mocks.Indexer)
-		mockIndexer.On("Save", db.trie, filepath.Join(db.path, "index")).Return(ErrMockError)
+		mockIndexer.On("Save", db.trie, filepath.Join(db.path, "temp_index")).Return(ErrMockError)
 		db.indexer = mockIndexer
 
 		err = db.Close()

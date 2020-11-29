@@ -1,7 +1,9 @@
 package internal
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sort"
@@ -62,4 +64,49 @@ func ParseIds(fns []string) ([]int, error) {
 	}
 	sort.Ints(ids)
 	return ids, nil
+}
+
+// Copy copies source contents to destination
+func Copy(src, dst string, exclude []string) error {
+	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		relPath := strings.Replace(path, src, "", 1)
+		if relPath == "" {
+			return nil
+		}
+		for _, e := range exclude {
+			matched, err := filepath.Match(e, info.Name())
+			if err != nil {
+				return err
+			}
+			if matched {
+				return nil
+			}
+		}
+		if info.IsDir() {
+			return os.Mkdir(filepath.Join(dst, relPath), info.Mode())
+		}
+		var data, err1 = ioutil.ReadFile(filepath.Join(src, relPath))
+		if err1 != nil {
+			return err1
+		}
+		return ioutil.WriteFile(filepath.Join(dst, relPath), data, info.Mode())
+	})
+}
+
+// SaveJsonToFile converts v into json and store in file identified by path
+func SaveJsonToFile(v interface{}, path string, mode os.FileMode) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	return ioutil.WriteFile(path, b, mode)
+}
+
+// LoadFromJsonFile reads file located at `path` and put its content in json format in v
+func LoadFromJsonFile(path string, v interface{}) error {
+	b, err := ioutil.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(b, v)
 }
