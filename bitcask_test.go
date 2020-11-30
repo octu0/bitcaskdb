@@ -314,6 +314,64 @@ func TestDeletedKeys(t *testing.T) {
 	})
 }
 
+func TestMetadata(t *testing.T) {
+	assert := assert.New(t)
+	testdir, err := ioutil.TempDir("", "bitcask")
+	assert.NoError(err)
+	defer os.RemoveAll(testdir)
+
+	db, err := Open(testdir)
+	assert.NoError(err)
+	err = db.Put([]byte("foo"), []byte("bar"))
+	assert.NoError(err)
+	err = db.Close()
+	assert.NoError(err)
+	db, err = Open(testdir)
+	assert.NoError(err)
+
+	t.Run("IndexUptoDateAfterCloseAndOpen", func(t *testing.T) {
+		assert.Equal(true, db.metadata.IndexUpToDate)
+	})
+	t.Run("IndexUptoDateAfterPut", func(t *testing.T) {
+		assert.NoError(db.Put([]byte("foo1"), []byte("bar1")))
+		assert.Equal(false, db.metadata.IndexUpToDate)
+	})
+	t.Run("Reclaimable", func(t *testing.T) {
+		assert.Equal(int64(0), db.Reclaimable())
+	})
+	t.Run("ReclaimableAfterNewPut", func(t *testing.T) {
+		assert.NoError(db.Put([]byte("hello"), []byte("world")))
+		assert.Equal(int64(0), db.Reclaimable())
+	})
+	t.Run("ReclaimableAfterRepeatedPut", func(t *testing.T) {
+		assert.NoError(db.Put([]byte("hello"), []byte("world")))
+		assert.Equal(int64(26), db.Reclaimable())
+	})
+	t.Run("ReclaimableAfterDelete", func(t *testing.T) {
+		assert.NoError(db.Delete([]byte("hello")))
+		assert.Equal(int64(73), db.Reclaimable())
+	})
+	t.Run("ReclaimableAfterNonExistingDelete", func(t *testing.T) {
+		assert.NoError(db.Delete([]byte("hello1")))
+		assert.Equal(int64(73), db.Reclaimable())
+	})
+	t.Run("ReclaimableAfterDeleteAll", func(t *testing.T) {
+		assert.NoError(db.DeleteAll())
+		assert.Equal(int64(158), db.Reclaimable())
+	})
+	t.Run("ReclaimableAfterMerge", func(t *testing.T) {
+		assert.NoError(db.Merge())
+		assert.Equal(int64(0), db.Reclaimable())
+	})
+	t.Run("IndexUptoDateAfterMerge", func(t *testing.T) {
+		assert.Equal(true, db.metadata.IndexUpToDate)
+	})
+	t.Run("ReclaimableAfterMergeAndDeleteAll", func(t *testing.T) {
+		assert.NoError(db.DeleteAll())
+		assert.Equal(int64(0), db.Reclaimable())
+	})
+}
+
 func TestConfigErrors(t *testing.T) {
 	assert := assert.New(t)
 

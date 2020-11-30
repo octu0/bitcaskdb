@@ -13,6 +13,7 @@ const (
 	keySize      = 4
 	valueSize    = 8
 	checksumSize = 4
+	MetaInfoSize = keySize + valueSize + checksumSize
 )
 
 // NewEncoder creates a streaming Entry encoder.

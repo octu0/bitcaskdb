@@ -17,6 +17,7 @@ import (
 	"github.com/prologic/bitcask/internal"
 	"github.com/prologic/bitcask/internal/config"
 	"github.com/prologic/bitcask/internal/data"
+	"github.com/prologic/bitcask/internal/data/codec"
 	"github.com/prologic/bitcask/internal/index"
 	"github.com/prologic/bitcask/internal/metadata"
 )
@@ -101,6 +102,11 @@ func (b *Bitcask) Close() error {
 		return err
 	}
 
+	b.metadata.IndexUpToDate = true
+	if err := b.saveMetadata(); err != nil {
+		return err
+	}
+
 	for _, df := range b.datafiles {
 		if err := df.Close(); err != nil {
 			return err
@@ -172,29 +178,32 @@ func (b *Bitcask) Put(key, value []byte) error {
 	}
 
 	b.mu.Lock()
+	defer b.mu.Unlock()
 	offset, n, err := b.put(key, value)
 	if err != nil {
-		b.mu.Unlock()
 		return err
 	}
 
 	if b.config.Sync {
 		if err := b.curr.Sync(); err != nil {
-			b.mu.Unlock()
 			return err
 		}
 	}
 
+	// in case of successful `put`, IndexUpToDate will be always be false
 	if b.metadata.IndexUpToDate {
 		b.metadata.IndexUpToDate = false
-		if err := b.metadata.Save(filepath.Join(b.path, "meta.json"), b.config.FileFileModeBeforeUmask); err != nil {
+		if err := b.saveMetadata(); err != nil {
 			return err
 		}
+	}
+
+	if oldItem, found := b.trie.Search(key); found {
+		b.metadata.ReclaimableSpace += oldItem.(internal.Item).Size
 	}
 
 	item := internal.Item{FileID: b.curr.FileID(), Offset: offset, Size: n}
 	b.trie.Insert(key, item)
-	b.mu.Unlock()
 
 	return nil
 }
@@ -207,6 +216,9 @@ func (b *Bitcask) Delete(key []byte) error {
 	if err != nil {
 		b.mu.Unlock()
 		return err
+	}
+	if item, found := b.trie.Search(key); found {
+		b.metadata.ReclaimableSpace += item.(internal.Item).Size + codec.MetaInfoSize + int64(len(key))
 	}
 	b.trie.Delete(key)
 	b.mu.Unlock()
@@ -221,7 +233,12 @@ func (b *Bitcask) DeleteAll() (err error) {
 
 	b.trie.ForEach(func(node art.Node) bool {
 		_, _, err = b.put(node.Key(), []byte{})
-		return err == nil
+		if err != nil {
+			return false
+		}
+		item, _ := b.trie.Search(node.Key())
+		b.metadata.ReclaimableSpace += item.(internal.Item).Size + codec.MetaInfoSize + int64(len(node.Key()))
+		return true
 	})
 	b.trie = art.New()
 
@@ -421,6 +438,7 @@ func (b *Bitcask) Merge() error {
 			return err
 		}
 	}
+	b.metadata.ReclaimableSpace = 0
 
 	// And finally reopen the database
 	return b.Reopen()
@@ -512,12 +530,17 @@ func (b *Bitcask) saveIndex() error {
 	if err := b.indexer.Save(b.trie, filepath.Join(b.path, tempIdx)); err != nil {
 		return err
 	}
-	err := os.Rename(filepath.Join(b.path, tempIdx), filepath.Join(b.path, "index"))
-	if err != nil {
-		return err
-	}
-	b.metadata.IndexUpToDate = true
+	return os.Rename(filepath.Join(b.path, tempIdx), filepath.Join(b.path, "index"))
+}
+
+// saveMetadata saves metadata into disk
+func (b *Bitcask) saveMetadata() error {
 	return b.metadata.Save(filepath.Join(b.path, "meta.json"), b.config.DirFileModeBeforeUmask)
+}
+
+// Reclaimable returns space that can be reclaimed
+func (b *Bitcask) Reclaimable() int64 {
+	return b.metadata.ReclaimableSpace
 }
 
 func loadDatafiles(path string, maxKeySize uint32, maxValueSize uint64, fileModeBeforeUmask os.FileMode) (datafiles map[int]data.Datafile, lastID int, err error) {
