@@ -1620,7 +1620,6 @@ func TestLocking(t *testing.T) {
 
 	_, err = Open(testdir)
 	assert.Error(err)
-	assert.Equal(ErrDatabaseLocked, err)
 }
 
 type benchmarkTestCase struct {

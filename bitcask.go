@@ -12,8 +12,8 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/gofrs/flock"
 	art "github.com/plar/go-adaptive-radix-tree"
+	"github.com/prologic/bitcask/flock"
 	"github.com/prologic/bitcask/internal"
 	"github.com/prologic/bitcask/internal/config"
 	"github.com/prologic/bitcask/internal/data"
@@ -100,7 +100,6 @@ func (b *Bitcask) Close() error {
 	defer func() {
 		b.mu.RUnlock()
 		b.Flock.Unlock()
-		os.Remove(b.Flock.Path())
 	}()
 
 	if err := b.saveIndex(); err != nil {
