@@ -194,6 +194,12 @@ You can find an [AUTHORS](/AUTHORS) file where we keep a list of contributors to
 [![](https://sourcerer.io/fame/prologic/prologic/bitcask/images/6)](https://sourcerer.io/fame/prologic/prologic/bitcask/links/6)
 [![](https://sourcerer.io/fame/prologic/prologic/bitcask/images/7)](https://sourcerer.io/fame/prologic/prologic/bitcask/links/7)
 
+## Related Projects
+
+- [bitraft](https://github.com/prologic/bitraft) -- A Distributed Key/Value store (_using Raft_) with a Redis compatible protocol.
+- [bitcaskfs](https://github.com/prologic/bitcaskfs) -- A FUSE filesystem for mounting a Bitcask database.
+- [bitcaskbench](https://github.com/prologic/bitcaskbench) -- A benchmarking tool comparing Bitcask and several other Go key/value libraries.
+
 ## License
 
 bitcask is licensed under the term of the [MIT License](https://github.com/prologic/bitcask/blob/master/LICENSE)
