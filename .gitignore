@@ -8,5 +8,6 @@
 
 /bitcask
 /bitcaskd
+/bitcask_bench*
 /cmd/bitcask/bitcask
 /cmd/bitcaskd/bitcaskd

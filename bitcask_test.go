@@ -9,7 +9,6 @@ import (
 	"path"
 	"path/filepath"
 	"reflect"
-	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -51,12 +50,6 @@ func SortByteArrays(src [][]byte) [][]byte {
 	sorted := sortByteArrays(src)
 	sort.Sort(sorted)
 	return sorted
-}
-
-func skipIfWindows(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Skipping this test on Windows")
-	}
 }
 
 func TestAll(t *testing.T) {
@@ -403,9 +396,6 @@ func TestConfigErrors(t *testing.T) {
 }
 
 func TestAutoRecovery(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.SkipNow()
-	}
 	withAutoRecovery := []bool{false, true}
 
 	for _, autoRecovery := range withAutoRecovery {
@@ -773,8 +763,6 @@ func TestStatsError(t *testing.T) {
 	})
 
 	t.Run("Test", func(t *testing.T) {
-		skipIfWindows(t)
-
 		t.Run("FabricatedDestruction", func(t *testing.T) {
 			// This would never happen in reality :D
 			// Or would it? :)
@@ -790,8 +778,6 @@ func TestStatsError(t *testing.T) {
 }
 
 func TestDirFileModeBeforeUmask(t *testing.T) {
-	skipIfWindows(t)
-
 	assert := assert.New(t)
 
 	t.Run("Setup", func(t *testing.T) {
@@ -874,8 +860,6 @@ func TestDirFileModeBeforeUmask(t *testing.T) {
 }
 
 func TestFileFileModeBeforeUmask(t *testing.T) {
-	skipIfWindows(t)
-
 	assert := assert.New(t)
 
 	t.Run("Setup", func(t *testing.T) {
@@ -1345,8 +1329,6 @@ func TestMergeErrors(t *testing.T) {
 	assert := assert.New(t)
 
 	t.Run("RemoveDatabaseDirectory", func(t *testing.T) {
-		skipIfWindows(t)
-
 		testdir, err := ioutil.TempDir("", "bitcask")
 		assert.NoError(err)
 		defer os.RemoveAll(testdir)
