@@ -74,7 +74,7 @@ func getKeyValueSizes(buf []byte, maxKeySize uint32, maxValueSize uint64) (uint3
 	actualKeySize := binary.BigEndian.Uint32(buf[:keySize])
 	actualValueSize := binary.BigEndian.Uint64(buf[keySize:])
 
-	if actualKeySize > maxKeySize || actualValueSize > maxValueSize || actualKeySize == 0 {
+	if (maxKeySize > 0 && actualKeySize > maxKeySize) || (maxValueSize > 0 && actualValueSize > maxValueSize) || actualKeySize == 0 {
 
 		return 0, 0, errInvalidKeyOrValueSize
 	}

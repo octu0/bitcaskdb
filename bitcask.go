@@ -179,10 +179,10 @@ func (b *Bitcask) Put(key, value []byte) error {
 	if len(key) == 0 {
 		return ErrEmptyKey
 	}
-	if uint32(len(key)) > b.config.MaxKeySize {
+	if b.config.MaxKeySize > 0 && uint32(len(key)) > b.config.MaxKeySize {
 		return ErrKeyTooLarge
 	}
-	if uint64(len(value)) > b.config.MaxValueSize {
+	if b.config.MaxValueSize > 0 && uint64(len(value)) > b.config.MaxValueSize {
 		return ErrValueTooLarge
 	}
 
