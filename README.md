@@ -198,7 +198,7 @@ You can find an [AUTHORS](/AUTHORS) file where we keep a list of contributors to
 
 - [bitraft](https://github.com/prologic/bitraft) -- A Distributed Key/Value store (_using Raft_) with a Redis compatible protocol.
 - [bitcaskfs](https://github.com/prologic/bitcaskfs) -- A FUSE filesystem for mounting a Bitcask database.
-- [bitcaskbench](https://github.com/prologic/bitcaskbench) -- A benchmarking tool comparing Bitcask and several other Go key/value libraries.
+- [bitcask-bench](https://github.com/prologic/bitcask-bench) -- A benchmarking tool comparing Bitcask and several other Go key/value libraries.
 
 ## License
 
