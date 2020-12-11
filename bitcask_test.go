@@ -1034,7 +1034,7 @@ func TestMerge(t *testing.T) {
 
 		s3, err := db.Stats()
 		assert.NoError(err)
-		assert.Equal(1, s3.Datafiles)
+		assert.Equal(2, s3.Datafiles)
 		assert.Equal(1, s3.Keys)
 		assert.True(s3.Size > s1.Size)
 		assert.True(s3.Size < s2.Size)
@@ -1364,18 +1364,19 @@ func TestMergeErrors(t *testing.T) {
 		assert.NoError(err)
 		defer os.RemoveAll(testdir)
 
-		db, err := Open(testdir)
+		db, err := Open(testdir, WithMaxDatafileSize(22))
 		assert.NoError(err)
 
 		assert.NoError(db.Put([]byte("foo"), []byte("bar")))
+		assert.NoError(db.Put([]byte("bar"), []byte("baz")))
 
 		mockDatafile := new(mocks.Datafile)
-		mockDatafile.On("FileID").Return(0)
+		mockDatafile.On("Close").Return(nil)
 		mockDatafile.On("ReadAt", int64(0), int64(22)).Return(
 			internal.Entry{},
 			ErrMockError,
 		)
-		db.curr = mockDatafile
+		db.datafiles[0] = mockDatafile
 
 		err = db.Merge()
 		assert.Error(err)
