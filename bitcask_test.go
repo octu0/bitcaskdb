@@ -633,6 +633,11 @@ func TestSync(t *testing.T) {
 		value := []byte("foobar")
 		err = db.Put(key, value)
 	})
+
+	t.Run("Put", func(t *testing.T) {
+		err = db.Put([]byte("hello"), []byte("world"))
+		assert.NoError(err)
+	})
 }
 
 func TestMaxKeySize(t *testing.T) {

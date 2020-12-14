@@ -125,6 +125,11 @@ func (b *Bitcask) close() error {
 func (b *Bitcask) Sync() error {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
+
+	if err := b.saveMetadata(); err != nil {
+		return err
+	}
+
 	return b.curr.Sync()
 }
 
@@ -201,12 +206,7 @@ func (b *Bitcask) Put(key, value []byte) error {
 	}
 
 	// in case of successful `put`, IndexUpToDate will be always be false
-	if b.metadata.IndexUpToDate {
-		b.metadata.IndexUpToDate = false
-		if err := b.saveMetadata(); err != nil {
-			return err
-		}
-	}
+	b.metadata.IndexUpToDate = false
 
 	if oldItem, found := b.trie.Search(key); found {
 		b.metadata.ReclaimableSpace += oldItem.(internal.Item).Size
