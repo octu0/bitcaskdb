@@ -446,7 +446,7 @@ func (b *Bitcask) Merge() error {
 	defer os.RemoveAll(temp)
 
 	// Create a merged database
-	mdb, err := Open(temp, b.options...)
+	mdb, err := Open(temp, withConfig(b.config))
 	if err != nil {
 		return err
 	}

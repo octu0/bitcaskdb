@@ -34,7 +34,7 @@ func readKeyBytes(r io.Reader, maxKeySize uint32) ([]byte, error) {
 		return nil, errors.Wrap(errTruncatedKeySize, err.Error())
 	}
 	size := binary.BigEndian.Uint32(s)
-	if size > uint32(maxKeySize) {
+	if maxKeySize > 0 && size > uint32(maxKeySize) {
 		return nil, errKeySizeTooLarge
 	}
 

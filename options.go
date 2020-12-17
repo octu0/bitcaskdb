@@ -31,6 +31,19 @@ const (
 // Option is a function that takes a config struct and modifies it
 type Option func(*config.Config) error
 
+func withConfig(src *config.Config) Option {
+	return func(cfg *config.Config) error {
+		cfg.MaxDatafileSize = src.MaxDatafileSize
+		cfg.MaxKeySize = src.MaxKeySize
+		cfg.MaxValueSize = src.MaxValueSize
+		cfg.Sync = src.Sync
+		cfg.AutoRecovery = src.AutoRecovery
+		cfg.DirFileModeBeforeUmask = src.DirFileModeBeforeUmask
+		cfg.FileFileModeBeforeUmask = src.FileFileModeBeforeUmask
+		return nil
+	}
+}
+
 // WithAutoRecovery sets auto recovery of data and index file recreation.
 // IMPORTANT: This flag MUST BE used only if a proper backup was made of all
 // the existing datafiles.
