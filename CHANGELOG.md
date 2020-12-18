@@ -1,10 +1,34 @@
 
+<a name="v0.3.10"></a>
+## [v0.3.10](https://github.com/prologic/bitcask/compare/v0.3.9...v0.3.10) (2020-12-18)
+
+### Bug Fixes
+
+* Fix a bug when MaxValueSize == 0 on Merge operations
+* Fix link to bitcask-bench
+* Fix CI (again)
+* Fix CI
+
+### Features
+
+* Add support for unlimited key/value sizes
+* Add a few more test cases for concurrent operations
+
+### Updates
+
+* Update README.md
+
+
 <a name="v0.3.9"></a>
 ## [v0.3.9](https://github.com/prologic/bitcask/compare/v0.3.8...v0.3.9) (2020-11-17)
 
 ### Bug Fixes
 
 * Fix a race condition around .Close() and .Sync()
+
+### Updates
+
+* Update CHANGELOG for v0.3.9
 
 
 <a name="v0.3.8"></a>
