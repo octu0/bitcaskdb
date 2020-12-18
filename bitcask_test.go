@@ -1627,6 +1627,27 @@ func TestLocking(t *testing.T) {
 	assert.Error(err)
 }
 
+func TestLockingAfterMerge(t *testing.T) {
+	assert := assert.New(t)
+
+	testdir, err := ioutil.TempDir("", "bitcask")
+	assert.NoError(err)
+
+	db, err := Open(testdir)
+	assert.NoError(err)
+	defer db.Close()
+
+	_, err = Open(testdir)
+	assert.Error(err)
+
+	err = db.Merge()
+	assert.NoError(err)
+
+	// This should still error.
+	_, err = Open(testdir)
+	assert.Error(err)
+}
+
 type benchmarkTestCase struct {
 	name string
 	size int

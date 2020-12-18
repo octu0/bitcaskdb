@@ -22,6 +22,10 @@ import (
 	"github.com/prologic/bitcask/internal/metadata"
 )
 
+const (
+	lockfile = "lock"
+)
+
 var (
 	// ErrKeyNotFound is the error returned when a key is not found
 	ErrKeyNotFound = errors.New("error: key not found")
@@ -96,13 +100,15 @@ func (b *Bitcask) Stats() (stats Stats, err error) {
 // database.
 func (b *Bitcask) Close() error {
 	b.mu.RLock()
-	defer b.mu.RUnlock()
+	defer func() {
+		b.mu.RUnlock()
+		b.Flock.Unlock()
+	}()
 
 	return b.close()
 }
 
 func (b *Bitcask) close() error {
-	defer b.Flock.Unlock()
 	if err := b.saveIndex(); err != nil {
 		return err
 	}
@@ -490,7 +496,7 @@ func (b *Bitcask) Merge() error {
 		return err
 	}
 	for _, file := range files {
-		if file.IsDir() {
+		if file.IsDir() || file.Name() == lockfile {
 			continue
 		}
 		ids, err := internal.ParseIds([]string{file.Name()})
@@ -563,7 +569,7 @@ func Open(path string, options ...Option) (*Bitcask, error) {
 	}
 
 	bitcask := &Bitcask{
-		Flock:    flock.New(filepath.Join(path, "lock")),
+		Flock:    flock.New(filepath.Join(path, lockfile)),
 		config:   cfg,
 		options:  options,
 		path:     path,
@@ -604,7 +610,7 @@ func (b *Bitcask) Backup(path string) error {
 			return err
 		}
 	}
-	return internal.Copy(b.path, path, []string{"lock"})
+	return internal.Copy(b.path, path, []string{lockfile})
 }
 
 // saveIndex saves index currently in RAM to disk
