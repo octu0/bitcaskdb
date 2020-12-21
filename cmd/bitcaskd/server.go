@@ -1,11 +1,13 @@
 package main
 
 import (
+	"encoding/binary"
 	"fmt"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/tidwall/redcon"
@@ -32,12 +34,18 @@ func newServer(bind, dbpath string) (*server, error) {
 }
 
 func (s *server) handleSet(cmd redcon.Command, conn redcon.Conn) {
-	if len(cmd.Args) != 3 {
+	if len(cmd.Args) != 3 && len(cmd.Args) != 4 {
 		conn.WriteError("ERR wrong number of arguments for '" + string(cmd.Args[0]) + "' command")
 		return
 	}
 	key := cmd.Args[1]
 	value := cmd.Args[2]
+	var opts []bitcask.PutOptions
+	if len(cmd.Args) == 4 {
+		ttl, _ := binary.Varint(cmd.Args[3])
+		e := time.Now().UTC().Add(time.Duration(ttl)*time.Millisecond)
+		opts = append(opts, bitcask.WithExpiry(e))
+	}
 
 	err := s.db.Lock()
 	if err != nil {
@@ -46,7 +54,7 @@ func (s *server) handleSet(cmd redcon.Command, conn redcon.Conn) {
 	}
 	defer s.db.Unlock()
 
-	if err := s.db.Put(key, value); err != nil {
+	if err := s.db.Put(key, value, opts...); err != nil {
 		conn.WriteString(fmt.Sprintf("ERR: %s", err))
 	} else {
 		conn.WriteString("OK")

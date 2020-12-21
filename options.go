@@ -2,6 +2,7 @@ package bitcask
 
 import (
 	"os"
+	"time"
 
 	"github.com/prologic/bitcask/internal/config"
 )
@@ -26,6 +27,8 @@ const (
 	DefaultSync = false
 
 	// DefaultAutoRecovery is the default auto-recovery action.
+
+	CurrentDBVersion = uint32(1)
 )
 
 // Option is a function that takes a config struct and modifies it
@@ -111,5 +114,19 @@ func newDefaultConfig() *config.Config {
 		Sync:                    DefaultSync,
 		DirFileModeBeforeUmask:  DefaultDirFileModeBeforeUmask,
 		FileFileModeBeforeUmask: DefaultFileFileModeBeforeUmask,
+		DBVersion:               CurrentDBVersion,
+	}
+}
+
+type Feature struct {
+	Expiry *time.Time
+}
+
+type PutOptions func(*Feature) error
+
+func WithExpiry(expiry time.Time) PutOptions {
+	return func(f *Feature) error {
+		f.Expiry = &expiry
+		return nil
 	}
 }

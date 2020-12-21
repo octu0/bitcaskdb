@@ -13,6 +13,7 @@ type Config struct {
 	MaxValueSize            uint64 `json:"max_value_size"`
 	Sync                    bool   `json:"sync"`
 	AutoRecovery            bool   `json:"autorecovery"`
+	DBVersion               uint32 `json:"db_version"`
 	DirFileModeBeforeUmask  os.FileMode
 	FileFileModeBeforeUmask os.FileMode
 }

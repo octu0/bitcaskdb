@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"io"
 	"testing"
+	"time"
 
 	"github.com/prologic/bitcask/internal"
 	"github.com/stretchr/testify/assert"
@@ -106,4 +107,24 @@ func TestTruncatedData(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestDecodeWithoutPrefix(t *testing.T) {
+	assert := assert.New(t)
+	e := internal.Entry{}
+	buf := []byte{0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 7, 109, 121, 107, 101, 121, 109, 121, 118, 97, 108, 117, 101, 0, 6, 81, 189, 0, 0, 0, 0, 95, 117, 28, 0}
+	valueOffset := uint32(5)
+	mockTime := time.Date(2020, 10, 1, 0, 0, 0, 0, time.UTC)
+	expectedEntry := internal.Entry{
+		Key:      []byte("mykey"),
+		Value:    []byte("myvalue"),
+		Checksum: 414141,
+		Expiry:   &mockTime,
+	}
+	decodeWithoutPrefix(buf[keySize+valueSize:], valueOffset, &e)
+	assert.Equal(expectedEntry.Key, e.Key)
+	assert.Equal(expectedEntry.Value, e.Value)
+	assert.Equal(expectedEntry.Checksum, e.Checksum)
+	assert.Equal(expectedEntry.Offset, e.Offset)
+	assert.Equal(*expectedEntry.Expiry, *e.Expiry)
 }

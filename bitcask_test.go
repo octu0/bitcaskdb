@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -70,7 +71,7 @@ func TestAll(t *testing.T) {
 	})
 
 	t.Run("Put", func(t *testing.T) {
-		err = db.Put([]byte([]byte("foo")), []byte("bar"))
+		err = db.Put([]byte("foo"), []byte("bar"))
 		assert.NoError(err)
 	})
 
@@ -82,6 +83,18 @@ func TestAll(t *testing.T) {
 
 	t.Run("Len", func(t *testing.T) {
 		assert.Equal(1, db.Len())
+	})
+
+	t.Run("PutWithExpiry", func(t *testing.T) {
+		err = db.Put([]byte("bar"), []byte("baz"), WithExpiry(time.Now()))
+		assert.NoError(err)
+	})
+
+	t.Run("GetExpiredKey", func(t *testing.T) {
+		time.Sleep(time.Millisecond)
+		_, err := db.Get([]byte("bar"))
+		assert.Error(err)
+		assert.Equal(ErrKeyExpired, err)
 	})
 
 	t.Run("Has", func(t *testing.T) {
@@ -338,19 +351,19 @@ func TestMetadata(t *testing.T) {
 	})
 	t.Run("ReclaimableAfterRepeatedPut", func(t *testing.T) {
 		assert.NoError(db.Put([]byte("hello"), []byte("world")))
-		assert.Equal(int64(26), db.Reclaimable())
+		assert.Equal(int64(34), db.Reclaimable())
 	})
 	t.Run("ReclaimableAfterDelete", func(t *testing.T) {
 		assert.NoError(db.Delete([]byte("hello")))
-		assert.Equal(int64(73), db.Reclaimable())
+		assert.Equal(int64(97), db.Reclaimable())
 	})
 	t.Run("ReclaimableAfterNonExistingDelete", func(t *testing.T) {
 		assert.NoError(db.Delete([]byte("hello1")))
-		assert.Equal(int64(73), db.Reclaimable())
+		assert.Equal(int64(97), db.Reclaimable())
 	})
 	t.Run("ReclaimableAfterDeleteAll", func(t *testing.T) {
 		assert.NoError(db.DeleteAll())
-		assert.Equal(int64(158), db.Reclaimable())
+		assert.Equal(int64(214), db.Reclaimable())
 	})
 	t.Run("ReclaimableAfterMerge", func(t *testing.T) {
 		assert.NoError(db.Merge())
@@ -1072,7 +1085,7 @@ func TestGetErrors(t *testing.T) {
 
 		mockDatafile := new(mocks.Datafile)
 		mockDatafile.On("FileID").Return(0)
-		mockDatafile.On("ReadAt", int64(0), int64(22)).Return(
+		mockDatafile.On("ReadAt", int64(0), int64(30)).Return(
 			internal.Entry{},
 			ErrMockError,
 		)
@@ -1088,7 +1101,7 @@ func TestGetErrors(t *testing.T) {
 		assert.NoError(err)
 		defer os.RemoveAll(testdir)
 
-		db, err := Open(testdir, WithMaxDatafileSize(32))
+		db, err := Open(testdir, WithMaxDatafileSize(40))
 		assert.NoError(err)
 
 		err = db.Put([]byte("foo"), []byte("bar"))
@@ -1096,7 +1109,7 @@ func TestGetErrors(t *testing.T) {
 
 		mockDatafile := new(mocks.Datafile)
 		mockDatafile.On("FileID").Return(0)
-		mockDatafile.On("ReadAt", int64(0), int64(22)).Return(
+		mockDatafile.On("ReadAt", int64(0), int64(30)).Return(
 			internal.Entry{
 				Checksum: 0x0,
 				Key:      []byte("foo"),
@@ -1377,7 +1390,7 @@ func TestMergeErrors(t *testing.T) {
 
 		mockDatafile := new(mocks.Datafile)
 		mockDatafile.On("Close").Return(nil)
-		mockDatafile.On("ReadAt", int64(0), int64(22)).Return(
+		mockDatafile.On("ReadAt", int64(0), int64(30)).Return(
 			internal.Entry{},
 			ErrMockError,
 		)
