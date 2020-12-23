@@ -19,12 +19,66 @@ For a more feature-complete Redis-compatible server, distributed key/value store
 
 ## Features
 
-* Embeddable (`import "github.com/prologic/bitcask"`)
+* Embedded (`import "github.com/prologic/bitcask"`)
 * Builtin CLI (`bitcask`)
 * Builtin Redis-compatible server (`bitcaskd`)
 * Predictable read/write performance
 * Low latency
 * High throughput (See: [Performance](README.md#Performance) )
+
+## Is Bitcask right for my project?
+
+__NOTE__: Please read this carefully to identify whether using Bitcask is
+          suitable for your needs.
+
+`bitcask` is a **great fit** for:
+
+- Storing hundreds of thousands to millions of key/value pairs based on
+  default configuration. With the default configuration (_configurable_)
+  of 64 bytes per key and 64kB values, 1M keys would consume roughly ~600-700MB
+  of memory ~65-70GB of disk storage. These are all configurable when you
+  create a new database with `bitcask.Open(...)` with functional-style options
+  you can pass with `WithXXX()`.
+
+- As the backing store to a distributed key/value store. See for example the
+  [bitraft](https://github.com/prologic/bitraft) as an example of this.
+
+- For high performance, low latency read/write workloads where you cannot fit
+  a typical hash-map into memory, but require the highest level of performance
+  and predicate read latency. Bitcask ensures only 1 read/write IOPS are ever
+  required for reading and writing key/value pairs.
+
+- As a general purpose embedded key/value store where you would have used
+  [BoltDB](https://github.com/boltdb/bolt),
+  [LevelDB](https://github.com/syndtr/goleveldb),
+  [BuntDB](https://github.com/tidwall/buntdb)
+  or similar...
+
+`bitcask` is not suited for:
+
+- Storing billions of records
+  The reason for this is the key-space is held in memory using a highly
+  performant and memory optimized adaptive radix tree thanks to
+  [go-adaptive-radix-tree](github.com/plar/go-adaptive-radix-tree) _however_
+  this means the more keys you have in your key space, the more memory is
+  consumed. Consider using a disk-backed B-Tree like [BoltDB](https://github.com/boltdb/bolt)
+  or [LevelDB](https://github.com/syndtr/goleveldb) if you intend to store a
+  large quantity of key/value pairs.
+
+> Note however that storing large amounts of data in terms of value(s) is
+> totally fine. In other wise thousands to millions of keys with large values
+> will work just fine.
+
+- Write intensive workloads. Due to the [Bitcask design](https://riak.com/assets/bitcask-intro.pdf?source=post_page---------------------------)
+  heavy write workloads that lots of key/value pairs will over time cause
+  problems like "Too many open files" (#193) errors to occur. This can be mitigated by
+  periodically compacting the data files by issuing a `.Merge()` operation however
+  if key/value pairs do not change or are never deleted, as-in only new key/value
+  pairs are ever written this will have no effect. Eventually you will run out
+  of file descriptors!
+
+> You should consider your read/write workloads carefully and ensure you set
+> appropriate file descriptor limits with `ulimit -n` that suit your needs.
 
 ## Development
 
@@ -64,7 +118,7 @@ func main() {
 }
 ```
 
-See the [godoc](https://godoc.org/github.com/prologic/bitcask) for further
+See the [GoDoc](https://godoc.org/github.com/prologic/bitcask) for further
 documentation and other examples.
 
 ## Usage (tool)
@@ -118,7 +172,7 @@ $ docker run -d -p 6379:6379 prologic/bitcask
 
 ## Performance
 
-Benchmarks run on a 11" Macbook with a 1.4Ghz Intel Core i7:
+Benchmarks run on a 11" MacBook with a 1.4Ghz Intel Core i7:
 
 ```sh
 $ make bench
@@ -171,7 +225,7 @@ The full benchmark above shows linear performance as you increase key/value size
 
 Support the ongoing development of Bitcask!
 
-**Sponser**
+**Sponsor**
 
 - Become a [Sponsor](https://www.patreon.com/prologic)
 
@@ -183,7 +237,7 @@ Support the ongoing development of Bitcask!
 
 Thank you to all those that have contributed to this project, battle-tested it, used it in their own projects or products, fixed bugs, improved performance and even fix tiny typos in documentation! Thank you and keep contributing!
 
-You can find an [AUTHORS](/AUTHORS) file where we keep a list of contributors to the project. If you contriibute a PR please consider adding your name there. There is also Github's own [Contributors](https://github.com/prologic/bitcask/graphs/contributors) statistics.
+You can find an [AUTHORS](/AUTHORS) file where we keep a list of contributors to the project. If you contribute a PR please consider adding your name there. There is also GitHub's own [Contributors](https://github.com/prologic/bitcask/graphs/contributors) statistics.
 
 [![](https://sourcerer.io/fame/prologic/prologic/bitcask/images/0)](https://sourcerer.io/fame/prologic/prologic/bitcask/links/0)
 [![](https://sourcerer.io/fame/prologic/prologic/bitcask/images/1)](https://sourcerer.io/fame/prologic/prologic/bitcask/links/1)
@@ -197,7 +251,7 @@ You can find an [AUTHORS](/AUTHORS) file where we keep a list of contributors to
 ## Related Projects
 
 - [bitraft](https://github.com/prologic/bitraft) -- A Distributed Key/Value store (_using Raft_) with a Redis compatible protocol.
-- [bitcaskfs](https://github.com/prologic/bitcaskfs) -- A FUSE filesystem for mounting a Bitcask database.
+- [bitcaskfs](https://github.com/prologic/bitcaskfs) -- A FUSE file system for mounting a Bitcask database.
 - [bitcask-bench](https://github.com/prologic/bitcask-bench) -- A benchmarking tool comparing Bitcask and several other Go key/value libraries.
 
 ## License
