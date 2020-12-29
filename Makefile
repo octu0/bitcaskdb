@@ -37,7 +37,7 @@ profile: build
 	@go test -cpuprofile cpu.prof -memprofile mem.prof -v -bench .
 
 bench: build
-	@go test -v -benchmem -bench=. .
+	@go test -v -run=XXX -benchmem -bench=. .
 
 mocks:
 	@mockery -all -case underscore -output ./internal/mocks -recursive

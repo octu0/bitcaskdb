@@ -12,9 +12,9 @@ import (
 const testLockPath = "/tmp/bitcask_unit_test_lock" // file path to use for the lock
 
 func TestTryLock(t *testing.T) {
-	// test that basic locking functionnalities are consistent
+	// test that basic locking functionalities are consistent
 
-	// make sure there is no present lock when startng this test
+	// make sure there is no present lock when starting this test
 	os.Remove(testLockPath)
 
 	assert := assert.New(t)
@@ -48,7 +48,7 @@ func TestTryLock(t *testing.T) {
 func TestLock(t *testing.T) {
 	assert := assert.New(t)
 
-	// make sure there is no present lock when startng this test
+	// make sure there is no present lock when starting this test
 	os.Remove(testLockPath)
 
 	syncChan := make(chan bool)
@@ -96,7 +96,7 @@ func TestErrorConditions(t *testing.T) {
 	// -- setup
 	assert := assert.New(t)
 
-	// make sure there is no present lock when startng this test
+	// make sure there is no present lock when starting this test
 	os.Remove(testLockPath)
 
 	lock := New(testLockPath)
