@@ -101,6 +101,24 @@ func TestAll(t *testing.T) {
 		assert.True(db.Has([]byte("foo")))
 	})
 
+	t.Run("HasWithExpired", func(t *testing.T) {
+		err = db.Put([]byte("bar"), []byte("baz"), WithExpiry(time.Now()))
+		assert.NoError(err)
+		time.Sleep(time.Millisecond)
+		assert.False(db.Has([]byte("bar")))
+	})
+
+	t.Run("RunGC", func(t *testing.T) {
+		err = db.Put([]byte("bar"), []byte("baz"), WithExpiry(time.Now()))
+		assert.NoError(err)
+		time.Sleep(time.Millisecond)
+		err = db.RunGC()
+		assert.NoError(err)
+		_, err := db.Get([]byte("bar"))
+		assert.Error(err)
+		assert.Equal(ErrKeyNotFound, err)
+	})
+
 	t.Run("Keys", func(t *testing.T) {
 		keys := make([][]byte, 0)
 		for key := range db.Keys() {
@@ -214,6 +232,11 @@ func TestReopen(t *testing.T) {
 			assert.NoError(err)
 		})
 
+		t.Run("PutWithExpiry", func(t *testing.T) {
+			err = db.Put([]byte("bar"), []byte("baz"), WithExpiry(time.Now()))
+			assert.NoError(err)
+		})
+
 		t.Run("Get", func(t *testing.T) {
 			val, err := db.Get([]byte("foo"))
 			assert.NoError(err)
@@ -240,6 +263,13 @@ func TestReopen(t *testing.T) {
 			val, err := db.Get([]byte("zzz"))
 			assert.NoError(err)
 			assert.Equal([]byte("foo"), val)
+		})
+
+		t.Run("GetExpiredKeyAfterReopen", func(t *testing.T) {
+			val, err := db.Get([]byte("bar"))
+			assert.Error(err)
+			assert.Equal(ErrKeyExpired, err)
+			assert.Nil(val)
 		})
 
 		t.Run("Close", func(t *testing.T) {
@@ -484,6 +514,42 @@ func TestAutoRecovery(t *testing.T) {
 	}
 }
 
+func TestLoadIndexes(t *testing.T) {
+	assert := assert.New(t)
+	testdir, err1 := ioutil.TempDir("", "bitcask")
+	assert.NoError(err1)
+	defer os.RemoveAll(testdir)
+
+	var db *Bitcask
+	var err error
+
+	t.Run("Setup", func(t *testing.T) {
+		db, err = Open(testdir)
+		assert.NoError(err)
+		for i:=0; i<5; i++ {
+			key := fmt.Sprintf("key%d", i)
+			val := fmt.Sprintf("val%d", i)
+			err := db.Put([]byte(key), []byte(val))
+			assert.NoError(err)
+		}
+		for i:=0; i<5; i++ {
+			key := fmt.Sprintf("foo%d", i)
+			val := fmt.Sprintf("bar%d", i)
+			err := db.Put([]byte(key), []byte(val), WithExpiry(time.Now().Add(time.Duration(i)*time.Second)))
+			assert.NoError(err)
+		}
+		err = db.Close()
+		assert.NoError(err)
+	})
+
+	t.Run("OpenAgain", func(t *testing.T) {
+		db, err = Open(testdir)
+		assert.NoError(err)
+		assert.Equal(10, db.trie.Size())
+		assert.Equal(5, db.ttlIndex.Size())
+	})
+}
+
 func TestReIndex(t *testing.T) {
 	assert := assert.New(t)
 
@@ -506,6 +572,16 @@ func TestReIndex(t *testing.T) {
 			assert.NoError(err)
 		})
 
+		t.Run("PutWithExpiry", func(t *testing.T) {
+			err = db.Put([]byte("bar"), []byte("baz"), WithExpiry(time.Now()))
+			assert.NoError(err)
+		})
+
+		t.Run("PutWithLargeExpiry", func(t *testing.T) {
+			err = db.Put([]byte("bar1"), []byte("baz1"), WithExpiry(time.Now().Add(time.Hour)))
+			assert.NoError(err)
+		})
+
 		t.Run("Get", func(t *testing.T) {
 			val, err := db.Get([]byte("foo"))
 			assert.NoError(err)
@@ -525,6 +601,8 @@ func TestReIndex(t *testing.T) {
 		t.Run("DeleteIndex", func(t *testing.T) {
 			err := os.Remove(filepath.Join(testdir, "index"))
 			assert.NoError(err)
+			err = os.Remove(filepath.Join(testdir, ttlIndexFile))
+			assert.NoError(err)
 		})
 	})
 
@@ -543,6 +621,16 @@ func TestReIndex(t *testing.T) {
 			val, err := db.Get([]byte("foo"))
 			assert.NoError(err)
 			assert.Equal([]byte("bar"), val)
+		})
+
+		t.Run("GetKeyWithExpiry", func(t *testing.T) {
+			val, err := db.Get([]byte("bar"))
+			assert.Error(err)
+			assert.Equal(ErrKeyExpired, err)
+			assert.Nil(val)
+			val, err = db.Get([]byte("bar1"))
+			assert.NoError(err)
+			assert.Equal([]byte("baz1"), val)
 		})
 
 		t.Run("Close", func(t *testing.T) {

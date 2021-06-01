@@ -26,7 +26,8 @@ import (
 )
 
 const (
-	lockfile = "lock"
+	lockfile     = "lock"
+	ttlIndexFile = "ttl_index"
 )
 
 var (
@@ -71,15 +72,17 @@ type Bitcask struct {
 
 	*flock.Flock
 
-	config    *config.Config
-	options   []Option
-	path      string
-	curr      data.Datafile
-	datafiles map[int]data.Datafile
-	trie      art.Tree
-	indexer   index.Indexer
-	metadata  *metadata.MetaData
-	isMerging bool
+	config     *config.Config
+	options    []Option
+	path       string
+	curr       data.Datafile
+	datafiles  map[int]data.Datafile
+	trie       art.Tree
+	indexer    index.Indexer
+	ttlIndexer index.Indexer
+	ttlIndex   art.Tree
+	metadata   *metadata.MetaData
+	isMerging  bool
 }
 
 // Stats is a struct returned by Stats() on an open Bitcask instance
@@ -118,7 +121,7 @@ func (b *Bitcask) Close() error {
 }
 
 func (b *Bitcask) close() error {
-	if err := b.saveIndex(); err != nil {
+	if err := b.saveIndexes(); err != nil {
 		return err
 	}
 
@@ -162,8 +165,11 @@ func (b *Bitcask) Get(key []byte) ([]byte, error) {
 // Has returns true if the key exists in the database, false otherwise.
 func (b *Bitcask) Has(key []byte) bool {
 	b.mu.RLock()
+	defer b.mu.RUnlock()
 	_, found := b.trie.Search(key)
-	b.mu.RUnlock()
+	if found {
+		return !b.isExpired(key)
+	}
 	return found
 }
 
@@ -207,6 +213,9 @@ func (b *Bitcask) Put(key, value []byte, options ...PutOptions) error {
 
 	item := internal.Item{FileID: b.curr.FileID(), Offset: offset, Size: n}
 	b.trie.Insert(key, item)
+	if feature.Expiry != nil {
+		b.ttlIndex.Insert(key, *feature.Expiry)
+	}
 
 	return nil
 }
@@ -229,6 +238,7 @@ func (b *Bitcask) delete(key []byte) error {
 		b.metadata.ReclaimableSpace += item.(internal.Item).Size + codec.MetaInfoSize + int64(len(key))
 	}
 	b.trie.Delete(key)
+	b.ttlIndex.Delete(key)
 
 	return nil
 }
@@ -248,6 +258,7 @@ func (b *Bitcask) DeleteAll() (err error) {
 		return true
 	})
 	b.trie = art.New()
+	b.ttlIndex = art.New()
 
 	return
 }
@@ -286,12 +297,37 @@ func (b *Bitcask) Keys() chan []byte {
 
 		for it := b.trie.Iterator(); it.HasNext(); {
 			node, _ := it.Next()
+			if b.isExpired(node.Key()) {
+				continue
+			}
 			ch <- node.Key()
 		}
 		close(ch)
 	}()
 
 	return ch
+}
+
+// RunGC deletes all expired keys
+func (b *Bitcask) RunGC() error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.runGC()
+}
+
+// runGC deletes all keys that are expired
+// caller function should take care of the locking when calling this method
+func (b *Bitcask) runGC() (err error) {
+	b.ttlIndex.ForEach(func(node art.Node) (cont bool) {
+		if !b.isExpired(node.Key()) {
+			return true
+		}
+		if err = b.delete(node.Key()); err != nil {
+			return false
+		}
+		return true
+	})
+	return
 }
 
 // Fold iterates over all keys in the database calling the function `f` for
@@ -311,14 +347,17 @@ func (b *Bitcask) Fold(f func(key []byte) error) (err error) {
 	return
 }
 
-// get retrieves the value of the given key. If the key is not found or an/I/O
-// error occurs a null byte slice is returned along with the error.
+// get retrieves the value of the given key
 func (b *Bitcask) get(key []byte) (internal.Entry, error) {
 	var df data.Datafile
 
 	value, found := b.trie.Search(key)
 	if !found {
 		return internal.Entry{}, ErrKeyNotFound
+	}
+	if expired := b.isExpired(key); expired {
+		_ = b.delete(key) // we don't care if it doesnt succeed
+		return internal.Entry{}, ErrKeyExpired
 	}
 
 	item := value.(internal.Item)
@@ -332,11 +371,6 @@ func (b *Bitcask) get(key []byte) (internal.Entry, error) {
 	e, err := df.ReadAt(item.Offset, item.Size)
 	if err != nil {
 		return internal.Entry{}, err
-	}
-
-	if e.Expiry != nil && e.Expiry.Before(time.Now().UTC()) {
-		_ = b.delete(key) // we don't care if it doesnt succeed
-		return internal.Entry{}, ErrKeyExpired
 	}
 
 	checksum := crc32.ChecksumIEEE(e.Value)
@@ -371,7 +405,7 @@ func (b *Bitcask) put(key, value []byte, feature Feature) (int64, int64, error) 
 			return -1, 0, err
 		}
 		b.curr = curr
-		err = b.saveIndex()
+		err = b.saveIndexes()
 		if err != nil {
 			return -1, 0, err
 		}
@@ -422,7 +456,7 @@ func (b *Bitcask) reopen() error {
 	if err != nil {
 		return err
 	}
-	t, err := loadIndex(b.path, b.indexer, b.config.MaxKeySize, datafiles, lastID, b.metadata.IndexUpToDate)
+	t, ttlIndex, err := loadIndexes(b, datafiles, lastID)
 	if err != nil {
 		return err
 	}
@@ -434,6 +468,7 @@ func (b *Bitcask) reopen() error {
 
 	b.trie = t
 	b.curr = curr
+	b.ttlIndex = ttlIndex
 	b.datafiles = datafiles
 
 	return nil
@@ -605,12 +640,13 @@ func Open(path string, options ...Option) (*Bitcask, error) {
 	}
 
 	bitcask := &Bitcask{
-		Flock:    flock.New(filepath.Join(path, lockfile)),
-		config:   cfg,
-		options:  options,
-		path:     path,
-		indexer:  index.NewIndexer(),
-		metadata: meta,
+		Flock:      flock.New(filepath.Join(path, lockfile)),
+		config:     cfg,
+		options:    options,
+		path:       path,
+		indexer:    index.NewIndexer(),
+		ttlIndexer: index.NewTTLIndexer(),
+		metadata:   meta,
 	}
 
 	locked, err := bitcask.Flock.TryLock()
@@ -667,13 +703,19 @@ func (b *Bitcask) Backup(path string) error {
 	return internal.Copy(b.path, path, []string{lockfile})
 }
 
-// saveIndex saves index currently in RAM to disk
-func (b *Bitcask) saveIndex() error {
+// saveIndex saves index and ttl_index currently in RAM to disk
+func (b *Bitcask) saveIndexes() error {
 	tempIdx := "temp_index"
 	if err := b.indexer.Save(b.trie, filepath.Join(b.path, tempIdx)); err != nil {
 		return err
 	}
-	return os.Rename(filepath.Join(b.path, tempIdx), filepath.Join(b.path, "index"))
+	if err := os.Rename(filepath.Join(b.path, tempIdx), filepath.Join(b.path, "index")); err != nil {
+		return err
+	}
+	if err := b.ttlIndexer.Save(b.ttlIndex, filepath.Join(b.path, tempIdx)); err != nil {
+		return err
+	}
+	return os.Rename(filepath.Join(b.path, tempIdx), filepath.Join(b.path, ttlIndexFile))
 }
 
 // saveMetadata saves metadata into disk
@@ -684,6 +726,16 @@ func (b *Bitcask) saveMetadata() error {
 // Reclaimable returns space that can be reclaimed
 func (b *Bitcask) Reclaimable() int64 {
 	return b.metadata.ReclaimableSpace
+}
+
+// isExpired returns true if a key has expired
+// it returns false if key does not exist in ttl index
+func (b *Bitcask) isExpired(key []byte) bool {
+	expiry, found := b.ttlIndex.Search(key)
+	if !found {
+		return false
+	}
+	return expiry.(time.Time).Before(time.Now().UTC())
 }
 
 func loadDatafiles(path string, maxKeySize uint32, maxValueSize uint64, fileModeBeforeUmask os.FileMode) (datafiles map[int]data.Datafile, lastID int, err error) {
@@ -724,30 +776,37 @@ func getSortedDatafiles(datafiles map[int]data.Datafile) []data.Datafile {
 	return out
 }
 
-func loadIndex(path string, indexer index.Indexer, maxKeySize uint32, datafiles map[int]data.Datafile, lastID int, indexUpToDate bool) (art.Tree, error) {
-	t, found, err := indexer.Load(filepath.Join(path, "index"), maxKeySize)
+// loadIndexes loads index from disk to memory. If index is not available or partially available (last bitcask process crashed)
+// then it iterates over last datafile and construct index
+// we construct ttl_index here also along with normal index
+func loadIndexes(b *Bitcask, datafiles map[int]data.Datafile, lastID int) (art.Tree, art.Tree, error) {
+	t, found, err := b.indexer.Load(filepath.Join(b.path, "index"), b.config.MaxKeySize)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	if found && indexUpToDate {
-		return t, nil
+	ttlIndex, _, err := b.ttlIndexer.Load(filepath.Join(b.path, ttlIndexFile), b.config.MaxKeySize)
+	if err != nil {
+		return nil, nil, err
+	}
+	if found && b.metadata.IndexUpToDate {
+		return t, ttlIndex, nil
 	}
 	if found {
-		if err := loadIndexFromDatafile(t, datafiles[lastID]); err != nil {
-			return nil, err
+		if err := loadIndexFromDatafile(t, ttlIndex, datafiles[lastID]); err != nil {
+			return nil, ttlIndex, err
 		}
-		return t, nil
+		return t, ttlIndex, nil
 	}
 	sortedDatafiles := getSortedDatafiles(datafiles)
 	for _, df := range sortedDatafiles {
-		if err := loadIndexFromDatafile(t, df); err != nil {
-			return nil, err
+		if err := loadIndexFromDatafile(t, ttlIndex, df); err != nil {
+			return nil, ttlIndex, err
 		}
 	}
-	return t, nil
+	return t, ttlIndex, nil
 }
 
-func loadIndexFromDatafile(t art.Tree, df data.Datafile) error {
+func loadIndexFromDatafile(t art.Tree, ttlIndex art.Tree, df data.Datafile) error {
 	var offset int64
 	for {
 		e, n, err := df.Read()
@@ -765,6 +824,9 @@ func loadIndexFromDatafile(t art.Tree, df data.Datafile) error {
 		}
 		item := internal.Item{FileID: df.FileID(), Offset: offset, Size: n}
 		t.Insert(e.Key, item)
+		if e.Expiry != nil {
+			ttlIndex.Insert(e.Key, *e.Expiry)
+		}
 		offset += n
 	}
 	return nil
