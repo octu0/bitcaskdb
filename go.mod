@@ -11,7 +11,7 @@ require (
 	github.com/spf13/viper v1.8.1
 	github.com/stretchr/objx v0.2.0 // indirect
 	github.com/stretchr/testify v1.7.0
-	github.com/tidwall/redcon v1.4.0
+	github.com/tidwall/redcon v1.4.1
 	golang.org/x/exp v0.0.0-20200228211341-fcea875c7e85
 	golang.org/x/sys v0.0.0-20210510120138-977fb7262007
 )
