@@ -85,8 +85,8 @@ func TestAll(t *testing.T) {
 		assert.Equal(1, db.Len())
 	})
 
-	t.Run("PutWithExpiry", func(t *testing.T) {
-		err = db.Put([]byte("bar"), []byte("baz"), WithExpiry(time.Now()))
+	t.Run("PutWithTTL", func(t *testing.T) {
+		err = db.PutWithTTL([]byte("bar"), []byte("baz"), 0)
 		assert.NoError(err)
 	})
 
@@ -102,14 +102,14 @@ func TestAll(t *testing.T) {
 	})
 
 	t.Run("HasWithExpired", func(t *testing.T) {
-		err = db.Put([]byte("bar"), []byte("baz"), WithExpiry(time.Now()))
+		err = db.PutWithTTL([]byte("bar"), []byte("baz"), 0)
 		assert.NoError(err)
 		time.Sleep(time.Millisecond)
 		assert.False(db.Has([]byte("bar")))
 	})
 
 	t.Run("RunGC", func(t *testing.T) {
-		err = db.Put([]byte("bar"), []byte("baz"), WithExpiry(time.Now()))
+		err = db.PutWithTTL([]byte("bar"), []byte("baz"), 0)
 		assert.NoError(err)
 		time.Sleep(time.Millisecond)
 		err = db.RunGC()
@@ -232,8 +232,8 @@ func TestReopen(t *testing.T) {
 			assert.NoError(err)
 		})
 
-		t.Run("PutWithExpiry", func(t *testing.T) {
-			err = db.Put([]byte("bar"), []byte("baz"), WithExpiry(time.Now()))
+		t.Run("PutWithTTL", func(t *testing.T) {
+			err = db.PutWithTTL([]byte("bar"), []byte("baz"), 0)
 			assert.NoError(err)
 		})
 
@@ -526,16 +526,16 @@ func TestLoadIndexes(t *testing.T) {
 	t.Run("Setup", func(t *testing.T) {
 		db, err = Open(testdir)
 		assert.NoError(err)
-		for i:=0; i<5; i++ {
+		for i := 0; i < 5; i++ {
 			key := fmt.Sprintf("key%d", i)
 			val := fmt.Sprintf("val%d", i)
 			err := db.Put([]byte(key), []byte(val))
 			assert.NoError(err)
 		}
-		for i:=0; i<5; i++ {
+		for i := 0; i < 5; i++ {
 			key := fmt.Sprintf("foo%d", i)
 			val := fmt.Sprintf("bar%d", i)
-			err := db.Put([]byte(key), []byte(val), WithExpiry(time.Now().Add(time.Duration(i)*time.Second)))
+			err := db.PutWithTTL([]byte(key), []byte(val), time.Duration(i)*time.Second)
 			assert.NoError(err)
 		}
 		err = db.Close()
@@ -573,12 +573,12 @@ func TestReIndex(t *testing.T) {
 		})
 
 		t.Run("PutWithExpiry", func(t *testing.T) {
-			err = db.Put([]byte("bar"), []byte("baz"), WithExpiry(time.Now()))
+			err = db.PutWithTTL([]byte("bar"), []byte("baz"), 0)
 			assert.NoError(err)
 		})
 
 		t.Run("PutWithLargeExpiry", func(t *testing.T) {
-			err = db.Put([]byte("bar1"), []byte("baz1"), WithExpiry(time.Now().Add(time.Hour)))
+			err = db.PutWithTTL([]byte("bar1"), []byte("baz1"), time.Hour)
 			assert.NoError(err)
 		})
 

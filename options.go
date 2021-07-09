@@ -2,7 +2,6 @@ package bitcask
 
 import (
 	"os"
-	"time"
 
 	"github.com/prologic/bitcask/internal/config"
 )
@@ -115,18 +114,5 @@ func newDefaultConfig() *config.Config {
 		DirFileModeBeforeUmask:  DefaultDirFileModeBeforeUmask,
 		FileFileModeBeforeUmask: DefaultFileFileModeBeforeUmask,
 		DBVersion:               CurrentDBVersion,
-	}
-}
-
-type Feature struct {
-	Expiry *time.Time
-}
-
-type PutOptions func(*Feature) error
-
-func WithExpiry(expiry time.Time) PutOptions {
-	return func(f *Feature) error {
-		f.Expiry = &expiry
-		return nil
 	}
 }

@@ -38,13 +38,20 @@ func (s *server) handleSet(cmd redcon.Command, conn redcon.Conn) {
 		conn.WriteError("ERR wrong number of arguments for '" + string(cmd.Args[0]) + "' command")
 		return
 	}
+
+	var ttl *time.Duration
+
 	key := cmd.Args[1]
 	value := cmd.Args[2]
-	var opts []bitcask.PutOptions
+
 	if len(cmd.Args) == 4 {
-		ttl, _ := binary.Varint(cmd.Args[3])
-		e := time.Now().UTC().Add(time.Duration(ttl)*time.Millisecond)
-		opts = append(opts, bitcask.WithExpiry(e))
+		val, n := binary.Varint(cmd.Args[3])
+		if n <= 0 {
+			conn.WriteError("ERR error parsing ttl")
+			return
+		}
+		d := time.Duration(val) * time.Millisecond
+		ttl = &d
 	}
 
 	err := s.db.Lock()
@@ -54,11 +61,17 @@ func (s *server) handleSet(cmd redcon.Command, conn redcon.Conn) {
 	}
 	defer s.db.Unlock()
 
-	if err := s.db.Put(key, value, opts...); err != nil {
-		conn.WriteString(fmt.Sprintf("ERR: %s", err))
+	if ttl != nil {
+		if err := s.db.PutWithTTL(key, value, *ttl); err != nil {
+			conn.WriteString(fmt.Sprintf("ERR: %s", err))
+		}
 	} else {
-		conn.WriteString("OK")
+		if err := s.db.Put(key, value); err != nil {
+			conn.WriteString(fmt.Sprintf("ERR: %s", err))
+		}
 	}
+
+	conn.WriteString("OK")
 }
 
 func (s *server) handleGet(cmd redcon.Command, conn redcon.Conn) {
