@@ -19,7 +19,7 @@ builds:
 signs:
   - artifacts: checksum
 release:
-  github:
+  gitea:
     owner: prologic
     name: bitcask
   draft: true
