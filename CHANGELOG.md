@@ -1,4 +1,22 @@
 
+<a name="v0.3.11"></a>
+## [v0.3.11](https://git.mills.io/prologic/bitcask/compare/v0.3.10...v0.3.11) (2021-07-10)
+
+### Bug Fixes
+
+* Fix missing go.sum entries
+* Fix GoReleaser config
+* Fix go.sum
+
+### Documentation
+
+* Document good and possibly poor use-cases of Bitcask (#199)
+
+### Features
+
+* Add support for keys with ttl (#177)
+
+
 <a name="v0.3.10"></a>
 ## [v0.3.10](https://git.mills.io/prologic/bitcask/compare/v0.3.9...v0.3.10) (2020-12-18)
 
@@ -16,6 +34,7 @@
 
 ### Updates
 
+* Update CHANGELOG for v0.3.10
 * Update README.md
 
 
@@ -52,20 +71,20 @@
 
 ### Bug Fixes
 
-* Fix typo in labeler ([#172](https://git.mills.io/prologic/bitcask/issues/172))
+* Fix typo in labeler (#172)
 * Fix builds configuration for goreleaser
 * Fix (again) goreleaser config
 * Fix goreleaser config and improve release notes / changelog
-* Fix recoverDatafile error covering ([#162](https://git.mills.io/prologic/bitcask/issues/162))
-* Fix loadIndex to be deterministic ([#115](https://git.mills.io/prologic/bitcask/issues/115))
+* Fix recoverDatafile error covering (#162)
+* Fix loadIndex to be deterministic (#115)
 
 ### Features
 
-* Add configuration options for FileMode ([#183](https://git.mills.io/prologic/bitcask/issues/183))
-* Add imports and log in example code ([#182](https://git.mills.io/prologic/bitcask/issues/182))
+* Add configuration options for FileMode (#183)
+* Add imports and log in example code (#182)
 * Add empty changelog
 * Add DependaBot config
-* Add DeleteAll function ([#116](https://git.mills.io/prologic/bitcask/issues/116))
+* Add DeleteAll function (#116)
 
 ### Updates
 
@@ -73,7 +92,7 @@
 * Update README.md
 * Update CHANGELOG for v0.3.6
 * Update CHANGELOG for v0.3.6
-* Update deps ([#140](https://git.mills.io/prologic/bitcask/issues/140))
+* Update deps (#140)
 * Update README.md
 
 
@@ -89,13 +108,13 @@
 ### Features
 
 * Add *.db to ignore future accidental commits of a bitcask db to the repo
-* Add unit test for opening bad database with corrupted/invalid datafiles ([#105](https://git.mills.io/prologic/bitcask/issues/105))
+* Add unit test for opening bad database with corrupted/invalid datafiles (#105)
 
 ### Updates
 
 * Update Drone CI test pipeline
 * Update README.md
-* Update to Go 1.13 and update README with new benchmarks ([#89](https://git.mills.io/prologic/bitcask/issues/89))
+* Update to Go 1.13 and update README with new benchmarks (#89)
 * Update README.md
 
 
@@ -108,8 +127,8 @@
 
 ### Bug Fixes
 
-* Fix a bug wit the decoder passing the wrong value for the value's offset into the buffer ([#77](https://git.mills.io/prologic/bitcask/issues/77))
-* Fix typo ([#65](https://git.mills.io/prologic/bitcask/issues/65))
+* Fix a bug wit the decoder passing the wrong value for the value's offset into the buffer (#77)
+* Fix typo (#65)
 * Fix and cleanup some unnecessary internal sub-packages and duplication
 
 ### Updates
@@ -162,7 +181,7 @@
 
 ### Bug Fixes
 
-* Fix issue(db file Merge issue in windows env): ([#15](https://git.mills.io/prologic/bitcask/issues/15))
+* Fix issue(db file Merge issue in windows env): (#15)
 
 
 <a name="v0.1.7"></a>
@@ -170,9 +189,9 @@
 
 ### Bug Fixes
 
-* Fix mismatched key casing. ([#12](https://git.mills.io/prologic/bitcask/issues/12))
-* Fix outdated README ([#11](https://git.mills.io/prologic/bitcask/issues/11))
-* Fix typos in bitcask.go docs ([#10](https://git.mills.io/prologic/bitcask/issues/10))
+* Fix mismatched key casing. (#12)
+* Fix outdated README (#11)
+* Fix typos in bitcask.go docs (#10)
 
 ### Updates
 
@@ -185,7 +204,7 @@
 
 ### Features
 
-* Add Development section to README documenting use of Protobuf and tooling required. [#6](https://git.mills.io/prologic/bitcask/issues/6)
+* Add Development section to README documenting use of Protobuf and tooling required. #6
 * Add other badges from img.shields.io
 
 
@@ -378,7 +397,7 @@
 
 ### Features
 
-* Add flock on database Open()/Close() to prevent multiple concurrent processes write access. Fixes [#2](https://git.mills.io/prologic/bitcask/issues/2)
+* Add flock on database Open()/Close() to prevent multiple concurrent processes write access. Fixes #2
 
 
 <a name="0.0.3"></a>
