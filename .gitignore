@@ -1,6 +1,7 @@
 *~*
-*.bak
 *.db
+*.bak
+**.envrc
 
 /tmp
 /dist
