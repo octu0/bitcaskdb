@@ -8,6 +8,12 @@ builds:
     ldflags: -w -X git.mills.io/prologic/bitcask/internal.Version={{.Version}} -X git.mills.io/prologic/bitcask/internal.Commit={{.Commit}}
     env:
       - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
   -
     id: bitcaskd
     binary: bitcaskd
@@ -16,6 +22,12 @@ builds:
     ldflags: -w -X git.mills.io/prologic/bitcask/internal.Version={{.Version}} -X git.mills.io/prologic/bitcask/internal.Commit={{.Commit}}
     env:
       - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
 signs:
   - artifacts: checksum
 release:
