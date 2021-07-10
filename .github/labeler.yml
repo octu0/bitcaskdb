@@ -1,9 +1,0 @@
-documentation:
-  - "**/*.md"
-
-tests:
-  - "**/*_test.go"
-
-dependencies:
-  - go.mod
-  - go.sum
