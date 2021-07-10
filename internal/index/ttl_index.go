@@ -7,7 +7,7 @@ import (
 	"time"
 
 	art "github.com/plar/go-adaptive-radix-tree"
-	"github.com/prologic/bitcask/internal"
+	"git.mills.io/prologic/bitcask/internal"
 )
 
 type ttlIndexer struct{}

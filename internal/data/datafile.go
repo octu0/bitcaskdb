@@ -7,8 +7,8 @@ import (
 	"sync"
 
 	"github.com/pkg/errors"
-	"github.com/prologic/bitcask/internal"
-	"github.com/prologic/bitcask/internal/data/codec"
+	"git.mills.io/prologic/bitcask/internal"
+	"git.mills.io/prologic/bitcask/internal/data/codec"
 	"golang.org/x/exp/mmap"
 )
 

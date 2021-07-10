@@ -7,7 +7,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	flag "github.com/spf13/pflag"
 
-	"github.com/prologic/bitcask/internal"
+	"git.mills.io/prologic/bitcask/internal"
 )
 
 var (

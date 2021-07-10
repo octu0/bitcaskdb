@@ -5,7 +5,7 @@ builds:
     binary: bitcask
     main: ./cmd/bitcask
     flags: -tags "static_build"
-    ldflags: -w -X github.com/prologic/bitcask/internal.Version={{.Version}} -X github.com/prologic/bitcask/internal.Commit={{.Commit}}
+    ldflags: -w -X git.mills.io/prologic/bitcask/internal.Version={{.Version}} -X git.mills.io/prologic/bitcask/internal.Commit={{.Commit}}
     env:
       - CGO_ENABLED=0
   -
@@ -13,7 +13,7 @@ builds:
     binary: bitcaskd
     main: ./cmd/bitcaskd
     flags: -tags "static_build"
-    ldflags: -w -X github.com/prologic/bitcask/internal.Version={{.Version}} -X github.com/prologic/bitcask/internal.Commit={{.Commit}}
+    ldflags: -w -X git.mills.io/prologic/bitcask/internal.Version={{.Version}} -X git.mills.io/prologic/bitcask/internal.Commit={{.Commit}}
     env:
       - CGO_ENABLED=0
 signs:

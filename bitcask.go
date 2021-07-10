@@ -14,14 +14,14 @@ import (
 	"time"
 
 	art "github.com/plar/go-adaptive-radix-tree"
-	"github.com/prologic/bitcask/flock"
-	"github.com/prologic/bitcask/internal"
-	"github.com/prologic/bitcask/internal/config"
-	"github.com/prologic/bitcask/internal/data"
-	"github.com/prologic/bitcask/internal/data/codec"
-	"github.com/prologic/bitcask/internal/index"
-	"github.com/prologic/bitcask/internal/metadata"
-	"github.com/prologic/bitcask/scripts/migrations"
+	"git.mills.io/prologic/bitcask/flock"
+	"git.mills.io/prologic/bitcask/internal"
+	"git.mills.io/prologic/bitcask/internal/config"
+	"git.mills.io/prologic/bitcask/internal/data"
+	"git.mills.io/prologic/bitcask/internal/data/codec"
+	"git.mills.io/prologic/bitcask/internal/index"
+	"git.mills.io/prologic/bitcask/internal/metadata"
+	"git.mills.io/prologic/bitcask/scripts/migrations"
 	log "github.com/sirupsen/logrus"
 )
 
