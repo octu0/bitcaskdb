@@ -35,3 +35,5 @@ release:
     owner: prologic
     name: bitcask
   draft: true
+gitea_urls:
+  api: https://git.mills.io/api/v1/
