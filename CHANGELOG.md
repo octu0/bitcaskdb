@@ -1,4 +1,8 @@
 
+<a name="v0.3.12"></a>
+## [v0.3.12](https://git.mills.io/prologic/bitcask/compare/v0.3.11...v0.3.12) (0001-01-01)
+
+
 <a name="v0.3.11"></a>
 ## [v0.3.11](https://git.mills.io/prologic/bitcask/compare/v0.3.10...v0.3.11) (2021-07-10)
 
@@ -15,6 +19,10 @@
 ### Features
 
 * Add support for keys with ttl (#177)
+
+### Updates
+
+* Update CHANGELOG for v0.3.11
 
 
 <a name="v0.3.10"></a>
