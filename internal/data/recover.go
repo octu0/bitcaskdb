@@ -27,7 +27,7 @@ func CheckAndRecover(path string, cfg *config.Config) error {
 	f := dfs[len(dfs)-1]
 	recovered, err := recoverDatafile(f, cfg)
 	if err != nil {
-		return fmt.Errorf("recovering data file")
+		return fmt.Errorf("error recovering data file: %s", err)
 	}
 	if recovered {
 		if err := os.Remove(filepath.Join(path, "index")); err != nil {
