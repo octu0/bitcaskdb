@@ -479,6 +479,7 @@ func TestAutoRecovery(t *testing.T) {
 			require.NoError(err)
 
 			db, err = Open(testdir, WithAutoRecovery(autoRecovery))
+			t.Logf("err: %s", err)
 			require.NoError(err)
 			defer db.Close()
 			// Check that all values but the last are still intact.
