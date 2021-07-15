@@ -48,8 +48,8 @@ func recoverDatafile(path string, cfg *config.Config) (recovered bool, err error
 			err = closeErr
 		}
 	}()
-	_, file := filepath.Split(path)
-	rPath := fmt.Sprintf("%s.recovered", file)
+	dir, file := filepath.Split(path)
+	rPath := filepath.Join(dir, fmt.Sprintf("%s.recovered", file))
 	fr, err := os.OpenFile(rPath, os.O_CREATE|os.O_WRONLY, os.ModePerm)
 	if err != nil {
 		return false, fmt.Errorf("creating the recovered datafile: %w", err)
