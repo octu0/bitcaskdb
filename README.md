@@ -1,17 +1,8 @@
 # bitcask
 
-![](https://git.mills.io/prologic/bitcask/workflows/Coverage/badge.svg)
-![](https://git.mills.io/prologic/bitcask/workflows/Docker/badge.svg)
-![](https://git.mills.io/prologic/bitcask/workflows/Go/badge.svg)
-![](https://git.mills.io/prologic/bitcask/workflows/ReviewDog/badge.svg)
-
-[![CodeCov](https://codecov.io/gh/prologic/bitcask/branch/master/graph/badge.svg)](https://codecov.io/gh/prologic/bitcask)
-[![Go Report Card](https://goreportcard.com/badge/prologic/bitcask)](https://goreportcard.com/report/prologic/bitcask)
-[![codebeat badge](https://codebeat.co/badges/15fba8a5-3044-4f40-936f-9e0f5d5d1fd9)](https://codebeat.co/projects/github-com-prologic-bitcask-master)
-[![GoDoc](https://godoc.org/git.mills.io/prologic/bitcask?status.svg)](https://godoc.org/git.mills.io/prologic/bitcask) 
-[![GitHub license](https://img.shields.io/github/license/prologic/bitcask.svg)](https://git.mills.io/prologic/bitcask)
-[![Sourcegraph](https://sourcegraph.com/git.mills.io/prologic/bitcask/-/badge.svg)](https://sourcegraph.com/git.mills.io/prologic/bitcask?badge)
-[![TODOs](https://img.shields.io/endpoint?url=https://api.tickgit.com/badge?repo=git.mills.io/prologic/bitcask)](https://www.tickgit.com/browse?repo=git.mills.io/prologic/bitcask)
+[![Build Status](https://ci.mills.io/api/badges/prologic/bitcask/status.svg)](https://ci.mills.io/prologic/bitcask)
+[![Go Report Card](https://goreportcard.com/badge/git.mills.io/prologic/bitcask)](https://goreportcard.com/report/git.mills.io/prologic/bitcask)
+[![GoDoc](https://pkg.go.dev/git.mills.io/prologic/bitcask?status.svg)](https://pkg.go.dev/git.mills.io/prologic/bitcask) 
 
 A high performance Key/Value store written in [Go](https://golang.org) with a predictable read/write performance and high throughput. Uses a [Bitcask](https://en.wikipedia.org/wiki/Bitcask) on-disk layout (LSM+WAL) similar to [Riak](https://riak.com/)
 
