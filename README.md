@@ -2,7 +2,7 @@
 
 [![Build Status](https://ci.mills.io/api/badges/prologic/bitcask/status.svg)](https://ci.mills.io/prologic/bitcask)
 [![Go Report Card](https://goreportcard.com/badge/git.mills.io/prologic/bitcask)](https://goreportcard.com/report/git.mills.io/prologic/bitcask)
-[![GoDoc](https://pkg.go.dev/git.mills.io/prologic/bitcask?status.svg)](https://pkg.go.dev/git.mills.io/prologic/bitcask) 
+[![Go Reference](https://pkg.go.dev/badge/git.mills.io/prologic/bitcask.svg)](https://pkg.go.dev/git.mills.io/prologic/bitcask)
 
 A high performance Key/Value store written in [Go](https://golang.org) with a predictable read/write performance and high throughput. Uses a [Bitcask](https://en.wikipedia.org/wiki/Bitcask) on-disk layout (LSM+WAL) similar to [Riak](https://riak.com/)
 
