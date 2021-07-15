@@ -1,6 +1,22 @@
 
+<a name="v0.3.13"></a>
+## [v0.3.13](https://git.mills.io/prologic/bitcask/compare/v0.3.12...v0.3.13) (2021-07-16)
+
+### Bug Fixes
+
+* Fix paths used for temporary recovery iles to avoid crossing devices (#223)
+
+### Features
+
+* Add Drone CI config
+
+
 <a name="v0.3.12"></a>
-## [v0.3.12](https://git.mills.io/prologic/bitcask/compare/v0.3.11...v0.3.12) (0001-01-01)
+## [v0.3.12](https://git.mills.io/prologic/bitcask/compare/v0.3.11...v0.3.12) (2021-07-13)
+
+### Updates
+
+* Update CHANGELOG for v0.3.12
 
 
 <a name="v0.3.11"></a>
