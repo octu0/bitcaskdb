@@ -13,8 +13,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gofrs/flock"
 	art "github.com/plar/go-adaptive-radix-tree"
-	"git.mills.io/prologic/bitcask/flock"
+	log "github.com/sirupsen/logrus"
+
 	"git.mills.io/prologic/bitcask/internal"
 	"git.mills.io/prologic/bitcask/internal/config"
 	"git.mills.io/prologic/bitcask/internal/data"
@@ -22,7 +24,6 @@ import (
 	"git.mills.io/prologic/bitcask/internal/index"
 	"git.mills.io/prologic/bitcask/internal/metadata"
 	"git.mills.io/prologic/bitcask/scripts/migrations"
-	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -68,10 +69,8 @@ var (
 // and in-memory hash of key/value pairs as per the Bitcask paper and seen
 // in the Riak database.
 type Bitcask struct {
-	mu sync.RWMutex
-
-	*flock.Flock
-
+	mu         sync.RWMutex
+	flock      *flock.Flock
 	config     *config.Config
 	options    []Option
 	path       string
@@ -114,7 +113,7 @@ func (b *Bitcask) Close() error {
 	b.mu.RLock()
 	defer func() {
 		b.mu.RUnlock()
-		b.Flock.Unlock()
+		b.flock.Unlock()
 	}()
 
 	return b.close()
@@ -669,6 +668,10 @@ func (b *Bitcask) Merge() error {
 		return err
 	}
 	for _, file := range files {
+		// see #225
+		if file.Name() == lockfile {
+			continue
+		}
 		err := os.Rename(
 			path.Join([]string{mdb.path, file.Name()}...),
 			path.Join([]string{b.path, file.Name()}...),
@@ -723,7 +726,7 @@ func Open(path string, options ...Option) (*Bitcask, error) {
 	}
 
 	bitcask := &Bitcask{
-		Flock:      flock.New(filepath.Join(path, lockfile)),
+		flock:      flock.New(filepath.Join(path, lockfile)),
 		config:     cfg,
 		options:    options,
 		path:       path,
@@ -732,12 +735,12 @@ func Open(path string, options ...Option) (*Bitcask, error) {
 		metadata:   meta,
 	}
 
-	locked, err := bitcask.Flock.TryLock()
+	ok, err := bitcask.flock.TryLock()
 	if err != nil {
 		return nil, err
 	}
 
-	if !locked {
+	if !ok {
 		return nil, ErrDatabaseLocked
 	}
 

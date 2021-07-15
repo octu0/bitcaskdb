@@ -54,13 +54,6 @@ func (s *server) handleSet(cmd redcon.Command, conn redcon.Conn) {
 		ttl = &d
 	}
 
-	err := s.db.Lock()
-	if err != nil {
-		conn.WriteError("ERR " + fmt.Errorf("failed to lock db: %v", err).Error() + "")
-		return
-	}
-	defer s.db.Unlock()
-
 	if ttl != nil {
 		if err := s.db.PutWithTTL(key, value, *ttl); err != nil {
 			conn.WriteString(fmt.Sprintf("ERR: %s", err))
@@ -82,13 +75,6 @@ func (s *server) handleGet(cmd redcon.Command, conn redcon.Conn) {
 
 	key := cmd.Args[1]
 
-	err := s.db.Lock()
-	if err != nil {
-		conn.WriteError("ERR " + fmt.Errorf("failed to lock db: %v", err).Error() + "")
-		return
-	}
-	defer s.db.Unlock()
-
 	value, err := s.db.Get(key)
 	if err != nil {
 		conn.WriteNull()
@@ -98,13 +84,6 @@ func (s *server) handleGet(cmd redcon.Command, conn redcon.Conn) {
 }
 
 func (s *server) handleKeys(cmd redcon.Command, conn redcon.Conn) {
-	err := s.db.Lock()
-	if err != nil {
-		conn.WriteError("ERR " + fmt.Errorf("failed to lock db: %v", err).Error() + "")
-		return
-	}
-	defer s.db.Unlock()
-
 	conn.WriteArray(s.db.Len())
 	for key := range s.db.Keys() {
 		conn.WriteBulk(key)
@@ -118,13 +97,6 @@ func (s *server) handleExists(cmd redcon.Command, conn redcon.Conn) {
 	}
 
 	key := cmd.Args[1]
-
-	err := s.db.Lock()
-	if err != nil {
-		conn.WriteError("ERR " + fmt.Errorf("failed to lock db: %v", err).Error() + "")
-		return
-	}
-	defer s.db.Unlock()
 
 	if s.db.Has(key) {
 		conn.WriteInt(1)
@@ -140,13 +112,6 @@ func (s *server) handleDel(cmd redcon.Command, conn redcon.Conn) {
 	}
 
 	key := cmd.Args[1]
-
-	err := s.db.Lock()
-	if err != nil {
-		conn.WriteError("ERR " + fmt.Errorf("failed to lock db: %v", err).Error() + "")
-		return
-	}
-	defer s.db.Unlock()
 
 	if err := s.db.Delete(key); err != nil {
 		conn.WriteInt(0)
