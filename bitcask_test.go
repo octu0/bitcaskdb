@@ -1750,6 +1750,43 @@ func TestLockingAfterMerge(t *testing.T) {
 	assert.Error(err)
 }
 
+func TestGetExpiredInsideFold(t *testing.T) {
+	assert := assert.New(t)
+
+	testdir, err := ioutil.TempDir("", "bitcask")
+	assert.NoError(err)
+
+	db, err := Open(testdir)
+	assert.NoError(err)
+	defer db.Close()
+	// Add a node to the tree that won't expire
+	db.Put([]byte("static"), []byte("static"))
+	// Add a node that expires almost immediately to the tree
+	db.PutWithTTL([]byte("shortLived"), []byte("shortLived"), 1*time.Millisecond)
+	db.Put([]byte("skipped"), []byte("skipped"))
+	db.Put([]byte("static2"), []byte("static2"))
+	time.Sleep(2 * time.Millisecond)
+	var arr []string
+	_ = db.Fold(func(key []byte) error {
+		val, err := db.Get(key)
+		switch string(key) {
+		case "skipped":
+			fallthrough
+		case "static2":
+			fallthrough
+		case "static":
+			assert.NoError(err)
+			assert.Equal(string(val), string(key))
+		case "shortLived":
+			assert.Error(err)
+		}
+		arr = append(arr, string(val))
+		return nil
+	})
+	assert.Contains(arr, "skipped")
+
+}
+
 type benchmarkTestCase struct {
 	name string
 	size int

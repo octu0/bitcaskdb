@@ -386,8 +386,7 @@ func (b *Bitcask) get(key []byte) (internal.Entry, error) {
 	if !found {
 		return internal.Entry{}, ErrKeyNotFound
 	}
-	if expired := b.isExpired(key); expired {
-		_ = b.delete(key) // we don't care if it doesnt succeed
+	if b.isExpired(key) {
 		return internal.Entry{}, ErrKeyExpired
 	}
 
