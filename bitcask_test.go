@@ -1784,7 +1784,38 @@ func TestGetExpiredInsideFold(t *testing.T) {
 		return nil
 	})
 	assert.Contains(arr, "skipped")
+}
 
+func TestRunGCDeletesAllExpired(t *testing.T) {
+	assert := assert.New(t)
+
+	testdir, err := ioutil.TempDir("", "bitcask")
+	assert.NoError(err)
+
+	db, err := Open(testdir)
+	assert.NoError(err)
+	defer db.Close()
+
+	// Add a node to the tree that won't expire
+	db.Put([]byte("static"), []byte("static"))
+
+	// Add a node that expires almost immediately to the tree
+	db.PutWithTTL([]byte("shortLived"), []byte("shortLived"), 0)
+	db.PutWithTTL([]byte("longLived"), []byte("longLived"), time.Hour)
+	db.PutWithTTL([]byte("longLived2"), []byte("longLived2"), time.Hour)
+	db.PutWithTTL([]byte("shortLived2"), []byte("shortLived2"), 0)
+	db.PutWithTTL([]byte("shortLived3"), []byte("shortLived3"), 0)
+	db.Put([]byte("static2"), []byte("static2"))
+
+	// Sleep a bit and run the Garbage Collector
+	time.Sleep(3 * time.Millisecond)
+	db.RunGC()
+
+	_ = db.Fold(func(key []byte) error {
+		_, err := db.Get(key)
+		assert.NoError(err)
+		return nil
+	})
 }
 
 type benchmarkTestCase struct {
