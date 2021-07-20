@@ -5,12 +5,6 @@ name: default
 steps:
   - name: build & run tests
     image: r.mills.io/prologic/golang-alpine
-    volumes:
-      - name: gomodcache
-        path: /go/pkg/mod/cache
-    privileged: true
-    environment:
-      GOPROXY: https://goproxy.mills.io
     commands:
       - make build
       - make test
@@ -25,7 +19,9 @@ steps:
         - success
         - failure
 
-volumes:
-  - name: gomodcache
-    host:
-      path: /var/lib/cache/go
+trigger:
+  branch:
+    - master
+  event:
+    - tag
+    - pull_request
