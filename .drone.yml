@@ -24,4 +24,5 @@ trigger:
     - master
   event:
     - tag
+    - push
     - pull_request
