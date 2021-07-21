@@ -168,6 +168,65 @@ func TestAll(t *testing.T) {
 		assert.NoError(err)
 	})
 
+	t.Run("Sift", func(t *testing.T) {
+		err = db.Put([]byte("toBeSifted"), []byte("siftMe"))
+		assert.NoError(err)
+		err = db.Put([]byte("notToBeSifted"), []byte("dontSiftMe"))
+		assert.NoError(err)
+		err := db.Sift(func(key []byte) (bool, error) {
+			value, err := db.Get(key)
+			if err != nil {
+				return false, err
+			}
+			if string(value) == "siftMe" {
+				return true, nil
+			}
+			return false, nil
+		})
+		assert.NoError(err)
+		_, err = db.Get([]byte("toBeSifted"))
+		assert.Equal(ErrKeyNotFound, err)
+		_, err = db.Get([]byte("notToBeSifted"))
+		assert.NoError(err)
+	})
+
+	t.Run("ScanSift", func(t *testing.T) {
+		err := db.DeleteAll()
+		assert.NoError(err)
+		err = db.Put([]byte("toBeSifted"), []byte("siftMe"))
+		assert.NoError(err)
+		err = db.Put([]byte("toBeSkipped"), []byte("siftMe"))
+		assert.NoError(err)
+		err = db.Put([]byte("toBeSiftedAsWell"), []byte("siftMe"))
+		assert.NoError(err)
+		err = db.Put([]byte("toBeSiftedButNotReally"), []byte("dontSiftMe"))
+		assert.NoError(err)
+		err = db.ScanSift([]byte("toBeSifted"), func(key []byte) (bool, error) {
+			value, err := db.Get(key)
+			if err != nil {
+				return false, err
+			}
+			if string(value) == "siftMe" {
+				return true, nil
+			}
+			return false, nil
+		})
+		assert.NoError(err)
+		_, err = db.Get([]byte("toBeSifted"))
+		assert.Equal(ErrKeyNotFound, err)
+		_, err = db.Get([]byte("toBeSiftedAsWell"))
+		assert.Equal(ErrKeyNotFound, err)
+		_, err = db.Get([]byte("toBeSkipped"))
+		assert.NoError(err)
+		_, err = db.Get([]byte("toBeSiftedButNotReally"))
+		assert.NoError(err)
+	})
+
+	t.Run("DeleteAll", func(t *testing.T) {
+		err = db.DeleteAll()
+		assert.NoError(err)
+	})
+
 	t.Run("Close", func(t *testing.T) {
 		err = db.Close()
 		assert.NoError(err)
@@ -1652,6 +1711,93 @@ func TestConcurrent(t *testing.T) {
 			err = db.Close()
 			assert.NoError(err)
 		})
+	})
+}
+
+func TestSift(t *testing.T) {
+	assert := assert.New(t)
+
+	testdir, err := ioutil.TempDir("", "bitcask")
+	assert.NoError(err)
+
+	var db *Bitcask
+
+	t.Run("Setup", func(t *testing.T) {
+		t.Run("Open", func(t *testing.T) {
+			db, err = Open(testdir)
+			assert.NoError(err)
+		})
+
+		t.Run("Put", func(t *testing.T) {
+			var items = map[string][]byte{
+				"1":     []byte("1"),
+				"2":     []byte("2"),
+				"3":     []byte("3"),
+				"food":  []byte("pizza"),
+				"foo":   []byte([]byte("foo")),
+				"fooz":  []byte("fooz ball"),
+				"hello": []byte("world"),
+			}
+			for k, v := range items {
+				err = db.Put([]byte(k), v)
+				assert.NoError(err)
+			}
+		})
+	})
+
+	t.Run("SiftErrors", func(t *testing.T) {
+		err = db.Sift(func(key []byte) (bool, error) {
+			return false, ErrMockError
+		})
+		assert.Equal(ErrMockError, err)
+
+		err = db.ScanSift([]byte("fo"), func(key []byte) (bool, error) {
+			return true, ErrMockError
+		})
+		assert.Equal(ErrMockError, err)
+	})
+}
+func TestScanSift(t *testing.T) {
+	assert := assert.New(t)
+
+	testdir, err := ioutil.TempDir("", "bitcask")
+	assert.NoError(err)
+
+	var db *Bitcask
+
+	t.Run("Setup", func(t *testing.T) {
+		t.Run("Open", func(t *testing.T) {
+			db, err = Open(testdir)
+			assert.NoError(err)
+		})
+
+		t.Run("Put", func(t *testing.T) {
+			var items = map[string][]byte{
+				"1":     []byte("1"),
+				"2":     []byte("2"),
+				"3":     []byte("3"),
+				"food":  []byte("pizza"),
+				"foo":   []byte([]byte("foo")),
+				"fooz":  []byte("fooz ball"),
+				"hello": []byte("world"),
+			}
+			for k, v := range items {
+				err = db.Put([]byte(k), v)
+				assert.NoError(err)
+			}
+		})
+	})
+
+	t.Run("ScanSiftErrors", func(t *testing.T) {
+		err = db.ScanSift([]byte("fo"), func(key []byte) (bool, error) {
+			return false, ErrMockError
+		})
+		assert.Equal(ErrMockError, err)
+
+		err = db.ScanSift([]byte("fo"), func(key []byte) (bool, error) {
+			return true, ErrMockError
+		})
+		assert.Equal(ErrMockError, err)
 	})
 }
 
