@@ -1,4 +1,20 @@
 
+<a name="v0.3.14"></a>
+## [v0.3.14](https://git.mills.io/prologic/bitcask/compare/v0.3.13...v0.3.14) (2021-07-21)
+
+### Bug Fixes
+
+* Fix runGC behaviour to correctly delete all expired keys (#229)
+* Fix missing push event
+* Fix how CI is triggered
+* Fix README Go Reference badge
+* Fix README badges
+
+### Features
+
+* Add RangeScan() support (#160)
+
+
 <a name="v0.3.13"></a>
 ## [v0.3.13](https://git.mills.io/prologic/bitcask/compare/v0.3.12...v0.3.13) (2021-07-16)
 
@@ -9,6 +25,10 @@
 ### Features
 
 * Add Drone CI config
+
+### Updates
+
+* Update CHANGELOG for v0.3.13
 
 
 <a name="v0.3.12"></a>
