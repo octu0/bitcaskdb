@@ -190,7 +190,7 @@ func TestAll(t *testing.T) {
 		assert.NoError(err)
 	})
 
-	t.Run("ScanSift", func(t *testing.T) {
+	t.Run("SiftScan", func(t *testing.T) {
 		err := db.DeleteAll()
 		assert.NoError(err)
 		err = db.Put([]byte("toBeSifted"), []byte("siftMe"))
@@ -201,7 +201,7 @@ func TestAll(t *testing.T) {
 		assert.NoError(err)
 		err = db.Put([]byte("toBeSiftedButNotReally"), []byte("dontSiftMe"))
 		assert.NoError(err)
-		err = db.ScanSift([]byte("toBeSifted"), func(key []byte) (bool, error) {
+		err = db.SiftScan([]byte("toBeSifted"), func(key []byte) (bool, error) {
 			value, err := db.Get(key)
 			if err != nil {
 				return false, err
@@ -1751,13 +1751,13 @@ func TestSift(t *testing.T) {
 		})
 		assert.Equal(ErrMockError, err)
 
-		err = db.ScanSift([]byte("fo"), func(key []byte) (bool, error) {
+		err = db.SiftScan([]byte("fo"), func(key []byte) (bool, error) {
 			return true, ErrMockError
 		})
 		assert.Equal(ErrMockError, err)
 	})
 }
-func TestScanSift(t *testing.T) {
+func TestSiftScan(t *testing.T) {
 	assert := assert.New(t)
 
 	testdir, err := ioutil.TempDir("", "bitcask")
@@ -1788,13 +1788,13 @@ func TestScanSift(t *testing.T) {
 		})
 	})
 
-	t.Run("ScanSiftErrors", func(t *testing.T) {
-		err = db.ScanSift([]byte("fo"), func(key []byte) (bool, error) {
+	t.Run("SiftScanErrors", func(t *testing.T) {
+		err = db.SiftScan([]byte("fo"), func(key []byte) (bool, error) {
 			return false, ErrMockError
 		})
 		assert.Equal(ErrMockError, err)
 
-		err = db.ScanSift([]byte("fo"), func(key []byte) (bool, error) {
+		err = db.SiftScan([]byte("fo"), func(key []byte) (bool, error) {
 			return true, ErrMockError
 		})
 		assert.Equal(ErrMockError, err)
@@ -1858,6 +1858,146 @@ func TestScan(t *testing.T) {
 		})
 		assert.Error(err)
 		assert.Equal(ErrMockError, err)
+	})
+}
+func TestSiftRange(t *testing.T) {
+	assert := assert.New(t)
+
+	testdir, err := ioutil.TempDir("", "bitcask")
+	assert.NoError(err)
+
+	var db *Bitcask
+
+	t.Run("Setup", func(t *testing.T) {
+		t.Run("Open", func(t *testing.T) {
+			db, err = Open(testdir)
+			assert.NoError(err)
+		})
+
+		t.Run("Put", func(t *testing.T) {
+			for i := 1; i < 10; i++ {
+				key := []byte(fmt.Sprintf("foo_%d", i))
+				val := []byte(fmt.Sprintf("%d", i))
+				err = db.Put(key, val)
+				assert.NoError(err)
+			}
+		})
+	})
+
+	t.Run("SiftRange", func(t *testing.T) {
+		var (
+			vals     [][]byte
+			expected = [][]byte{
+				[]byte("1"),
+				[]byte("2"),
+				[]byte("4"),
+				[]byte("5"),
+				[]byte("6"),
+				[]byte("7"),
+				[]byte("8"),
+				[]byte("9"),
+			}
+		)
+
+		err = db.SiftRange([]byte("foo_3"), []byte("foo_7"), func(key []byte) (bool, error) {
+			val, err := db.Get(key)
+			assert.NoError(err)
+			if string(val) == "3" {
+				return true, nil
+			}
+			return false, nil
+		})
+		err = db.Fold(func(key []byte) error {
+			val, err := db.Get(key)
+			assert.NoError(err)
+			vals = append(vals, val)
+
+			return nil
+		})
+
+		_, err = db.Get([]byte("foo_3"))
+		assert.Equal(ErrKeyNotFound, err)
+		vals = SortByteArrays(vals)
+		assert.Equal(expected, vals)
+	})
+
+	t.Run("SiftRangeErrors", func(t *testing.T) {
+		err = db.SiftRange([]byte("foo_3"), []byte("foo_7"), func(key []byte) (bool, error) {
+			return true, ErrMockError
+		})
+		assert.Error(err)
+		assert.Equal(ErrMockError, err)
+	})
+
+	t.Run("InvalidRange", func(t *testing.T) {
+		err = db.SiftRange([]byte("foo_3"), []byte("foo_1"), func(key []byte) (bool, error) {
+			return false, nil
+		})
+		assert.Error(err)
+		assert.Equal(ErrInvalidRange, err)
+	})
+}
+
+func TestRange(t *testing.T) {
+	assert := assert.New(t)
+
+	testdir, err := ioutil.TempDir("", "bitcask")
+	assert.NoError(err)
+
+	var db *Bitcask
+
+	t.Run("Setup", func(t *testing.T) {
+		t.Run("Open", func(t *testing.T) {
+			db, err = Open(testdir)
+			assert.NoError(err)
+		})
+
+		t.Run("Put", func(t *testing.T) {
+			for i := 1; i < 10; i++ {
+				key := []byte(fmt.Sprintf("foo_%d", i))
+				val := []byte(fmt.Sprintf("%d", i))
+				err = db.Put(key, val)
+				assert.NoError(err)
+			}
+		})
+	})
+
+	t.Run("Range", func(t *testing.T) {
+		var (
+			vals     [][]byte
+			expected = [][]byte{
+				[]byte("3"),
+				[]byte("4"),
+				[]byte("5"),
+				[]byte("6"),
+				[]byte("7"),
+			}
+		)
+
+		err = db.Range([]byte("foo_3"), []byte("foo_7"), func(key []byte) error {
+			val, err := db.Get(key)
+			assert.NoError(err)
+			vals = append(vals, val)
+			return nil
+		})
+		vals = SortByteArrays(vals)
+		assert.Equal(expected, vals)
+	})
+
+	t.Run("RangeErrors", func(t *testing.T) {
+		err = db.Range([]byte("foo_3"), []byte("foo_7"), func(key []byte) error {
+			return ErrMockError
+		})
+		assert.Error(err)
+		assert.Equal(ErrMockError, err)
+	})
+
+	t.Run("InvalidRange", func(t *testing.T) {
+		err = db.Range([]byte("foo_3"), []byte("foo_1"), func(key []byte) error {
+			return nil
+		})
+		assert.Error(err)
+		assert.Equal(ErrInvalidRange, err)
 	})
 }
 
