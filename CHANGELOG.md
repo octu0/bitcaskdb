@@ -1,9 +1,14 @@
 
+<a name="v1.0.0"></a>
+## [v1.0.0](https://git.mills.io/prologic/bitcask/compare/1.0.0...v1.0.0) (0001-01-01)
+
+
 <a name="1.0.0"></a>
-## [1.0.0](https://git.mills.io/prologic/bitcask/compare/v0.3.14...1.0.0) (2021-07-22)
+## [1.0.0](https://git.mills.io/prologic/bitcask/compare/v0.3.14...1.0.0) (2021-07-24)
 
 ### Updates
 
+* Update CHANGELOG for 1.0.0
 * Update README
 
 
