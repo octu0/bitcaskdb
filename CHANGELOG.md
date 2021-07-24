@@ -1,4 +1,12 @@
 
+<a name="1.0.0"></a>
+## [1.0.0](https://git.mills.io/prologic/bitcask/compare/v0.3.14...1.0.0) (2021-07-22)
+
+### Updates
+
+* Update README
+
+
 <a name="v0.3.14"></a>
 ## [v0.3.14](https://git.mills.io/prologic/bitcask/compare/v0.3.13...v0.3.14) (2021-07-21)
 
@@ -13,6 +21,10 @@
 ### Features
 
 * Add RangeScan() support (#160)
+
+### Updates
+
+* Update CHANGELOG for v0.3.14
 
 
 <a name="v0.3.13"></a>
