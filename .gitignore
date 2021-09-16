@@ -5,6 +5,7 @@
 
 /tmp
 /dist
+/cacheDb
 /coverage.txt
 
 /bitcask

@@ -27,8 +27,14 @@ install: build
 	@go install ./cmd/bitcask/...
 	@go install ./cmd/bitcaskd/...
 
+ifeq ($(PUBLISH), 1)
 image:
-	@docker build -t prologic/bitcask .
+	@docker build --build-arg VERSION="$(VERSION)" --build-arg COMMIT="$(COMMIT)" -t prologic/bitcask .
+	@docker push prologic/bitcask
+else
+image:
+	@docker build --build-arg VERSION="$(VERSION)" --build-arg COMMIT="$(COMMIT)" -t prologic/bitcask .
+endif
 
 release:
 	@./tools/release.sh
