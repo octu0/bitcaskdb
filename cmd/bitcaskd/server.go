@@ -84,10 +84,41 @@ func (s *server) handleGet(cmd redcon.Command, conn redcon.Conn) {
 }
 
 func (s *server) handleKeys(cmd redcon.Command, conn redcon.Conn) {
-	conn.WriteArray(s.db.Len())
-	for key := range s.db.Keys() {
-		conn.WriteBulk(key)
+	if len(cmd.Args) != 2 {
+		conn.WriteError("ERR wrong number of arguments for '" + string(cmd.Args[0]) + "' command")
+		return
 	}
+
+	pattern := string(cmd.Args[1])
+
+	// Fast-track condition for improved speed
+	if pattern == "*" {
+		conn.WriteArray(s.db.Len())
+		for key := range s.db.Keys() {
+			conn.WriteBulk(key)
+		}
+		return
+	}
+
+	// Prefix handling
+	if strings.Count(pattern, "*") == 1 && strings.HasSuffix(pattern, "*") {
+		prefix := strings.ReplaceAll(pattern, "*", "")
+		count := 0
+		keys := make([][]byte, 0)
+		s.db.Scan([]byte(prefix), func(key []byte) error {
+			keys = append(keys, key)
+			count++
+			return nil
+		})
+		conn.WriteArray(count)
+		for _, key := range keys {
+			conn.WriteBulk(key)
+		}
+		return
+	}
+
+	// No results means empty array
+	conn.WriteArray(0)
 }
 
 func (s *server) handleExists(cmd redcon.Command, conn redcon.Conn) {
