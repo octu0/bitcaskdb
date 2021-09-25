@@ -74,9 +74,11 @@ func NewDatafile(path string, id int, readonly bool, maxKeySize uint32, maxValue
 		return nil, errors.Wrap(err, "error calling Stat()")
 	}
 
-	ra, err = mmap.Open(fn)
-	if err != nil {
-		return nil, err
+	if readonly {
+		ra, err = mmap.Open(fn)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	offset := stat.Size()
@@ -107,7 +109,9 @@ func (df *datafile) Name() string {
 
 func (df *datafile) Close() error {
 	defer func() {
-		df.ra.Close()
+		if df.ra != nil {
+			df.ra.Close()
+		}
 		df.r.Close()
 	}()
 
@@ -155,7 +159,7 @@ func (df *datafile) ReadAt(index, size int64) (e internal.Entry, err error) {
 
 	b := make([]byte, size)
 
-	if df.w == nil {
+	if df.ra != nil {
 		n, err = df.ra.ReadAt(b, index)
 	} else {
 		n, err = df.r.ReadAt(b, index)
