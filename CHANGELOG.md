@@ -1,6 +1,23 @@
 
+<a name="v1.0.1"></a>
+## [v1.0.1](https://git.mills.io/prologic/bitcask/compare/v1.0.0...v1.0.1) (2021-10-31)
+
+### Features
+
+* Add ErrBadConfig and ErrBadMetadata as errors that consumers can check and use (#241)
+* Add key prefix matching to KEYS command (#237)
+
+### Updates
+
+* Update image target
+
+
 <a name="v1.0.0"></a>
-## [v1.0.0](https://git.mills.io/prologic/bitcask/compare/1.0.0...v1.0.0) (0001-01-01)
+## [v1.0.0](https://git.mills.io/prologic/bitcask/compare/1.0.0...v1.0.0) (2021-07-24)
+
+### Updates
+
+* Update CHANGELOG for v1.0.0
 
 
 <a name="1.0.0"></a>
