@@ -2,7 +2,6 @@ package bitcask
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"hash/crc32"
 	"io"
@@ -31,41 +30,6 @@ import (
 const (
 	lockfile     = "lock"
 	ttlIndexFile = "ttl_index"
-)
-
-var (
-	// ErrKeyNotFound is the error returned when a key is not found
-	ErrKeyNotFound = errors.New("error: key not found")
-
-	// ErrKeyTooLarge is the error returned for a key that exceeds the
-	// maximum allowed key size (configured with WithMaxKeySize).
-	ErrKeyTooLarge = errors.New("error: key too large")
-
-	// ErrKeyExpired is the error returned when a key is queried which has
-	// already expired (due to ttl)
-	ErrKeyExpired = errors.New("error: key expired")
-
-	// ErrEmptyKey is the error returned for a value with an empty key.
-	ErrEmptyKey = errors.New("error: empty key")
-
-	// ErrValueTooLarge is the error returned for a value that exceeds the
-	// maximum allowed value size (configured with WithMaxValueSize).
-	ErrValueTooLarge = errors.New("error: value too large")
-
-	// ErrChecksumFailed is the error returned if a key/value retrieved does
-	// not match its CRC checksum
-	ErrChecksumFailed = errors.New("error: checksum failed")
-
-	// ErrDatabaseLocked is the error returned if the database is locked
-	// (typically opened by another process)
-	ErrDatabaseLocked = errors.New("error: database locked")
-
-	ErrInvalidRange   = errors.New("error: invalid range")
-	ErrInvalidVersion = errors.New("error: invalid db version")
-
-	// ErrMergeInProgress is the error returned if merge is called when already a merge
-	// is in progress
-	ErrMergeInProgress = errors.New("error: merge already in progress")
 )
 
 // Bitcask is a struct that represents a on-disk LSM and WAL data structure
@@ -864,7 +828,7 @@ func Open(path string, options ...Option) (*Bitcask, error) {
 	if internal.Exists(configPath) {
 		cfg, err = config.Load(configPath)
 		if err != nil {
-			return nil, err
+			return nil, &ErrBadConfig{err}
 		}
 	} else {
 		cfg = newDefaultConfig()
@@ -886,7 +850,7 @@ func Open(path string, options ...Option) (*Bitcask, error) {
 
 	meta, err = loadMetadata(path)
 	if err != nil {
-		return nil, err
+		return nil, &ErrBadMetadata{err}
 	}
 
 	bitcask := &Bitcask{
