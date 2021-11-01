@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/pkg/errors"
 	"git.mills.io/prologic/bitcask/internal"
 	"git.mills.io/prologic/bitcask/internal/data/codec"
+	"github.com/pkg/errors"
 	"golang.org/x/exp/mmap"
 )
 
@@ -158,6 +158,9 @@ func (df *datafile) ReadAt(index, size int64) (e internal.Entry, err error) {
 	var n int
 
 	b := make([]byte, size)
+
+	df.RLock()
+	defer df.RUnlock()
 
 	if df.ra != nil {
 		n, err = df.ra.ReadAt(b, index)
