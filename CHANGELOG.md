@@ -1,4 +1,13 @@
 
+<a name="v1.0.2"></a>
+## [v1.0.2](https://git.mills.io/prologic/bitcask/compare/v1.0.1...v1.0.2) (2021-11-01)
+
+### Bug Fixes
+
+* Fix a data race in Datafile.ReadAt()
+* Fix release tool
+
+
 <a name="v1.0.1"></a>
 ## [v1.0.1](https://git.mills.io/prologic/bitcask/compare/v1.0.0...v1.0.1) (2021-10-31)
 
@@ -9,6 +18,7 @@
 
 ### Updates
 
+* Update CHANGELOG for v1.0.1
 * Update image target
 
 
