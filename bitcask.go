@@ -264,7 +264,9 @@ func (b *Bitcask) Sift(f func(key []byte) (bool, error)) (err error) {
 		return true
 	})
 	b.mu.RUnlock()
-
+	if err != nil {
+		return
+	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	keysToDelete.ForEach(func(node art.Node) (cont bool) {
@@ -342,6 +344,10 @@ func (b *Bitcask) SiftScan(prefix []byte, f func(key []byte) (bool, error)) (err
 		return true
 	})
 	b.mu.RUnlock()
+
+	if err != nil {
+		return
+	}
 
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -421,6 +427,10 @@ func (b *Bitcask) SiftRange(start, end []byte, f func(key []byte) (bool, error))
 		return true
 	})
 	b.mu.RUnlock()
+
+	if err != nil {
+		return
+	}
 
 	b.mu.Lock()
 	defer b.mu.Unlock()
