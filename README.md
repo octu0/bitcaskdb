@@ -6,7 +6,8 @@
 [![Releases](https://img.shields.io/github/v/release/octu0/bitcaskdb)](https://github.com/octu0/bitcaskdb/releases)
 
 Original code is [bitcask](https://git.mills.io/prologic/bitcask) and bitcaskdb modifies I/O operations.  
-Small Value are still operated in memory, large Value are directly I/O operation on disk.
+Small Value are still operated in memory, large Value are directly I/O operation on disk.  
+This makes it possible to perform Merge operations and large data store with minimal RAM utilization.
 
 A high performance Key/Value store written in [Go](https://golang.org) with a predictable read/write performance and high throughput. 
 Uses a [Bitcask](https://en.wikipedia.org/wiki/Bitcask) on-disk layout (LSM+WAL) similar to [Riak](https://riak.com/).
