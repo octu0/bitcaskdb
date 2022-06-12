@@ -5,6 +5,8 @@ import (
 	"io"
 	"runtime"
 	"time"
+
+	"github.com/octu0/bitcaskdb/context"
 )
 
 var (
@@ -42,9 +44,10 @@ func (e *Entry) Close() error {
 	return nil
 }
 
-func (e *Entry) Validate() error {
-	buf := bytePool.Get()
-	defer bytePool.Put(buf)
+func (e *Entry) Validate(ctx *context.Context) error {
+	pool := ctx.Buffer().BytePool()
+	buf := pool.Get()
+	defer pool.Put(buf)
 
 	c := crc32.New(crc32.IEEETable)
 	for {

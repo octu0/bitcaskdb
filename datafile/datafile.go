@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/octu0/bp"
 	"github.com/pkg/errors"
 	"golang.org/x/exp/mmap"
 
@@ -17,16 +16,11 @@ import (
 )
 
 const (
-	defaultDatafileFilename     = "%09d.data"
-	defaultBufferSize       int = 128 * 1024
+	defaultDatafileFilename string = "%09d.data"
 )
 
 var (
 	_ Datafile = (*datafile)(nil)
-)
-
-var (
-	bytePool = bp.NewBytePool(1000, defaultBufferSize)
 )
 
 // Datafile is an interface  that represents a readable and writeable datafile
@@ -127,8 +121,9 @@ func (df *datafile) Read() (*Entry, error) {
 
 // ReadAt the entry located at index offset with expected serialized size
 func (df *datafile) ReadAt(index, size int64) (*Entry, error) {
-	buf := bytePool.Get()
-	defer bytePool.Put(buf)
+	pool := df.opt.ctx.Buffer().BytePool()
+	buf := pool.Get()
+	defer pool.Put(buf)
 
 	df.RLock()
 	defer df.RUnlock()
