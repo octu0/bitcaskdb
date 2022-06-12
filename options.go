@@ -34,7 +34,6 @@ type Option func(*Config) error
 type Config struct {
 	MaxDatafileSize         int    `json:"max_datafile_size"`
 	Sync                    bool   `json:"sync"`
-	AutoRecovery            bool   `json:"autorecovery"`
 	DBVersion               uint32 `json:"db_version"`
 	ValidateChecksum        bool
 	TempDir                 string
@@ -55,16 +54,6 @@ func withConfig(src *Config) Option {
 		cfg.ValueOnMemoryThreshold = src.ValueOnMemoryThreshold
 		cfg.DirFileModeBeforeUmask = src.DirFileModeBeforeUmask
 		cfg.FileFileModeBeforeUmask = src.FileFileModeBeforeUmask
-		return nil
-	}
-}
-
-// WithAutoRecovery sets auto recovery of data and index file recreation.
-// IMPORTANT: This flag MUST BE used only if a proper backup was made of all
-// the existing datafiles.
-func WithAutoRecovery(enabled bool) Option {
-	return func(cfg *Config) error {
-		cfg.AutoRecovery = enabled
 		return nil
 	}
 }

@@ -1094,11 +1094,6 @@ func Open(path string, options ...Option) (*Bitcask, error) {
 		return nil, err
 	}
 
-	if cfg.AutoRecovery {
-		if err := CheckAndRecover(ctx, path, cfg); err != nil {
-			return nil, fmt.Errorf("recovering database: %s", err)
-		}
-	}
 	if err := bitcask.Reopen(); err != nil {
 		return nil, err
 	}
