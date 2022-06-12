@@ -1,5 +1,7 @@
 *~*
 *.db
+*.swp
+*.DS_Store
 *.bak
 **.envrc
 

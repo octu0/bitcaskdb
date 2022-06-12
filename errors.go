@@ -1,8 +1,9 @@
-package bitcask
+package bitcaskdb
 
 import (
-	"errors"
 	"fmt"
+
+	"github.com/pkg/errors"
 )
 
 var (
@@ -23,10 +24,6 @@ var (
 	// ErrValueTooLarge is the error returned for a value that exceeds the
 	// maximum allowed value size (configured with WithMaxValueSize).
 	ErrValueTooLarge = errors.New("error: value too large")
-
-	// ErrChecksumFailed is the error returned if a key/value retrieved does
-	// not match its CRC checksum
-	ErrChecksumFailed = errors.New("error: checksum failed")
 
 	// ErrDatabaseLocked is the error returned if the database is locked
 	// (typically opened by another process)
