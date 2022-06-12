@@ -86,12 +86,12 @@ func (e *Encoder) Encode(key []byte, r io.Reader, expiry time.Time) (int64, erro
 	tempData := newTemopraryData(e.ctx, e.tempDir, e.threshold)
 	defer tempData.Close()
 
-	size, checksum, err := e.read(tempData, bfr)
+	valueSize, checksum, err := e.read(tempData, bfr)
 	if err != nil {
 		return 0, errors.WithStack(err)
 	}
 
-	if size < 1 {
+	if valueSize < 1 {
 		return 0, errInvalidKeyOrValueSize
 	}
 
@@ -100,7 +100,7 @@ func (e *Encoder) Encode(key []byte, r io.Reader, expiry time.Time) (int64, erro
 		return 0, errors.Wrap(err, "failed writing key prefix")
 	}
 	// valueSize
-	if err := binary.Write(e.w, binary.BigEndian, uint64(size)); err != nil {
+	if err := binary.Write(e.w, binary.BigEndian, uint64(valueSize)); err != nil {
 		return 0, errors.Wrap(err, "failed writing value length prefix")
 	}
 	// checksumSize
@@ -130,7 +130,7 @@ func (e *Encoder) Encode(key []byte, r io.Reader, expiry time.Time) (int64, erro
 		return 0, errors.Wrap(err, "failed flushing data")
 	}
 
-	return int64(MetaInfoSize + int64(len(key)) + size), nil
+	return headerSize + int64(len(key)) + valueSize, nil
 }
 
 func (e *Encoder) encodeNoValue(key []byte) (int64, error) {
@@ -156,7 +156,7 @@ func (e *Encoder) encodeNoValue(key []byte) (int64, error) {
 	if err := e.w.Flush(); err != nil {
 		return 0, errors.Wrap(err, "failed flushing data")
 	}
-	return int64(MetaInfoSize + int64(len(key))), nil
+	return headerSize + int64(len(key)), nil
 }
 
 // NewEncoder creates a streaming Entry encoder.

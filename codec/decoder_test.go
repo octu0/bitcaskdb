@@ -19,13 +19,13 @@ const (
 func TestDecoderShortPrefix(t *testing.T) {
 	t.Parallel()
 
-	prefix := make([]byte, keySize+valueSize)
+	prefix := make([]byte, headerKeySize+headerValueSize)
 	binary.BigEndian.PutUint32(prefix, 1)
-	binary.BigEndian.PutUint64(prefix[keySize:], 1)
+	binary.BigEndian.PutUint64(prefix[headerKeySize:], 1)
 
-	truncBytesCount := 2
-	buf := bytes.NewReader(prefix[:keySize+valueSize-truncBytesCount])
-	decoder := NewDecoder(context.Default(), buf)
+	truncBytesCount := int64(2)
+	buf := bytes.NewReader(prefix[:headerKeySize+headerValueSize-truncBytesCount])
+	decoder := NewDecoder(context.Default(), buf, 0)
 	defer decoder.Close()
 
 	_, err := decoder.Decode()
@@ -50,12 +50,12 @@ func TestDecoderInvalidValueKeySizes(t *testing.T) {
 		i := i
 		t.Run(tests[i].name, func(tt *testing.T) {
 			tt.Parallel()
-			prefix := make([]byte, MetaInfoSize)
-			binary.BigEndian.PutUint32(prefix[:keySize], tests[i].keySize)
-			binary.BigEndian.PutUint64(prefix[keySize:keySize+valueSize], tests[i].valueSize)
+			prefix := make([]byte, headerSize)
+			binary.BigEndian.PutUint32(prefix[:headerKeySize], tests[i].keySize)
+			binary.BigEndian.PutUint64(prefix[headerKeySize:headerKeySize+headerValueSize], tests[i].valueSize)
 
 			buf := bytes.NewReader(prefix)
-			decoder := NewDecoder(context.Default(), buf)
+			decoder := NewDecoder(context.Default(), buf, 0)
 			defer decoder.Close()
 
 			_, err := decoder.Decode()
@@ -72,21 +72,21 @@ func TestDecoderInvalidValueKeySizes(t *testing.T) {
 func TestDecoderTruncatedData(t *testing.T) {
 	key := []byte("foo")
 	value := []byte("bar")
-	data := make([]byte, keySize+valueSize+checksumSize+len(key)+len(value))
+	data := make([]byte, headerKeySize+headerValueSize+headerChecksumSize+int64(len(key))+int64(len(value)))
 
 	binary.BigEndian.PutUint32(data, uint32(len(key)))
-	binary.BigEndian.PutUint64(data[keySize:], uint64(len(value)))
-	copy(data[keySize+valueSize:], key)
-	copy(data[keySize+valueSize+len(key):], value)
-	copy(data[keySize+valueSize+len(key)+len(value):], bytes.Repeat([]byte("0"), checksumSize))
+	binary.BigEndian.PutUint64(data[headerKeySize:], uint64(len(value)))
+	copy(data[headerKeySize+headerValueSize:], key)
+	copy(data[headerKeySize+headerValueSize+int64(len(key)):], value)
+	copy(data[headerKeySize+headerValueSize+int64(len(key))+int64(len(value)):], bytes.Repeat([]byte("0"), int(headerChecksumSize)))
 
 	tests := []struct {
 		data []byte
 		name string
 	}{
-		{data: data[:keySize+valueSize+len(key)-1], name: "truncated key"},
-		{data: data[:keySize+valueSize+len(key)+len(value)-1], name: "truncated value"},
-		{data: data[:keySize+valueSize+len(key)+len(value)+checksumSize-1], name: "truncated checksum"},
+		{data: data[:headerKeySize+headerValueSize+int64(len(key))-1], name: "truncated key"},
+		{data: data[:headerKeySize+headerValueSize+int64(len(key))+int64(len(value))-1], name: "truncated value"},
+		{data: data[:headerKeySize+headerValueSize+int64(len(key))+int64(len(value))+headerChecksumSize-1], name: "truncated checksum"},
 	}
 
 	for i := range tests {
@@ -94,7 +94,7 @@ func TestDecoderTruncatedData(t *testing.T) {
 		t.Run(tests[i].name, func(tt *testing.T) {
 			tt.Parallel()
 			buf := bytes.NewReader(tests[i].data)
-			decoder := NewDecoder(context.Default(), buf)
+			decoder := NewDecoder(context.Default(), buf, 0)
 			defer decoder.Close()
 
 			_, err := decoder.Decode()
@@ -108,16 +108,16 @@ func TestDecoderTruncatedData(t *testing.T) {
 func TestDecoderPayload(t *testing.T) {
 	t.Parallel()
 
-	data := make([]byte, MetaInfoSize+2)
-	binary.BigEndian.PutUint32(data[0:keySize], 1)
-	binary.BigEndian.PutUint64(data[keySize:keySize+valueSize], 2)
-	binary.BigEndian.PutUint32(data[keySize+valueSize:keySize+valueSize+checksumSize], 3)
-	binary.BigEndian.PutUint64(data[keySize+valueSize+checksumSize:keySize+valueSize+checksumSize+ttlSize], 4)
+	data := make([]byte, headerSize+2)
+	binary.BigEndian.PutUint32(data[0:headerKeySize], 1)
+	binary.BigEndian.PutUint64(data[headerKeySize:headerKeySize+headerValueSize], 2)
+	binary.BigEndian.PutUint32(data[headerKeySize+headerValueSize:headerKeySize+headerValueSize+headerChecksumSize], 3)
+	binary.BigEndian.PutUint64(data[headerKeySize+headerValueSize+headerChecksumSize:headerKeySize+headerValueSize+headerChecksumSize+headerTTLSize], 4)
 
-	copy(data[MetaInfoSize:MetaInfoSize+1], []byte("a"))
-	copy(data[MetaInfoSize+1:MetaInfoSize+2], []byte("b"))
+	copy(data[headerSize:headerSize+1], []byte("a"))
+	copy(data[headerSize+1:headerSize+2], []byte("b"))
 
-	d := NewDecoder(context.Default(), bytes.NewReader(data))
+	d := NewDecoder(context.Default(), bytes.NewReader(data), 0)
 	defer d.Close()
 
 	p, err := d.Decode()
@@ -147,7 +147,7 @@ func TestDecoderPayload(t *testing.T) {
 func TestDecodeNoValue(t *testing.T) {
 	// encoder_test#TestEncodeNoValue
 	b, _ := base64.StdEncoding.DecodeString(b64EmptyValue)
-	d := NewDecoder(context.Default(), bytes.NewReader(b))
+	d := NewDecoder(context.Default(), bytes.NewReader(b), 0)
 	defer d.Close()
 
 	p, err := d.Decode()
@@ -162,7 +162,7 @@ func TestDecodeNoValue(t *testing.T) {
 	if p.ValueSize != 0 {
 		t.Errorf("value size is zero")
 	}
-	if p.N != int64(MetaInfoSize+len(p.Key)) {
+	if p.N != headerSize+int64(len(p.Key)) {
 		t.Errorf("meta + key only")
 	}
 	if _, err := p.Value.Read([]byte{}); err != nil {
@@ -188,16 +188,16 @@ func (t *testDecodeIOCounterReader) ReadAt(p []byte, off int64) (int, error) {
 func TestDecoderIOCount(t *testing.T) {
 	t.Run("read/<128K", func(tt *testing.T) {
 		data := make([]byte, 32*1024)
-		binary.BigEndian.PutUint32(data[0:keySize], 256)
-		binary.BigEndian.PutUint64(data[keySize:keySize+valueSize], 30*1024)
-		binary.BigEndian.PutUint32(data[keySize+valueSize:keySize+valueSize+checksumSize], 3)
-		binary.BigEndian.PutUint64(data[keySize+valueSize+checksumSize:keySize+valueSize+checksumSize+ttlSize], 4)
+		binary.BigEndian.PutUint32(data[0:headerKeySize], 256)
+		binary.BigEndian.PutUint64(data[headerKeySize:headerKeySize+headerValueSize], 30*1024)
+		binary.BigEndian.PutUint32(data[headerKeySize+headerValueSize:headerKeySize+headerValueSize+headerChecksumSize], 3)
+		binary.BigEndian.PutUint64(data[headerKeySize+headerValueSize+headerChecksumSize:headerKeySize+headerValueSize+headerChecksumSize+headerTTLSize], 4)
 
 		counter := &testDecodeIOCounterReader{
 			r: bytes.NewReader(data),
 			c: 0,
 		}
-		d := NewDecoder(context.Default(), counter)
+		d := NewDecoder(context.Default(), counter, 0)
 		defer d.Close()
 
 		p, err := d.Decode()
@@ -214,16 +214,16 @@ func TestDecoderIOCount(t *testing.T) {
 	})
 	t.Run("read/128K*2", func(tt *testing.T) {
 		data := make([]byte, (128*1024)*2)
-		binary.BigEndian.PutUint32(data[0:keySize], 256)
-		binary.BigEndian.PutUint64(data[keySize:keySize+valueSize], 250*1024)
-		binary.BigEndian.PutUint32(data[keySize+valueSize:keySize+valueSize+checksumSize], 3)
-		binary.BigEndian.PutUint64(data[keySize+valueSize+checksumSize:keySize+valueSize+checksumSize+ttlSize], 4)
+		binary.BigEndian.PutUint32(data[0:headerKeySize], 256)
+		binary.BigEndian.PutUint64(data[headerKeySize:headerKeySize+headerValueSize], 250*1024)
+		binary.BigEndian.PutUint32(data[headerKeySize+headerValueSize:headerKeySize+headerValueSize+headerChecksumSize], 3)
+		binary.BigEndian.PutUint64(data[headerKeySize+headerValueSize+headerChecksumSize:headerKeySize+headerValueSize+headerChecksumSize+headerTTLSize], 4)
 
 		counter := &testDecodeIOCounterReader{
 			r: bytes.NewReader(data),
 			c: 0,
 		}
-		d := NewDecoder(context.Default(), counter)
+		d := NewDecoder(context.Default(), counter, 0)
 		defer d.Close()
 
 		p, err := d.Decode()

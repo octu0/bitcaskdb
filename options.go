@@ -18,6 +18,9 @@ const (
 	// Data size exceeding this threshold to temporarily copied to TempDir
 	DefaultCopyTempThrshold int64 = 10 * 1024 * 1024
 
+	// Data size larger than this size will be placed on RAM
+	DefaultValueOnMemoryThreshold int64 = 128 * 1024
+
 	// DefaultSync is the default file synchronization action
 	DefaultSync = false
 
@@ -36,6 +39,7 @@ type Config struct {
 	ValidateChecksum        bool
 	TempDir                 string
 	CopyTempThreshold       int64
+	ValueOnMemoryThreshold  int64
 	DirFileModeBeforeUmask  os.FileMode
 	FileFileModeBeforeUmask os.FileMode
 }
@@ -46,6 +50,9 @@ func withConfig(src *Config) Option {
 		cfg.Sync = src.Sync
 		cfg.AutoRecovery = src.AutoRecovery
 		cfg.ValidateChecksum = src.ValidateChecksum
+		cfg.TempDir = src.TempDir
+		cfg.CopyTempThreshold = src.CopyTempThreshold
+		cfg.ValueOnMemoryThreshold = src.ValueOnMemoryThreshold
 		cfg.DirFileModeBeforeUmask = src.DirFileModeBeforeUmask
 		cfg.FileFileModeBeforeUmask = src.FileFileModeBeforeUmask
 		return nil
@@ -120,6 +127,13 @@ func WithCopyTempThreshold(size int64) Option {
 	}
 }
 
+func WithValueOnMemoryThreshold(size int64) Option {
+	return func(cfg *Config) error {
+		cfg.ValueOnMemoryThreshold = size
+		return nil
+	}
+}
+
 func newDefaultConfig() *Config {
 	return &Config{
 		MaxDatafileSize:         DefaultMaxDatafileSize,
@@ -127,6 +141,7 @@ func newDefaultConfig() *Config {
 		ValidateChecksum:        false,
 		TempDir:                 os.TempDir(),
 		CopyTempThreshold:       DefaultCopyTempThrshold,
+		ValueOnMemoryThreshold:  DefaultValueOnMemoryThreshold,
 		DirFileModeBeforeUmask:  DefaultDirFileModeBeforeUmask,
 		FileFileModeBeforeUmask: DefaultFileFileModeBeforeUmask,
 		DBVersion:               CurrentDBVersion,

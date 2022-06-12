@@ -9,10 +9,15 @@ const (
 )
 
 type Buffer struct {
+	bufferSize      int
 	bytePool        *bp.BytePool
 	bufferPool      *bp.BufferPool
 	bufioReaderPool *bp.BufioReaderPool
 	bufioWriterPool *bp.BufioWriterPool
+}
+
+func (b *Buffer) BufferSize() int {
+	return b.bufferSize
 }
 
 func (b *Buffer) BytePool() *bp.BytePool {
@@ -33,6 +38,7 @@ func (b *Buffer) BufioWriterPool() *bp.BufioWriterPool {
 
 func createDefaultBuffer() *Buffer {
 	return &Buffer{
+		bufferSize:      defaultBufferSize,
 		bytePool:        bp.NewBytePool(1000, defaultBufferSize),
 		bufferPool:      bp.NewBufferPool(1000, defaultBufferSize),
 		bufioReaderPool: bp.NewBufioReaderSizePool(1000, defaultBufferSize),

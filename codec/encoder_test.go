@@ -14,10 +14,10 @@ import (
 func TestEncode(t *testing.T) {
 	t.Parallel()
 
-	key := []byte("mykey")
-	value := []byte("myvalue")
+	key := []byte("a")
+	value := []byte("abc")
 	expiry := time.Date(2020, 10, 1, 0, 0, 0, 0, time.UTC)
-	expectSize := int64(MetaInfoSize + int64(len(key)) + int64(len(value)))
+	expectSize := headerSize + int64(len(key)) + int64(len(value))
 
 	buf := bytes.NewBuffer(nil)
 	encoder := NewEncoder(context.Default(), buf, "", 0)
@@ -32,6 +32,45 @@ func TestEncode(t *testing.T) {
 	}
 	if int64(len(buf.Bytes())) != size {
 		t.Errorf("written size: %d != %d", len(buf.Bytes()), size)
+	}
+
+	r := bytes.NewReader(buf.Bytes())
+	keySize := uint32(0)
+	if err := binary.Read(r, binary.BigEndian, &keySize); err != nil {
+		t.Errorf("no error: %+v", err)
+	}
+	valueSize := uint64(0)
+	if err := binary.Read(r, binary.BigEndian, &valueSize); err != nil {
+		t.Errorf("no error: %+v", err)
+	}
+	checksum := uint32(0)
+	if err := binary.Read(r, binary.BigEndian, &checksum); err != nil {
+		t.Errorf("no error: %+v", err)
+	}
+	ttl := uint64(0)
+	if err := binary.Read(r, binary.BigEndian, &ttl); err != nil {
+		t.Errorf("no error: %+v", err)
+	}
+	if checksum != uint32(891568578) {
+		t.Errorf("checksum %d", checksum)
+	}
+	if time.Unix(int64(ttl), 0).UTC().Equal(expiry) != true {
+		t.Errorf("expiry: expect:%s actual:%s", expiry, time.Unix(int64(ttl), 0).UTC())
+	}
+
+	k := make([]byte, keySize)
+	if _, err := r.Read(k); err != nil {
+		t.Errorf("no error: %+v", err)
+	}
+	if string(key) != string(k) {
+		t.Errorf("expect:%s actual:%s", key, k)
+	}
+	v := make([]byte, valueSize)
+	if _, err := r.Read(v); err != nil {
+		t.Errorf("no error: %+v", err)
+	}
+	if string(value) != string(v) {
+		t.Errorf("expect:%s actual:%s", value, v)
 	}
 }
 
@@ -48,7 +87,7 @@ func TestEncodeNoValue(t *testing.T) {
 	if err != nil {
 		t.Errorf("no error: %+v", err)
 	}
-	if size != int64(MetaInfoSize+len(key)) {
+	if size != headerSize+int64(len(key)) {
 		t.Errorf("size value is 0")
 	}
 
@@ -161,8 +200,8 @@ func TestEncodeIOCount(t *testing.T) {
 		if rr.c != 3 {
 			tt.Errorf("read = 3 actual=%d", rr.c)
 		}
-		if ww.c != 2 {
-			tt.Errorf("write = 2 actual=%d", ww.c)
+		if ww.c != 3 {
+			tt.Errorf("write = 3 actual=%d", ww.c)
 		}
 	})
 }

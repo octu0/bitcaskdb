@@ -586,6 +586,7 @@ func (b *Bitcask) maybeRotate() error {
 		datafile.FileID(id),
 		datafile.TempDir(b.config.TempDir),
 		datafile.CopyTempThreshold(b.config.CopyTempThreshold),
+		datafile.ValueOnMemoryThreshold(b.config.ValueOnMemoryThreshold),
 	)
 	if err != nil {
 		return err
@@ -600,6 +601,7 @@ func (b *Bitcask) maybeRotate() error {
 		datafile.FileMode(b.config.FileFileModeBeforeUmask),
 		datafile.TempDir(b.config.TempDir),
 		datafile.CopyTempThreshold(b.config.CopyTempThreshold),
+		datafile.ValueOnMemoryThreshold(b.config.ValueOnMemoryThreshold),
 	)
 	if err != nil {
 		return err
@@ -644,6 +646,7 @@ func (b *Bitcask) closeCurrentFile() error {
 		datafile.FileID(id),
 		datafile.TempDir(b.config.TempDir),
 		datafile.CopyTempThreshold(b.config.CopyTempThreshold),
+		datafile.ValueOnMemoryThreshold(b.config.ValueOnMemoryThreshold),
 	)
 	if err != nil {
 		return err
@@ -663,6 +666,7 @@ func (b *Bitcask) openNewWritableFile() error {
 		datafile.FileMode(b.config.FileFileModeBeforeUmask),
 		datafile.TempDir(b.config.TempDir),
 		datafile.CopyTempThreshold(b.config.CopyTempThreshold),
+		datafile.ValueOnMemoryThreshold(b.config.ValueOnMemoryThreshold),
 	)
 	if err != nil {
 		return err
@@ -698,6 +702,7 @@ func (b *Bitcask) reopen() error {
 		datafile.FileMode(b.config.FileFileModeBeforeUmask),
 		datafile.TempDir(b.config.TempDir),
 		datafile.CopyTempThreshold(b.config.CopyTempThreshold),
+		datafile.ValueOnMemoryThreshold(b.config.ValueOnMemoryThreshold),
 	)
 	if err != nil {
 		return err
@@ -721,13 +726,14 @@ func (b *Bitcask) Merge() error {
 		return ErrMergeInProgress
 	}
 	b.isMerging = true
+
 	b.mu.Unlock()
 	defer func() {
 		b.isMerging = false
 	}()
 	b.mu.RLock()
-	err := b.closeCurrentFile()
-	if err != nil {
+
+	if err := b.closeCurrentFile(); err != nil {
 		b.mu.RUnlock()
 		return err
 	}
@@ -735,12 +741,12 @@ func (b *Bitcask) Merge() error {
 	for id, _ := range b.datafiles {
 		filesToMerge = append(filesToMerge, id)
 	}
-	err = b.openNewWritableFile()
-	if err != nil {
+	if err := b.openNewWritableFile(); err != nil {
 		b.mu.RUnlock()
 		return err
 	}
 	b.mu.RUnlock()
+
 	sort.Slice(filesToMerge, func(i, j int) bool {
 		return filesToMerge[i] < filesToMerge[j]
 	})
@@ -761,7 +767,7 @@ func (b *Bitcask) Merge() error {
 	// Rewrite all key/value pairs into merged database
 	// Doing this automatically strips deleted keys and
 	// old key/value pairs
-	err = b.Fold(func(key []byte) error {
+	if err := b.Fold(func(key []byte) error {
 		filer, _ := b.trie.Search(key)
 		// if key was updated after start of merge operation, nothing to do
 		if filesToMerge[len(filesToMerge)-1] < filer.(indexer.Filer).FileID {
@@ -784,17 +790,20 @@ func (b *Bitcask) Merge() error {
 		}
 
 		return nil
-	})
-	if err != nil {
+	}); err != nil {
 		return err
 	}
-	if err = mdb.Close(); err != nil {
+	if err := mdb.Sync(); err != nil {
+		return err
+	}
+	if err := mdb.Close(); err != nil {
 		return err
 	}
 	// no reads and writes till we reopen
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if err = b.close(); err != nil {
+
+	if err := b.close(); err != nil {
 		return err
 	}
 
@@ -916,6 +925,7 @@ func loadDatafiles(ctx *context.Context, config *Config, path string) (map[int32
 			datafile.FileID(id),
 			datafile.TempDir(config.TempDir),
 			datafile.CopyTempThreshold(config.CopyTempThreshold),
+			datafile.ValueOnMemoryThreshold(config.ValueOnMemoryThreshold),
 		)
 		if err != nil {
 			return nil, 0, err

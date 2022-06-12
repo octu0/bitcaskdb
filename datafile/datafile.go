@@ -153,7 +153,7 @@ func (df *datafile) ReadAt(index, size int64) (*Entry, error) {
 	}
 
 	r := bytes.NewReader(buf[:size])
-	d := codec.NewDecoder(df.opt.ctx, r)
+	d := codec.NewDecoder(df.opt.ctx, r, df.opt.valueOnMemoryThreshold)
 	defer d.Close()
 
 	p, err := d.Decode()
@@ -246,7 +246,7 @@ func open(funcs ...datafileOptFunc) (*datafile, error) {
 
 	offset := stat.Size()
 
-	dec := codec.NewDecoder(opt.ctx, r)
+	dec := codec.NewDecoder(opt.ctx, r, opt.valueOnMemoryThreshold)
 	enc := codec.NewEncoder(opt.ctx, w, opt.tempDir, opt.copyTempThreshold)
 
 	return &datafile{

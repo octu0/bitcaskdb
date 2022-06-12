@@ -63,7 +63,7 @@ func recoverDatafile(ctx *context.Context, path string, cfg *Config) (recovered 
 		}
 	}()
 
-	dec := codec.NewDecoder(ctx, f)
+	dec := codec.NewDecoder(ctx, f, cfg.ValueOnMemoryThreshold)
 	defer dec.Close()
 
 	enc := codec.NewEncoder(ctx, fr, cfg.TempDir, cfg.CopyTempThreshold)
