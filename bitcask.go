@@ -491,6 +491,7 @@ func (b *Bitcask) Keys() chan []byte {
 func (b *Bitcask) RunGC() error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+
 	return b.runGC()
 }
 
@@ -559,7 +560,7 @@ func (b *Bitcask) get(key []byte) (*datafile.Entry, error) {
 	}
 
 	if b.config.ValidateChecksum {
-		if err := e.Validate(); err != nil {
+		if err := e.Validate(b.ctx); err != nil {
 			return nil, err
 		}
 	}
@@ -573,8 +574,7 @@ func (b *Bitcask) maybeRotate() error {
 		return nil
 	}
 
-	err := b.curr.Close()
-	if err != nil {
+	if err := b.curr.Close(); err != nil {
 		return err
 	}
 
@@ -839,11 +839,10 @@ func (b *Bitcask) Merge() error {
 		if file.Name() == lockfile {
 			continue
 		}
-		err := os.Rename(
+		if err := os.Rename(
 			path.Join([]string{mdb.path, file.Name()}...),
 			path.Join([]string{b.path, file.Name()}...),
-		)
-		if err != nil {
+		); err != nil {
 			return err
 		}
 	}
@@ -900,7 +899,7 @@ func (b *Bitcask) Reclaimable() int64 {
 // it returns false if key does not exist in ttl index
 func (b *Bitcask) isExpired(key []byte) bool {
 	expiry, found := b.ttlIndex.Search(key)
-	if !found {
+	if found != true {
 		return false
 	}
 	return expiry.(time.Time).Before(time.Now().UTC())
