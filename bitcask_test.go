@@ -1953,6 +1953,7 @@ func TestRange(t *testing.T) {
 			assert.NoError(err)
 			defer val.Close()
 			data, err := io.ReadAll(val)
+			assert.NoError(err)
 			vals = append(vals, data)
 			return nil
 		})
