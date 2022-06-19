@@ -9,7 +9,7 @@ import (
 
 	art "github.com/plar/go-adaptive-radix-tree"
 
-	"github.com/octu0/bitcaskdb/context"
+	"github.com/octu0/bitcaskdb/runtime"
 )
 
 func TestTTLIndexer(t *testing.T) {
@@ -23,7 +23,7 @@ func TestTTLIndexer(t *testing.T) {
 	trie := art.New()
 
 	t.Run("LoadEmpty", func(tt *testing.T) {
-		newTrie, found, err := NewTTLIndexer(context.Default()).Load(filepath.Join(tempDir, "ttl_index"))
+		newTrie, found, err := NewTTLIndexer(runtime.DefaultContext()).Load(filepath.Join(tempDir, "ttl_index"))
 		if err != nil {
 			tt.Fatalf("no error: %+v", err)
 		}
@@ -37,21 +37,21 @@ func TestTTLIndexer(t *testing.T) {
 
 	t.Run("Save", func(tt *testing.T) {
 		trie.Insert([]byte("key"), currTime)
-		if err := NewTTLIndexer(context.Default()).Save(trie, filepath.Join(tempDir, "ttl_index")); err != nil {
+		if err := NewTTLIndexer(runtime.DefaultContext()).Save(trie, filepath.Join(tempDir, "ttl_index")); err != nil {
 			tt.Errorf("no error: %+v", err)
 		}
 		trie.Insert([]byte("foo"), currTime.Add(24*time.Hour))
-		if err := NewTTLIndexer(context.Default()).Save(trie, filepath.Join(tempDir, "ttl_index")); err != nil {
+		if err := NewTTLIndexer(runtime.DefaultContext()).Save(trie, filepath.Join(tempDir, "ttl_index")); err != nil {
 			tt.Errorf("no error: %+v", err)
 		}
 		trie.Insert([]byte("key"), currTime.Add(-24*time.Hour))
-		if err := NewTTLIndexer(context.Default()).Save(trie, filepath.Join(tempDir, "ttl_index")); err != nil {
+		if err := NewTTLIndexer(runtime.DefaultContext()).Save(trie, filepath.Join(tempDir, "ttl_index")); err != nil {
 			tt.Errorf("no error: %+v", err)
 		}
 	})
 
 	t.Run("Load", func(tt *testing.T) {
-		newTrie, found, err := NewTTLIndexer(context.Default()).Load(filepath.Join(tempDir, "ttl_index"))
+		newTrie, found, err := NewTTLIndexer(runtime.DefaultContext()).Load(filepath.Join(tempDir, "ttl_index"))
 		if err != nil {
 			tt.Errorf("no error: %+v", err)
 		}

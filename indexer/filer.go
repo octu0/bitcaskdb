@@ -6,12 +6,12 @@ import (
 	"github.com/pkg/errors"
 	art "github.com/plar/go-adaptive-radix-tree"
 
-	"github.com/octu0/bitcaskdb/context"
+	"github.com/octu0/bitcaskdb/runtime"
 	"github.com/octu0/bitcaskdb/util"
 )
 
 type filerIndex struct {
-	ctx *context.Context
+	ctx runtime.Context
 }
 
 func (i *filerIndex) Load(path string) (art.Tree, bool, error) {
@@ -55,6 +55,6 @@ func (i *filerIndex) Save(t art.Tree, path string) error {
 	return nil
 }
 
-func NewFilerIndexer(ctx *context.Context) *filerIndex {
+func NewFilerIndexer(ctx runtime.Context) *filerIndex {
 	return &filerIndex{ctx}
 }

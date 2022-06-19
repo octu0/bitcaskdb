@@ -2,9 +2,7 @@ package bitcaskdb
 
 import (
 	"bytes"
-	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -17,9 +15,10 @@ import (
 	"github.com/pkg/errors"
 	art "github.com/plar/go-adaptive-radix-tree"
 
-	"github.com/octu0/bitcaskdb/context"
 	"github.com/octu0/bitcaskdb/datafile"
 	"github.com/octu0/bitcaskdb/indexer"
+	"github.com/octu0/bitcaskdb/repli"
+	"github.com/octu0/bitcaskdb/runtime"
 	"github.com/octu0/bitcaskdb/util"
 )
 
@@ -47,7 +46,7 @@ type metadata struct {
 // in the Riak database.
 type Bitcask struct {
 	mu         *sync.RWMutex
-	ctx        *context.Context
+	ctx        runtime.Context
 	flock      *flock.Flock
 	config     *Config
 	path       string
@@ -58,6 +57,8 @@ type Bitcask struct {
 	ttlIndexer indexer.Indexer
 	ttlIndex   art.Tree
 	metadata   *metadata
+	repliEmit  repli.Emitter
+	repliRecv  repli.Reciver
 	isMerging  bool
 }
 
@@ -86,22 +87,29 @@ func (b *Bitcask) Close() error {
 		b.flock.Unlock()
 	}()
 
+	if err := b.repliEmit.Stop(); err != nil {
+		return errors.WithStack(err)
+	}
+	if err := b.repliRecv.Stop(); err != nil {
+		return errors.WithStack(err)
+	}
+
 	return b.close()
 }
 
 func (b *Bitcask) close() error {
 	if err := b.saveIndexes(); err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
 	b.metadata.IndexUpToDate = true
 	if err := b.saveMetadata(); err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
 	for _, df := range b.datafiles {
 		if err := df.Close(); err != nil {
-			return err
+			return errors.WithStack(err)
 		}
 	}
 
@@ -148,34 +156,7 @@ func (b *Bitcask) Put(key []byte, value io.Reader) error {
 		return ErrEmptyKey
 	}
 
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	index, size, err := b.put(key, value)
-	if err != nil {
-		return err
-	}
-
-	if b.config.Sync {
-		if err := b.curr.Sync(); err != nil {
-			return err
-		}
-	}
-
-	// in case of successful `put`, IndexUpToDate will be always be false
-	b.metadata.IndexUpToDate = false
-
-	if oldFiler, found := b.trie.Search(key); found {
-		b.metadata.ReclaimableSpace += oldFiler.(indexer.Filer).Size
-	}
-
-	b.trie.Insert(key, indexer.Filer{
-		FileID: b.curr.FileID(),
-		Index:  index,
-		Size:   size,
-	})
-
-	return nil
+	return b.putAndIndex(key, value, time.Time{})
 }
 
 func (b *Bitcask) PutBytes(key, value []byte) error {
@@ -191,12 +172,21 @@ func (b *Bitcask) PutWithTTL(key []byte, value io.Reader, ttl time.Duration) err
 		return ErrEmptyKey
 	}
 
-	expiry := time.Now().Add(ttl)
+	return b.putAndIndex(key, value, time.Now().Add(ttl))
+}
 
+func (b *Bitcask) PutBytesWithTTL(key, value []byte, ttl time.Duration) error {
+	if value == nil {
+		return b.PutWithTTL(key, nil, ttl)
+	}
+	return b.PutWithTTL(key, bytes.NewReader(value), ttl)
+}
+
+func (b *Bitcask) putAndIndex(key []byte, value io.Reader, expiry time.Time) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	index, size, err := b.putWithExpiry(key, value, expiry)
+	index, size, err := b.put(key, value, expiry)
 	if err != nil {
 		return err
 	}
@@ -214,21 +204,17 @@ func (b *Bitcask) PutWithTTL(key []byte, value io.Reader, ttl time.Duration) err
 		b.metadata.ReclaimableSpace += oldFiler.(indexer.Filer).Size
 	}
 
-	b.trie.Insert(key, indexer.Filer{
+	f := indexer.Filer{
 		FileID: b.curr.FileID(),
 		Index:  index,
 		Size:   size,
-	})
-	b.ttlIndex.Insert(key, expiry)
-
-	return nil
-}
-
-func (b *Bitcask) PutBytesWithTTL(key, value []byte, ttl time.Duration) error {
-	if value == nil {
-		return b.PutWithTTL(key, nil, ttl)
 	}
-	return b.PutWithTTL(key, bytes.NewReader(value), ttl)
+	b.trie.Insert(key, f)
+	if expiry.IsZero() != true {
+		b.ttlIndex.Insert(key, expiry)
+	}
+	b.repliEmit.EmitInsert(f)
+	return nil
 }
 
 // Delete deletes the named key.
@@ -242,15 +228,21 @@ func (b *Bitcask) Delete(key []byte) error {
 // delete deletes the named key. If the key doesn't exist or an I/O error
 // occurs the error is returned.
 func (b *Bitcask) delete(key []byte) error {
-	_, _, err := b.put(key, nil)
+	_, _, err := b.put(key, nil, time.Time{})
 	if err != nil {
 		return err
 	}
-	if filer, found := b.trie.Search(key); found {
-		b.metadata.ReclaimableSpace += filer.(indexer.Filer).Size
+	v, found := b.trie.Search(key)
+	if found {
+		f := v.(indexer.Filer)
+		b.metadata.ReclaimableSpace += f.Size
 	}
+
 	b.trie.Delete(key)
 	b.ttlIndex.Delete(key)
+
+	// remove current
+	b.repliEmit.EmitDelete(key)
 
 	return nil
 }
@@ -297,7 +289,7 @@ func (b *Bitcask) DeleteAll() (err error) {
 	defer b.mu.RUnlock()
 
 	b.trie.ForEach(func(node art.Node) bool {
-		_, _, err = b.put(node.Key(), nil)
+		_, _, err = b.put(node.Key(), nil, time.Time{})
 		if err != nil {
 			return false
 		}
@@ -581,7 +573,7 @@ func (b *Bitcask) maybeRotate() error {
 	id := b.curr.FileID()
 
 	df, err := datafile.OpenReadonly(
-		datafile.Context(b.ctx),
+		datafile.RuntimeContext(b.ctx),
 		datafile.Path(b.path),
 		datafile.FileID(id),
 		datafile.TempDir(b.config.TempDir),
@@ -595,7 +587,7 @@ func (b *Bitcask) maybeRotate() error {
 	b.datafiles[id] = df
 
 	curr, err := datafile.Open(
-		datafile.Context(b.ctx),
+		datafile.RuntimeContext(b.ctx),
 		datafile.Path(b.path),
 		datafile.FileID(b.curr.FileID()+1),
 		datafile.FileMode(b.config.FileFileModeBeforeUmask),
@@ -615,17 +607,7 @@ func (b *Bitcask) maybeRotate() error {
 }
 
 // put inserts a new (key, value). Both key and value are valid inputs.
-func (b *Bitcask) put(key []byte, value io.Reader) (int64, int64, error) {
-	if err := b.maybeRotate(); err != nil {
-		return -1, 0, errors.Wrap(err, "error rotating active datafile")
-	}
-
-	return b.curr.Write(key, value, time.Time{})
-}
-
-// putWithExpiry inserts a new (key, value, expiry).
-// Both key and value are valid inputs.
-func (b *Bitcask) putWithExpiry(key []byte, value io.Reader, expiry time.Time) (int64, int64, error) {
+func (b *Bitcask) put(key []byte, value io.Reader, expiry time.Time) (int64, int64, error) {
 	if err := b.maybeRotate(); err != nil {
 		return -1, 0, errors.Wrap(err, "error rotating active datafile")
 	}
@@ -641,7 +623,7 @@ func (b *Bitcask) closeCurrentFile() error {
 
 	id := b.curr.FileID()
 	df, err := datafile.OpenReadonly(
-		datafile.Context(b.ctx),
+		datafile.RuntimeContext(b.ctx),
 		datafile.Path(b.path),
 		datafile.FileID(id),
 		datafile.TempDir(b.config.TempDir),
@@ -660,7 +642,7 @@ func (b *Bitcask) closeCurrentFile() error {
 func (b *Bitcask) openNewWritableFile() error {
 	id := b.curr.FileID() + 1
 	curr, err := datafile.Open(
-		datafile.Context(b.ctx),
+		datafile.RuntimeContext(b.ctx),
 		datafile.Path(b.path),
 		datafile.FileID(id),
 		datafile.FileMode(b.config.FileFileModeBeforeUmask),
@@ -696,7 +678,7 @@ func (b *Bitcask) reopen() error {
 	}
 
 	curr, err := datafile.Open(
-		datafile.Context(b.ctx),
+		datafile.RuntimeContext(b.ctx),
 		datafile.Path(b.path),
 		datafile.FileID(lastID),
 		datafile.FileMode(b.config.FileFileModeBeforeUmask),
@@ -752,18 +734,17 @@ func (b *Bitcask) Merge() error {
 	})
 
 	// Temporary merged database path
-	temp, err := ioutil.TempDir(b.path, "merge")
+	temp, err := os.MkdirTemp(b.path, "merge")
 	if err != nil {
 		return err
 	}
 	defer os.RemoveAll(temp)
 
 	// Create a merged database
-	mdb, err := Open(temp, withConfig(b.config))
+	mdb, err := Open(temp, withMerge(b.config))
 	if err != nil {
 		return err
 	}
-
 	// Rewrite all key/value pairs into merged database
 	// Doing this automatically strips deleted keys and
 	// old key/value pairs
@@ -808,7 +789,7 @@ func (b *Bitcask) Merge() error {
 	}
 
 	// Remove data files
-	files, err := ioutil.ReadDir(b.path)
+	files, err := os.ReadDir(b.path)
 	if err != nil {
 		return err
 	}
@@ -830,7 +811,7 @@ func (b *Bitcask) Merge() error {
 	}
 
 	// Rename all merged data files
-	files, err = ioutil.ReadDir(mdb.path)
+	files, err = os.ReadDir(mdb.path)
 	if err != nil {
 		return err
 	}
@@ -850,17 +831,6 @@ func (b *Bitcask) Merge() error {
 
 	// And finally reopen the database
 	return b.reopen()
-}
-
-// Backup copies db directory to given path
-// it creates path if it does not exist
-func (b *Bitcask) Backup(path string) error {
-	if util.Exists(path) != true {
-		if err := os.MkdirAll(path, b.config.DirFileModeBeforeUmask); err != nil {
-			return err
-		}
-	}
-	return util.CopyFiles(path, b.path, []string{lockfile})
 }
 
 // saveIndex saves index and ttl_index currently in RAM to disk
@@ -905,7 +875,15 @@ func (b *Bitcask) isExpired(key []byte) bool {
 	return expiry.(time.Time).Before(time.Now().UTC())
 }
 
-func loadDatafiles(ctx *context.Context, config *Config, path string) (map[int32]datafile.Datafile, int32, error) {
+func (b *Bitcask) repliSource() repli.Source {
+	return newRepliSource(b)
+}
+
+func (b *Bitcask) repliDestination() repli.Destination {
+	return newRepliDestination(b)
+}
+
+func loadDatafiles(ctx runtime.Context, config *Config, path string) (map[int32]datafile.Datafile, int32, error) {
 	fns, err := util.GetDatafiles(path)
 	if err != nil {
 		return nil, 0, err
@@ -919,7 +897,7 @@ func loadDatafiles(ctx *context.Context, config *Config, path string) (map[int32
 	datafiles := make(map[int32]datafile.Datafile, len(ids))
 	for _, id := range ids {
 		d, err := datafile.OpenReadonly(
-			datafile.Context(ctx),
+			datafile.RuntimeContext(ctx),
 			datafile.Path(path),
 			datafile.FileID(id),
 			datafile.TempDir(config.TempDir),
@@ -1034,6 +1012,20 @@ func checkVersion(cfg *Config, configPath string) error {
 	return nil
 }
 
+func createRepliEmitter(ctx runtime.Context, cfg *Config) repli.Emitter {
+	if cfg.NoRepliEmit {
+		return repli.NewNoopEmitter()
+	}
+	return repli.NewStreamEmitter(ctx, cfg.Logger, cfg.TempDir, int32(cfg.CopyTempThreshold))
+}
+
+func createRepliReciver(ctx runtime.Context, cfg *Config) repli.Reciver {
+	if cfg.NoRepliRecv {
+		return repli.NewNoopReciver()
+	}
+	return repli.NewStreamReciver(ctx, cfg.Logger, cfg.TempDir, cfg.RepliRequestTimeout)
+}
+
 // Open opens the database at the given path with optional options.
 // Options can be provided with the `WithXXX` functions that provide
 // configuration options as functions.
@@ -1069,7 +1061,9 @@ func Open(path string, options ...Option) (*Bitcask, error) {
 		return nil, &ErrBadMetadata{err}
 	}
 
-	ctx := context.Default()
+	ctx := runtime.DefaultContext()
+	repliEmitter := createRepliEmitter(ctx, cfg)
+	repliReciver := createRepliReciver(ctx, cfg)
 	bitcask := &Bitcask{
 		mu:         new(sync.RWMutex),
 		ctx:        ctx,
@@ -1079,13 +1073,18 @@ func Open(path string, options ...Option) (*Bitcask, error) {
 		indexer:    indexer.NewFilerIndexer(ctx),
 		ttlIndexer: indexer.NewTTLIndexer(ctx),
 		metadata:   meta,
+		repliEmit:  repliEmitter,
+		repliRecv:  repliReciver,
+	}
+
+	if err := repliEmitter.Start(bitcask.repliSource(), cfg.RepliBindIP, cfg.RepliBindPort); err != nil {
+		return nil, errors.WithStack(err)
 	}
 
 	ok, err := bitcask.flock.TryLock()
 	if err != nil {
 		return nil, err
 	}
-
 	if ok != true {
 		return nil, ErrDatabaseLocked
 	}
@@ -1098,5 +1097,8 @@ func Open(path string, options ...Option) (*Bitcask, error) {
 		return nil, err
 	}
 
+	if err := repliReciver.Start(bitcask.repliDestination(), cfg.RepliServerIP, cfg.RepliServerPort); err != nil {
+		return nil, errors.WithStack(err)
+	}
 	return bitcask, nil
 }

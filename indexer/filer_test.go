@@ -8,7 +8,7 @@ import (
 
 	art "github.com/plar/go-adaptive-radix-tree"
 
-	"github.com/octu0/bitcaskdb/context"
+	"github.com/octu0/bitcaskdb/runtime"
 )
 
 func TestFilerIndexer(t *testing.T) {
@@ -21,7 +21,7 @@ func TestFilerIndexer(t *testing.T) {
 	trie := art.New()
 
 	t.Run("LoadEmpty", func(tt *testing.T) {
-		newTrie, found, err := NewFilerIndexer(context.Default()).Load(filepath.Join(tempDir, "filer_index"))
+		newTrie, found, err := NewFilerIndexer(runtime.DefaultContext()).Load(filepath.Join(tempDir, "filer_index"))
 		if err != nil {
 			tt.Fatalf("no error: %+v", err)
 		}
@@ -35,21 +35,21 @@ func TestFilerIndexer(t *testing.T) {
 
 	t.Run("Save", func(tt *testing.T) {
 		trie.Insert([]byte("key"), Filer{0, 0, 20})
-		if err := NewFilerIndexer(context.Default()).Save(trie, filepath.Join(tempDir, "filer_index")); err != nil {
+		if err := NewFilerIndexer(runtime.DefaultContext()).Save(trie, filepath.Join(tempDir, "filer_index")); err != nil {
 			tt.Errorf("no error: %+v", err)
 		}
 		trie.Insert([]byte("foo"), Filer{1, 8, 15})
-		if err := NewFilerIndexer(context.Default()).Save(trie, filepath.Join(tempDir, "filer_index")); err != nil {
+		if err := NewFilerIndexer(runtime.DefaultContext()).Save(trie, filepath.Join(tempDir, "filer_index")); err != nil {
 			tt.Errorf("no error: %+v", err)
 		}
 		trie.Insert([]byte("key"), Filer{0, 24, 30})
-		if err := NewFilerIndexer(context.Default()).Save(trie, filepath.Join(tempDir, "filer_index")); err != nil {
+		if err := NewFilerIndexer(runtime.DefaultContext()).Save(trie, filepath.Join(tempDir, "filer_index")); err != nil {
 			tt.Errorf("no error: %+v", err)
 		}
 	})
 
 	t.Run("Load", func(tt *testing.T) {
-		newTrie, found, err := NewFilerIndexer(context.Default()).Load(filepath.Join(tempDir, "filer_index"))
+		newTrie, found, err := NewFilerIndexer(runtime.DefaultContext()).Load(filepath.Join(tempDir, "filer_index"))
 		if err != nil {
 			tt.Errorf("no error: %+v", err)
 		}

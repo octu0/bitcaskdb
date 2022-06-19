@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/octu0/bitcaskdb/context"
+	"github.com/octu0/bitcaskdb/runtime"
 )
 
 func TestTemporaryData(t *testing.T) {
 	t.Run("default_out_emory", func(tt *testing.T) {
 		data := []byte("hello world")
-		temp := newTemopraryData(context.Default(), "", 0)
+		temp := newTemopraryData(runtime.DefaultContext(), "", 0)
 		temp.Write(data)
 
 		out := bytes.NewBuffer(nil)
@@ -28,7 +28,7 @@ func TestTemporaryData(t *testing.T) {
 	})
 	t.Run("memory", func(tt *testing.T) {
 		data := []byte("hello world")
-		temp := newTemopraryData(context.Default(), "", int64(len(data)))
+		temp := newTemopraryData(runtime.DefaultContext(), "", int64(len(data)))
 		temp.Write(data)
 
 		out := bytes.NewBuffer(nil)
@@ -46,7 +46,7 @@ func TestTemporaryData(t *testing.T) {
 	})
 	t.Run("swap_tempfile", func(tt *testing.T) {
 		data := []byte("hello world")
-		temp := newTemopraryData(context.Default(), "", 1)
+		temp := newTemopraryData(runtime.DefaultContext(), "", 1)
 		temp.Write(data)
 
 		out := bytes.NewBuffer(nil)

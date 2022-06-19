@@ -8,7 +8,7 @@ import (
 	"github.com/pkg/errors"
 	art "github.com/plar/go-adaptive-radix-tree"
 
-	"github.com/octu0/bitcaskdb/context"
+	"github.com/octu0/bitcaskdb/runtime"
 )
 
 // Filer represents the location of the value on disk. This is used by the
@@ -20,7 +20,7 @@ type Filer struct {
 	Size   int64 `json:"size"`
 }
 
-func readKeyBytes(ctx *context.Context, r io.Reader) ([]byte, func(), error) {
+func readKeyBytes(ctx runtime.Context, r io.Reader) ([]byte, func(), error) {
 	pool := ctx.Buffer().BytePool()
 
 	size := uint32(0)
@@ -45,7 +45,7 @@ func readKeyBytes(ctx *context.Context, r io.Reader) ([]byte, func(), error) {
 	return key[:size], releaseFn, nil
 }
 
-func writeBytes(ctx *context.Context, w io.Writer, b []byte) error {
+func writeBytes(ctx runtime.Context, w io.Writer, b []byte) error {
 	if err := binary.Write(w, binary.BigEndian, uint32(len(b))); err != nil {
 		return errors.Wrap(err, "failed writing key prefix")
 	}
@@ -115,7 +115,7 @@ func writeTTL(w io.Writer, expiry time.Time) error {
 }
 
 // ReadIndex reads a persisted from a io.Reader into a Tree
-func readFilerIndex(ctx *context.Context, r io.Reader, t art.Tree) error {
+func readFilerIndex(ctx runtime.Context, r io.Reader, t art.Tree) error {
 	pool := ctx.Buffer().BufioReaderPool()
 	bfr := pool.Get(r)
 	defer pool.Put(bfr)
@@ -140,7 +140,7 @@ func readFilerIndex(ctx *context.Context, r io.Reader, t art.Tree) error {
 	return nil
 }
 
-func writeFilerIndex(ctx *context.Context, w io.Writer, t art.Tree) (lastErr error) {
+func writeFilerIndex(ctx runtime.Context, w io.Writer, t art.Tree) (lastErr error) {
 	pool := ctx.Buffer().BufioWriterPool()
 	bfw := pool.Get(w)
 	defer pool.Put(bfw)
@@ -167,7 +167,7 @@ func writeFilerIndex(ctx *context.Context, w io.Writer, t art.Tree) (lastErr err
 	return nil
 }
 
-func readTTLIndex(ctx *context.Context, r io.Reader, t art.Tree) error {
+func readTTLIndex(ctx runtime.Context, r io.Reader, t art.Tree) error {
 	pool := ctx.Buffer().BufioReaderPool()
 	bfr := pool.Get(r)
 	defer pool.Put(bfr)
@@ -192,7 +192,7 @@ func readTTLIndex(ctx *context.Context, r io.Reader, t art.Tree) error {
 	return nil
 }
 
-func writeTTLIndex(ctx *context.Context, w io.Writer, t art.Tree) (lastErr error) {
+func writeTTLIndex(ctx runtime.Context, w io.Writer, t art.Tree) (lastErr error) {
 	pool := ctx.Buffer().BufioWriterPool()
 	bfw := pool.Get(w)
 	defer pool.Put(bfw)

@@ -1,14 +1,26 @@
-package context
+package runtime
 
 import (
 	"github.com/octu0/bp"
+)
+
+var (
+	_ Buffer = (*defaultBuffer)(nil)
 )
 
 const (
 	defaultBufferSize int = 128 * 1024
 )
 
-type Buffer struct {
+type Buffer interface {
+	BufferSize() int
+	BytePool() *bp.BytePool
+	BufferPool() *bp.BufferPool
+	BufioReaderPool() *bp.BufioReaderPool
+	BufioWriterPool() *bp.BufioWriterPool
+}
+
+type defaultBuffer struct {
 	bufferSize      int
 	bytePool        *bp.BytePool
 	bufferPool      *bp.BufferPool
@@ -16,28 +28,28 @@ type Buffer struct {
 	bufioWriterPool *bp.BufioWriterPool
 }
 
-func (b *Buffer) BufferSize() int {
+func (b *defaultBuffer) BufferSize() int {
 	return b.bufferSize
 }
 
-func (b *Buffer) BytePool() *bp.BytePool {
+func (b *defaultBuffer) BytePool() *bp.BytePool {
 	return b.bytePool
 }
 
-func (b *Buffer) BufferPool() *bp.BufferPool {
+func (b *defaultBuffer) BufferPool() *bp.BufferPool {
 	return b.bufferPool
 }
 
-func (b *Buffer) BufioReaderPool() *bp.BufioReaderPool {
+func (b *defaultBuffer) BufioReaderPool() *bp.BufioReaderPool {
 	return b.bufioReaderPool
 }
 
-func (b *Buffer) BufioWriterPool() *bp.BufioWriterPool {
+func (b *defaultBuffer) BufioWriterPool() *bp.BufioWriterPool {
 	return b.bufioWriterPool
 }
 
-func createDefaultBuffer() *Buffer {
-	return &Buffer{
+func createDefaultBuffer() *defaultBuffer {
+	return &defaultBuffer{
 		bufferSize:      defaultBufferSize,
 		bytePool:        bp.NewBytePool(1000, defaultBufferSize),
 		bufferPool:      bp.NewBufferPool(1000, defaultBufferSize),

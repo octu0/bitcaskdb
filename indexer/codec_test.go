@@ -10,7 +10,7 @@ import (
 	"github.com/pkg/errors"
 	art "github.com/plar/go-adaptive-radix-tree"
 
-	"github.com/octu0/bitcaskdb/context"
+	"github.com/octu0/bitcaskdb/runtime"
 )
 
 const (
@@ -19,7 +19,7 @@ const (
 )
 
 func TestWriteFilerIndex(t *testing.T) {
-	ctx := context.Default()
+	ctx := runtime.DefaultContext()
 	at, expectedSerializedSize := getFilterTree()
 
 	out := bytes.NewBuffer(nil)
@@ -37,7 +37,7 @@ func TestWriteFilerIndex(t *testing.T) {
 }
 
 func TestWriteTTLIndex(t *testing.T) {
-	ctx := context.Default()
+	ctx := runtime.DefaultContext()
 	at, expectedSerializedSize := getTTLTree()
 
 	out := bytes.NewBuffer(nil)
@@ -55,7 +55,7 @@ func TestWriteTTLIndex(t *testing.T) {
 }
 
 func TestReadFilerIndex(t *testing.T) {
-	ctx := context.Default()
+	ctx := runtime.DefaultContext()
 	sampleTreeBytes, _ := base64.StdEncoding.DecodeString(b64Filer)
 	b := bytes.NewBuffer(sampleTreeBytes)
 
@@ -77,7 +77,7 @@ func TestReadFilerIndex(t *testing.T) {
 }
 
 func TestReadTTLIndex(t *testing.T) {
-	ctx := context.Default()
+	ctx := runtime.DefaultContext()
 	sampleTreeBytes, _ := base64.StdEncoding.DecodeString(b64TTL)
 	b := bytes.NewBuffer(sampleTreeBytes)
 
@@ -99,7 +99,7 @@ func TestReadTTLIndex(t *testing.T) {
 }
 
 func TestFilerReadCorruptedData(t *testing.T) {
-	ctx := context.Default()
+	ctx := runtime.DefaultContext()
 	t.Run("keysize/0", func(tt *testing.T) {
 		b := bytes.NewBuffer(nil)
 		if err := binary.Write(b, binary.BigEndian, uint32(0)); err != nil {
@@ -145,7 +145,7 @@ func TestFilerReadCorruptedData(t *testing.T) {
 }
 
 func TestTTLReadCorruptedData(t *testing.T) {
-	ctx := context.Default()
+	ctx := runtime.DefaultContext()
 	t.Run("keysize/0", func(tt *testing.T) {
 		b := bytes.NewBuffer(nil)
 		if err := binary.Write(b, binary.BigEndian, uint32(0)); err != nil {

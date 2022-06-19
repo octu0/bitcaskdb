@@ -9,7 +9,7 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/octu0/bitcaskdb/context"
+	"github.com/octu0/bitcaskdb/runtime"
 )
 
 type ReaderAtSeeker interface {
@@ -20,7 +20,7 @@ type ReaderAtSeeker interface {
 // Decoder wraps an underlying io.Reader and allows you to stream
 // Entry decodings on it.
 type Decoder struct {
-	ctx           *context.Context
+	ctx           runtime.Context
 	m             *sync.RWMutex
 	r             ReaderAtSeeker
 	valueOnMemory int64
@@ -35,17 +35,16 @@ func (d *Decoder) Close() {
 	d.closed = true
 }
 
-// Decode decodes the next Entry from the current stream
-func (d *Decoder) Decode() (*Payload, error) {
+func (d *Decoder) DecodeHeader() (*Header, error) {
 	bytePool := d.ctx.Buffer().BytePool()
 	head := bytePool.Get()
 	defer bytePool.Put(head)
 
-	if _, err := d.r.ReadAt(head[:headerSize], d.offset); err != nil {
+	if _, err := d.r.ReadAt(head[:HeaderSize], d.offset); err != nil {
 		return nil, errors.Wrap(err, "failed reading head")
 	}
 
-	h := bytes.NewReader(head[:headerSize])
+	h := bytes.NewReader(head[:HeaderSize])
 
 	keySize := uint32(0)
 	if err := binary.Read(h, binary.BigEndian, &keySize); err != nil {
@@ -71,32 +70,45 @@ func (d *Decoder) Decode() (*Payload, error) {
 	if 0 < ttl {
 		expiry = time.Unix(int64(ttl), 0).UTC()
 	}
+	return &Header{
+		KeySize:   int32(keySize),
+		ValueSize: int64(valueSize),
+		Checksum:  checksum,
+		Expiry:    expiry,
+		N:         HeaderSize + int64(keySize) + int64(valueSize),
+	}, nil
+}
+
+// Decode decodes the next Entry from the current stream
+func (d *Decoder) Decode() (*Payload, error) {
+	bytePool := d.ctx.Buffer().BytePool()
+	header, err := d.DecodeHeader()
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
 
 	key := bytePool.Get()
-	if uint32(cap(key)) < keySize {
+	if int32(cap(key)) < header.KeySize {
 		bytePool.Put(key)
-		key = make([]byte, keySize)
+		key = make([]byte, header.KeySize)
 	}
-	if _, err := d.r.ReadAt(key[:keySize], d.offset+headerSize); err != nil {
-		return nil, errors.Wrapf(err, "failed reading key data size=%d", keySize)
+	if _, err := d.r.ReadAt(key[:header.KeySize], d.offset+HeaderSize); err != nil {
+		return nil, errors.Wrapf(err, "failed reading key data size=%d", header.KeySize)
 	}
 
-	k := int64(keySize)
-	v := int64(valueSize)
-
-	valueReader, done := d.createValueReader(k, v)
+	valueReader, done := d.createValueReader(header.KeySize, header.ValueSize)
 
 	releaseFn := func() {
 		bytePool.Put(key)
 		done()
 	}
 	p := &Payload{
-		Key:       key[:keySize],
+		Key:       key[:header.KeySize],
 		Value:     valueReader,
-		Checksum:  checksum,
-		Expiry:    expiry,
-		N:         headerSize + k + v,
-		ValueSize: v,
+		Checksum:  header.Checksum,
+		Expiry:    header.Expiry,
+		N:         header.N,
+		ValueSize: header.ValueSize,
 		release:   releaseFn,
 	}
 	p.setFinalizer()
@@ -105,15 +117,15 @@ func (d *Decoder) Decode() (*Payload, error) {
 	return p, nil
 }
 
-func (d *Decoder) createValueReader(k int64, v int64) (io.Reader, func()) {
+func (d *Decoder) createValueReader(k int32, v int64) (io.Reader, func()) {
 	if v < d.valueOnMemory {
 		return d.createBufferedValueReader(k, v)
 	}
 	return d.createDefaultValueReader(k, v)
 }
 
-func (d *Decoder) createBufferedValueReader(k int64, v int64) (io.Reader, func()) {
-	value := io.NewSectionReader(d.r, d.offset+headerSize+k, v)
+func (d *Decoder) createBufferedValueReader(k int32, v int64) (io.Reader, func()) {
+	value := io.NewSectionReader(d.r, d.offset+HeaderSize+int64(k), v)
 
 	bufferPool := d.ctx.Buffer().BufferPool()
 	buf := bufferPool.Get()
@@ -123,8 +135,8 @@ func (d *Decoder) createBufferedValueReader(k int64, v int64) (io.Reader, func()
 	}
 }
 
-func (d *Decoder) createDefaultValueReader(k int64, v int64) (io.Reader, func()) {
-	value := io.NewSectionReader(d.r, d.offset+headerSize+k, v)
+func (d *Decoder) createDefaultValueReader(k int32, v int64) (io.Reader, func()) {
+	value := io.NewSectionReader(d.r, d.offset+HeaderSize+int64(k), v)
 
 	bfrPool := d.ctx.Buffer().BufioReaderPool()
 	buffered := bfrPool.Get(value)
@@ -134,7 +146,7 @@ func (d *Decoder) createDefaultValueReader(k int64, v int64) (io.Reader, func())
 }
 
 // NewDecoder creates a streaming Entry decoder.
-func NewDecoder(ctx *context.Context, r ReaderAtSeeker, valueOnMemory int64) *Decoder {
+func NewDecoder(ctx runtime.Context, r ReaderAtSeeker, valueOnMemory int64) *Decoder {
 	if valueOnMemory < 1 {
 		valueOnMemory = int64(ctx.Buffer().BufferSize())
 	}

@@ -3,15 +3,23 @@ package datafile
 import (
 	"hash/crc32"
 	"io"
-	"runtime"
+	goruntime "runtime"
 	"time"
 
-	"github.com/octu0/bitcaskdb/context"
+	"github.com/octu0/bitcaskdb/runtime"
 )
 
 var (
 	_ io.ReadCloser = (*Entry)(nil)
 )
+
+type Header struct {
+	KeySize   int32
+	ValueSize int64
+	Checksum  uint32
+	Expiry    time.Time
+	TotalSize int64
+}
 
 // Entry represents a key/value in the database
 type Entry struct {
@@ -26,7 +34,7 @@ type Entry struct {
 }
 
 func (e *Entry) setFinalizer() {
-	runtime.SetFinalizer(e, finalizeEntry)
+	goruntime.SetFinalizer(e, finalizeEntry)
 }
 
 func (e *Entry) Read(p []byte) (int, error) {
@@ -36,7 +44,7 @@ func (e *Entry) Read(p []byte) (int, error) {
 func (e *Entry) Close() error {
 	if e.closed != true {
 		e.closed = true
-		runtime.SetFinalizer(e, nil) // clear finalizer
+		goruntime.SetFinalizer(e, nil) // clear finalizer
 		if e.release != nil {
 			e.release()
 		}
@@ -44,7 +52,7 @@ func (e *Entry) Close() error {
 	return nil
 }
 
-func (e *Entry) Validate(ctx *context.Context) error {
+func (e *Entry) Validate(ctx runtime.Context) error {
 	pool := ctx.Buffer().BytePool()
 	buf := pool.Get()
 	defer pool.Put(buf)
@@ -68,6 +76,6 @@ func (e *Entry) Validate(ctx *context.Context) error {
 }
 
 func finalizeEntry(e *Entry) {
-	runtime.SetFinalizer(e, nil) // clear finalizer
+	goruntime.SetFinalizer(e, nil) // clear finalizer
 	e.Close()
 }

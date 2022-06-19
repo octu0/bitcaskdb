@@ -9,7 +9,7 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/octu0/bitcaskdb/context"
+	"github.com/octu0/bitcaskdb/runtime"
 )
 
 const (
@@ -25,7 +25,7 @@ func TestDecoderShortPrefix(t *testing.T) {
 
 	truncBytesCount := int64(2)
 	buf := bytes.NewReader(prefix[:headerKeySize+headerValueSize-truncBytesCount])
-	decoder := NewDecoder(context.Default(), buf, 0)
+	decoder := NewDecoder(runtime.DefaultContext(), buf, 0)
 	defer decoder.Close()
 
 	_, err := decoder.Decode()
@@ -50,12 +50,12 @@ func TestDecoderInvalidValueKeySizes(t *testing.T) {
 		i := i
 		t.Run(tests[i].name, func(tt *testing.T) {
 			tt.Parallel()
-			prefix := make([]byte, headerSize)
+			prefix := make([]byte, HeaderSize)
 			binary.BigEndian.PutUint32(prefix[:headerKeySize], tests[i].keySize)
 			binary.BigEndian.PutUint64(prefix[headerKeySize:headerKeySize+headerValueSize], tests[i].valueSize)
 
 			buf := bytes.NewReader(prefix)
-			decoder := NewDecoder(context.Default(), buf, 0)
+			decoder := NewDecoder(runtime.DefaultContext(), buf, 0)
 			defer decoder.Close()
 
 			_, err := decoder.Decode()
@@ -94,7 +94,7 @@ func TestDecoderTruncatedData(t *testing.T) {
 		t.Run(tests[i].name, func(tt *testing.T) {
 			tt.Parallel()
 			buf := bytes.NewReader(tests[i].data)
-			decoder := NewDecoder(context.Default(), buf, 0)
+			decoder := NewDecoder(runtime.DefaultContext(), buf, 0)
 			defer decoder.Close()
 
 			_, err := decoder.Decode()
@@ -108,16 +108,16 @@ func TestDecoderTruncatedData(t *testing.T) {
 func TestDecoderPayload(t *testing.T) {
 	t.Parallel()
 
-	data := make([]byte, headerSize+2)
+	data := make([]byte, HeaderSize+2)
 	binary.BigEndian.PutUint32(data[0:headerKeySize], 1)
 	binary.BigEndian.PutUint64(data[headerKeySize:headerKeySize+headerValueSize], 2)
 	binary.BigEndian.PutUint32(data[headerKeySize+headerValueSize:headerKeySize+headerValueSize+headerChecksumSize], 3)
 	binary.BigEndian.PutUint64(data[headerKeySize+headerValueSize+headerChecksumSize:headerKeySize+headerValueSize+headerChecksumSize+headerTTLSize], 4)
 
-	copy(data[headerSize:headerSize+1], []byte("a"))
-	copy(data[headerSize+1:headerSize+2], []byte("b"))
+	copy(data[HeaderSize:HeaderSize+1], []byte("a"))
+	copy(data[HeaderSize+1:HeaderSize+2], []byte("b"))
 
-	d := NewDecoder(context.Default(), bytes.NewReader(data), 0)
+	d := NewDecoder(runtime.DefaultContext(), bytes.NewReader(data), 0)
 	defer d.Close()
 
 	p, err := d.Decode()
@@ -147,7 +147,7 @@ func TestDecoderPayload(t *testing.T) {
 func TestDecodeNoValue(t *testing.T) {
 	// encoder_test#TestEncodeNoValue
 	b, _ := base64.StdEncoding.DecodeString(b64EmptyValue)
-	d := NewDecoder(context.Default(), bytes.NewReader(b), 0)
+	d := NewDecoder(runtime.DefaultContext(), bytes.NewReader(b), 0)
 	defer d.Close()
 
 	p, err := d.Decode()
@@ -162,7 +162,7 @@ func TestDecodeNoValue(t *testing.T) {
 	if p.ValueSize != 0 {
 		t.Errorf("value size is zero")
 	}
-	if p.N != headerSize+int64(len(p.Key)) {
+	if p.N != HeaderSize+int64(len(p.Key)) {
 		t.Errorf("meta + key only")
 	}
 	if _, err := p.Value.Read([]byte{}); err != nil {
@@ -197,7 +197,7 @@ func TestDecoderIOCount(t *testing.T) {
 			r: bytes.NewReader(data),
 			c: 0,
 		}
-		d := NewDecoder(context.Default(), counter, 0)
+		d := NewDecoder(runtime.DefaultContext(), counter, 0)
 		defer d.Close()
 
 		p, err := d.Decode()
@@ -223,7 +223,7 @@ func TestDecoderIOCount(t *testing.T) {
 			r: bytes.NewReader(data),
 			c: 0,
 		}
-		d := NewDecoder(context.Default(), counter, 0)
+		d := NewDecoder(runtime.DefaultContext(), counter, 0)
 		defer d.Close()
 
 		p, err := d.Decode()

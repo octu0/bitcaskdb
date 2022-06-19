@@ -19,6 +19,11 @@ const (
 	defaultDatafileFilename string = "%09d.data"
 )
 
+const (
+	IsEOF    bool = true
+	IsNotEOF bool = false
+)
+
 var (
 	_ Datafile = (*datafile)(nil)
 )
@@ -32,6 +37,7 @@ type Datafile interface {
 	Size() int64
 	Read() (*Entry, error)
 	ReadAt(index, size int64) (*Entry, error)
+	ReadAtHeader(index int64) (*Header, bool, error)
 	Write(key []byte, value io.Reader, expiry time.Time) (int64, int64, error)
 }
 
@@ -119,12 +125,7 @@ func (df *datafile) Read() (*Entry, error) {
 	return e, nil
 }
 
-// ReadAt the entry located at index offset with expected serialized size
-func (df *datafile) ReadAt(index, size int64) (*Entry, error) {
-	pool := df.opt.ctx.Buffer().BytePool()
-	buf := pool.Get()
-	defer pool.Put(buf)
-
+func (df *datafile) readAt(buf []byte, index, size int64) (int, error) {
 	df.RLock()
 	defer df.RUnlock()
 
@@ -132,22 +133,67 @@ func (df *datafile) ReadAt(index, size int64) (*Entry, error) {
 	if df.ra != nil {
 		readed, err := df.ra.ReadAt(buf[:size], index)
 		if err != nil {
-			return nil, err
+			return 0, err
 		}
 		n = readed
 	} else {
 		readed, err := df.r.ReadAt(buf[:size], index)
 		if err != nil {
-			return nil, err
+			return 0, err
 		}
 		n = readed
 	}
-
 	if int64(n) != size {
-		return nil, errReadError
+		return 0, errReadError
+	}
+	return n, nil
+}
+
+func (df *datafile) ReadAtHeader(index int64) (*Header, bool, error) {
+	pool := df.opt.ctx.Buffer().BytePool()
+	buf := pool.Get()
+	defer pool.Put(buf)
+
+	n, err := df.readAt(buf, index, codec.HeaderSize)
+	if err != nil {
+		return nil, IsEOF, err
 	}
 
-	r := bytes.NewReader(buf[:size])
+	r := bytes.NewReader(buf[:n])
+	d := codec.NewDecoder(df.opt.ctx, r, df.opt.valueOnMemoryThreshold)
+	defer d.Close()
+
+	h, err := d.DecodeHeader()
+	if err != nil {
+		return nil, IsEOF, err
+	}
+
+	header := &Header{
+		KeySize:   h.KeySize,
+		ValueSize: h.ValueSize,
+		Checksum:  h.Checksum,
+		Expiry:    h.Expiry,
+		TotalSize: h.N,
+	}
+
+	if df.offset <= (index + header.TotalSize) {
+		return header, IsEOF, nil
+	}
+	return header, IsNotEOF, nil
+}
+
+// ReadAt the entry located at index offset with expected serialized size
+func (df *datafile) ReadAt(index, size int64) (*Entry, error) {
+	pool := df.opt.ctx.Buffer().BytePool()
+	buf := pool.Get()
+	defer pool.Put(buf)
+
+	n, err := df.readAt(buf, index, size)
+	if err != nil {
+		return nil, err
+	}
+
+	r := bytes.NewReader(buf[:n])
 	d := codec.NewDecoder(df.opt.ctx, r, df.opt.valueOnMemoryThreshold)
 	defer d.Close()
 

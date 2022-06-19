@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/octu0/bitcaskdb/context"
+	"github.com/octu0/bitcaskdb/runtime"
 )
 
 const (
@@ -15,7 +15,7 @@ const (
 )
 
 type temporaryData struct {
-	ctx               *context.Context
+	ctx               runtime.Context
 	memory            *bytes.Buffer
 	file              *os.File
 	written           int64
@@ -75,7 +75,7 @@ func (t *temporaryData) WriteTo(w io.Writer) (int64, error) {
 	defer pool.Put(buf)
 
 	if t.file != nil {
-		t.file.Seek(0, 0)
+		t.file.Seek(0, io.SeekStart)
 		return io.CopyBuffer(w, t.file, buf)
 	}
 	return io.CopyBuffer(w, t.memory, buf)
@@ -108,7 +108,7 @@ func (t *temporaryData) Close() error {
 	return nil
 }
 
-func newTemopraryData(ctx *context.Context, tempDir string, threshold int64) *temporaryData {
+func newTemopraryData(ctx runtime.Context, tempDir string, threshold int64) *temporaryData {
 	if tempDir == "" {
 		tempDir = os.TempDir()
 	}

@@ -3,13 +3,13 @@ package datafile
 import (
 	"os"
 
-	"github.com/octu0/bitcaskdb/context"
+	"github.com/octu0/bitcaskdb/runtime"
 )
 
 type datafileOptFunc func(*datafileOpt)
 
 type datafileOpt struct {
-	ctx                    *context.Context
+	ctx                    runtime.Context
 	path                   string
 	fileID                 int32
 	readonly               bool
@@ -19,7 +19,7 @@ type datafileOpt struct {
 	valueOnMemoryThreshold int64
 }
 
-func Context(ctx *context.Context) datafileOptFunc {
+func RuntimeContext(ctx runtime.Context) datafileOptFunc {
 	return func(opt *datafileOpt) {
 		opt.ctx = ctx
 	}

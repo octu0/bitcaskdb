@@ -6,12 +6,12 @@ import (
 	"github.com/pkg/errors"
 	art "github.com/plar/go-adaptive-radix-tree"
 
-	"github.com/octu0/bitcaskdb/context"
+	"github.com/octu0/bitcaskdb/runtime"
 	"github.com/octu0/bitcaskdb/util"
 )
 
 type ttlIndexer struct {
-	ctx *context.Context
+	ctx runtime.Context
 }
 
 func (i *ttlIndexer) Load(path string) (art.Tree, bool, error) {
@@ -53,6 +53,6 @@ func (i *ttlIndexer) Save(t art.Tree, path string) error {
 	return nil
 }
 
-func NewTTLIndexer(ctx *context.Context) *ttlIndexer {
+func NewTTLIndexer(ctx runtime.Context) *ttlIndexer {
 	return &ttlIndexer{ctx}
 }

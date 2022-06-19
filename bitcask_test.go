@@ -137,14 +137,6 @@ func TestAll(t *testing.T) {
 		assert.NoError(err)
 	})
 
-	t.Run("Backup", func(t *testing.T) {
-		path, err := ioutil.TempDir("", "backup")
-		defer os.RemoveAll(path)
-		assert.NoError(err)
-		err = db.Backup(filepath.Join(path, "db-backup"))
-		assert.NoError(err)
-	})
-
 	t.Run("Sift", func(t *testing.T) {
 		err = db.PutBytes([]byte("toBeSifted"), []byte("siftMe"))
 		assert.NoError(err)

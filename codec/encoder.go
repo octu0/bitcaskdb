@@ -9,13 +9,13 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/octu0/bitcaskdb/context"
+	"github.com/octu0/bitcaskdb/runtime"
 )
 
 // Encoder wraps an underlying io.Writer and allows you to stream
 // Entry encodings on it.
 type Encoder struct {
-	ctx       *context.Context
+	ctx       runtime.Context
 	w         *bufio.Writer
 	tempDir   string
 	threshold int64
@@ -130,7 +130,7 @@ func (e *Encoder) Encode(key []byte, r io.Reader, expiry time.Time) (int64, erro
 		return 0, errors.Wrap(err, "failed flushing data")
 	}
 
-	return headerSize + int64(len(key)) + valueSize, nil
+	return HeaderSize + int64(len(key)) + valueSize, nil
 }
 
 func (e *Encoder) encodeNoValue(key []byte) (int64, error) {
@@ -156,11 +156,11 @@ func (e *Encoder) encodeNoValue(key []byte) (int64, error) {
 	if err := e.w.Flush(); err != nil {
 		return 0, errors.Wrap(err, "failed flushing data")
 	}
-	return headerSize + int64(len(key)), nil
+	return HeaderSize + int64(len(key)), nil
 }
 
 // NewEncoder creates a streaming Entry encoder.
-func NewEncoder(ctx *context.Context, w io.Writer, tempDir string, copyTempThreshold int64) *Encoder {
+func NewEncoder(ctx runtime.Context, w io.Writer, tempDir string, copyTempThreshold int64) *Encoder {
 	return &Encoder{
 		ctx:       ctx,
 		w:         ctx.Buffer().BufioWriterPool().Get(w),

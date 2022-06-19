@@ -2,7 +2,9 @@ package bitcaskdb
 
 import (
 	"encoding/json"
+	"log"
 	"os"
+	"time"
 )
 
 const (
@@ -24,6 +26,14 @@ const (
 	// DefaultSync is the default file synchronization action
 	DefaultSync = false
 
+	DefaultNoRepliEmit         bool          = true
+	DefaultRepliBindIP         string        = "[0.0.0.0]"
+	DefaultRepliBindPort       int           = 4220
+	DefaultNoRepliRecv         bool          = true
+	DefaultRepliServerIP       string        = "127.0.0.1"
+	DefaultRepliServerPort     int           = 4220
+	DefaultRepliRequestTimeout time.Duration = 10 * time.Second
+
 	CurrentDBVersion = uint32(1)
 )
 
@@ -36,24 +46,39 @@ type Config struct {
 	Sync                    bool   `json:"sync"`
 	DBVersion               uint32 `json:"db_version"`
 	ValidateChecksum        bool
+	Logger                  *log.Logger
 	TempDir                 string
 	CopyTempThreshold       int64
 	ValueOnMemoryThreshold  int64
+	NoRepliEmit             bool
+	RepliBindIP             string
+	RepliBindPort           int
+	NoRepliRecv             bool
+	RepliServerIP           string
+	RepliServerPort         int
+	RepliRequestTimeout     time.Duration
 	DirFileModeBeforeUmask  os.FileMode
 	FileFileModeBeforeUmask os.FileMode
 }
 
-func withConfig(src *Config) Option {
+func withMerge(src *Config) Option {
 	return func(cfg *Config) error {
 		cfg.MaxDatafileSize = src.MaxDatafileSize
 		cfg.Sync = src.Sync
-		cfg.AutoRecovery = src.AutoRecovery
 		cfg.ValidateChecksum = src.ValidateChecksum
+		cfg.Logger = src.Logger
 		cfg.TempDir = src.TempDir
 		cfg.CopyTempThreshold = src.CopyTempThreshold
 		cfg.ValueOnMemoryThreshold = src.ValueOnMemoryThreshold
 		cfg.DirFileModeBeforeUmask = src.DirFileModeBeforeUmask
 		cfg.FileFileModeBeforeUmask = src.FileFileModeBeforeUmask
+		cfg.RepliBindIP = src.RepliBindIP
+		cfg.RepliBindPort = src.RepliBindPort
+		cfg.RepliServerIP = src.RepliServerIP
+		cfg.RepliServerPort = src.RepliServerPort
+		cfg.RepliRequestTimeout = src.RepliRequestTimeout
+		cfg.NoRepliEmit = true
+		cfg.NoRepliRecv = true
 		return nil
 	}
 }
@@ -91,9 +116,41 @@ func WithSync(sync bool) Option {
 	}
 }
 
+func WithRepli(bindIP string, bindPort int) Option {
+	return func(cfg *Config) error {
+		cfg.NoRepliEmit = false
+		cfg.RepliBindIP = bindIP
+		cfg.RepliBindPort = bindPort
+		return nil
+	}
+}
+
+func WithRepliClient(serverIP string, serverPort int) Option {
+	return func(cfg *Config) error {
+		cfg.NoRepliRecv = false
+		cfg.RepliServerIP = serverIP
+		cfg.RepliServerPort = serverPort
+		return nil
+	}
+}
+
+func WithRepliClientRequestTimeout(rto time.Duration) Option {
+	return func(cfg *Config) error {
+		cfg.RepliRequestTimeout = rto
+		return nil
+	}
+}
+
 func WithValidateChecksum(enable bool) Option {
 	return func(cfg *Config) error {
 		cfg.ValidateChecksum = enable
+		return nil
+	}
+}
+
+func WithLogger(logger *log.Logger) Option {
+	return func(cfg *Config) error {
+		cfg.Logger = logger
 		return nil
 	}
 }
@@ -128,11 +185,19 @@ func newDefaultConfig() *Config {
 		MaxDatafileSize:         DefaultMaxDatafileSize,
 		Sync:                    DefaultSync,
 		ValidateChecksum:        false,
+		Logger:                  log.Default(),
 		TempDir:                 os.TempDir(),
 		CopyTempThreshold:       DefaultCopyTempThrshold,
 		ValueOnMemoryThreshold:  DefaultValueOnMemoryThreshold,
 		DirFileModeBeforeUmask:  DefaultDirFileModeBeforeUmask,
 		FileFileModeBeforeUmask: DefaultFileFileModeBeforeUmask,
+		NoRepliEmit:             DefaultNoRepliEmit,
+		RepliBindIP:             DefaultRepliBindIP,
+		RepliBindPort:           DefaultRepliBindPort,
+		NoRepliRecv:             DefaultNoRepliRecv,
+		RepliServerIP:           DefaultRepliServerIP,
+		RepliServerPort:         DefaultRepliServerPort,
+		RepliRequestTimeout:     DefaultRepliRequestTimeout,
 		DBVersion:               CurrentDBVersion,
 	}
 }

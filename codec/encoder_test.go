@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/octu0/bitcaskdb/context"
+	"github.com/octu0/bitcaskdb/runtime"
 )
 
 func TestEncode(t *testing.T) {
@@ -17,10 +17,10 @@ func TestEncode(t *testing.T) {
 	key := []byte("a")
 	value := []byte("abc")
 	expiry := time.Date(2020, 10, 1, 0, 0, 0, 0, time.UTC)
-	expectSize := headerSize + int64(len(key)) + int64(len(value))
+	expectSize := HeaderSize + int64(len(key)) + int64(len(value))
 
 	buf := bytes.NewBuffer(nil)
-	encoder := NewEncoder(context.Default(), buf, "", 0)
+	encoder := NewEncoder(runtime.DefaultContext(), buf, "", 0)
 	defer encoder.Close()
 
 	size, err := encoder.Encode(key, bytes.NewReader(value), expiry)
@@ -80,14 +80,14 @@ func TestEncodeNoValue(t *testing.T) {
 	buf := bytes.NewBuffer(nil)
 	key := []byte("testKey")
 	expiry := time.Date(2020, 10, 1, 0, 0, 0, 0, time.UTC)
-	encoder := NewEncoder(context.Default(), buf, "", 0)
+	encoder := NewEncoder(runtime.DefaultContext(), buf, "", 0)
 	defer encoder.Close()
 
 	size, err := encoder.Encode(key, nil, expiry)
 	if err != nil {
 		t.Errorf("no error: %+v", err)
 	}
-	if size != headerSize+int64(len(key)) {
+	if size != HeaderSize+int64(len(key)) {
 		t.Errorf("size value is 0")
 	}
 
@@ -165,7 +165,7 @@ func TestEncodeIOCount(t *testing.T) {
 			w: bytes.NewBuffer(nil),
 			c: 0,
 		}
-		e := NewEncoder(context.Default(), ww, "", 0)
+		e := NewEncoder(runtime.DefaultContext(), ww, "", 0)
 		defer e.Close()
 
 		if _, err := e.Encode(key, rr, expiry); err != nil {
@@ -191,7 +191,7 @@ func TestEncodeIOCount(t *testing.T) {
 			w: bytes.NewBuffer(nil),
 			c: 0,
 		}
-		e := NewEncoder(context.Default(), ww, "", 0)
+		e := NewEncoder(runtime.DefaultContext(), ww, "", 0)
 		defer e.Close()
 
 		if _, err := e.Encode(key, rr, expiry); err != nil {
