@@ -5,7 +5,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/octu0/bitcaskdb)](https://goreportcard.com/report/github.com/octu0/bitcaskdb)
 [![Releases](https://img.shields.io/github/v/release/octu0/bitcaskdb)](https://github.com/octu0/bitcaskdb/releases)
 
-Original code is [bitcask](https://git.mills.io/prologic/bitcask) and bitcaskdb modifies I/O operations.  
+Original code is [bitcask](https://git.mills.io/prologic/bitcask) and bitcaskdb modifies I/O operations and implement replication.  
 Small Value are still operated in memory, large Value are directly I/O operation on disk.  
 This makes it possible to perform Merge operations and large data store with minimal RAM utilization.
 
