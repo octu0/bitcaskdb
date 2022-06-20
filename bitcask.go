@@ -97,7 +97,10 @@ func (b *Bitcask) Close() error {
 		return errors.WithStack(err)
 	}
 
-	return b.close()
+	if err := b.close(); err != nil {
+		return errors.WithStack(err)
+	}
+	return nil
 }
 
 func (b *Bitcask) close() error {
@@ -116,7 +119,10 @@ func (b *Bitcask) close() error {
 		}
 	}
 
-	return b.curr.Close()
+	if err := b.curr.Close(); err != nil {
+		return errors.WithStack(err)
+	}
+	return nil
 }
 
 // Sync flushes all buffers to disk ensuring all data is written
@@ -125,10 +131,13 @@ func (b *Bitcask) Sync() error {
 	defer b.mu.RUnlock()
 
 	if err := b.saveMetadata(); err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
-	return b.curr.Sync()
+	if err := b.curr.Sync(); err != nil {
+		return errors.WithStack(err)
+	}
+	return nil
 }
 
 // Get fetches value for a key
@@ -459,6 +468,7 @@ func (b *Bitcask) SiftRange(start, end []byte, f func(key []byte) (bool, error))
 func (b *Bitcask) Len() int {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
+
 	return b.trie.Size()
 }
 
@@ -592,6 +602,7 @@ func (b *Bitcask) maybeRotate() error {
 	if err != nil {
 		return err
 	}
+
 	b.curr = curr
 	if err := b.saveIndexes(); err != nil {
 		return err
