@@ -2,6 +2,7 @@ package bitcaskdb
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"os"
 	"path"
@@ -851,9 +852,8 @@ func (b *Bitcask) saveIndexes() error {
 
 // saveMetadata saves metadata into disk
 func (b *Bitcask) saveMetadata() error {
-	outPath := filepath.Join(b.path, "meta.json")
-	if err := util.SaveJsonToFile(b.metadata, outPath, b.opt.DirFileModeBeforeUmask); err != nil {
-		return err
+	if err := saveMetadata(b.path, b.metadata, b.opt.DirFileModeBeforeUmask); err != nil {
+		return errors.WithStack(err)
 	}
 	return nil
 }
@@ -982,15 +982,39 @@ func loadIndexFromDatafile(t art.Tree, ttlIndex art.Tree, df datafile.Datafile) 
 	return nil
 }
 
+func saveMetadata(path string, meta *metadata, fmode os.FileMode) error {
+	outPath := filepath.Join(path, metadataFile)
+
+	f, err := os.OpenFile(outPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, fmode)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	defer f.Close()
+
+	if err := json.NewEncoder(f).Encode(meta); err != nil {
+		return errors.WithStack(err)
+	}
+	return nil
+}
+
 func loadMetadata(path string) (*metadata, error) {
-	if util.Exists(filepath.Join(path, "meta.json")) != true {
+	filePath := filepath.Join(path, metadataFile)
+
+	if _, err := os.Stat(filePath); err != nil {
+		// no file
 		return new(metadata), nil
 	}
 
-	p := filepath.Join(path, metadataFile)
+	// exists
+	f, err := os.OpenFile(filePath, os.O_RDONLY, 0)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	defer f.Close()
+
 	meta := new(metadata)
-	if err := util.LoadFromJsonFile(p, meta); err != nil {
-		return nil, err
+	if err := json.NewDecoder(f).Decode(meta); err != nil {
+		return nil, errors.WithStack(err)
 	}
 	return meta, nil
 }

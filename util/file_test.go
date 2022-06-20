@@ -73,36 +73,3 @@ func Test_Copy(t *testing.T) {
 		assert.Equal(false, exists)
 	})
 }
-
-func Test_SaveAndLoad(t *testing.T) {
-	assert := assert.New(t)
-	t.Run("save and load", func(t *testing.T) {
-		tempdir, err := ioutil.TempDir("", "bitcask")
-		assert.NoError(err)
-		defer os.RemoveAll(tempdir)
-		type test struct {
-			Value bool `json:"value"`
-		}
-		m := test{Value: true}
-		err = SaveJsonToFile(&m, filepath.Join(tempdir, "meta.json"), 0755)
-		assert.NoError(err)
-		m1 := test{}
-		err = LoadFromJsonFile(filepath.Join(tempdir, "meta.json"), &m1)
-		assert.NoError(err)
-		assert.Equal(m, m1)
-	})
-
-	t.Run("save and load error", func(t *testing.T) {
-		tempdir, err := ioutil.TempDir("", "bitcask")
-		assert.NoError(err)
-		defer os.RemoveAll(tempdir)
-		type test struct {
-			Value bool `json:"value"`
-		}
-		err = SaveJsonToFile(make(chan int), filepath.Join(tempdir, "meta.json"), 0755)
-		assert.Error(err)
-		m1 := test{}
-		err = LoadFromJsonFile(filepath.Join(tempdir, "meta.json"), &m1)
-		assert.Error(err)
-	})
-}
