@@ -12,22 +12,6 @@ func Exists(path string) bool {
 	return err == nil
 }
 
-// DirSize returns the space occupied by the given `path` on disk on the current
-// file system.
-func DirSize(path string) (int64, error) {
-	var size int64
-	err := filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if !info.IsDir() {
-			size += info.Size()
-		}
-		return err
-	})
-	return size, err
-}
-
 // Copy copies source contents to destination
 func CopyFiles(dst, src string, exclude []string) error {
 	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {

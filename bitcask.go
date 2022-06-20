@@ -19,7 +19,6 @@ import (
 	"github.com/octu0/bitcaskdb/datafile"
 	"github.com/octu0/bitcaskdb/indexer"
 	"github.com/octu0/bitcaskdb/repli"
-	"github.com/octu0/bitcaskdb/util"
 )
 
 const (
@@ -63,17 +62,22 @@ type Bitcask struct {
 
 // Stats returns statistics about the database including the number of
 // data files, keys and overall size on disk of the data
-func (b *Bitcask) Stats() (stats Stats, err error) {
-	if stats.Size, err = util.DirSize(b.path); err != nil {
-		return
+func (b *Bitcask) Stats() (Stats, error) {
+	dirSize, err := calcDirSize(b.path)
+	if err != nil {
+		return Stats{}, errors.WithStack(err)
 	}
 
 	b.mu.RLock()
-	stats.Datafiles = len(b.datafiles)
-	stats.Keys = b.trie.Size()
+	datafiles := len(b.datafiles)
+	keys := b.trie.Size()
 	b.mu.RUnlock()
 
-	return
+	return Stats{
+		Datafiles: datafiles,
+		Keys:      keys,
+		Size:      dirSize,
+	}, nil
 }
 
 // Close closes the database and removes the lock. It is important to call
@@ -1017,6 +1021,24 @@ func loadMetadata(path string) (*metadata, error) {
 		return nil, errors.WithStack(err)
 	}
 	return meta, nil
+}
+
+// calcDirSize returns the space occupied by the given `path` on disk on the current
+// file system.
+func calcDirSize(path string) (int64, error) {
+	size := int64(0)
+	if err := filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() != true {
+			size += info.Size()
+		}
+		return nil
+	}); err != nil {
+		return 0, errors.WithStack(err)
+	}
+	return size, nil
 }
 
 func createRepliEmitter(opt *option) repli.Emitter {
