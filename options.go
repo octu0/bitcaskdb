@@ -1,7 +1,6 @@
 package bitcaskdb
 
 import (
-	"encoding/json"
 	"log"
 	"os"
 	"time"
@@ -33,18 +32,15 @@ const (
 	DefaultRepliServerIP       string        = "127.0.0.1"
 	DefaultRepliServerPort     int           = 4220
 	DefaultRepliRequestTimeout time.Duration = 10 * time.Second
-
-	CurrentDBVersion = uint32(1)
 )
 
-// Option is a function that takes a config struct and modifies it
-type Option func(*Config) error
+// Option is a function that takes a option struct and modifies it
+type OptionFunc func(*option) error
 
-// Config contains the bitcask configuration parameters
-type Config struct {
-	MaxDatafileSize         int    `json:"max_datafile_size"`
-	Sync                    bool   `json:"sync"`
-	DBVersion               uint32 `json:"db_version"`
+// option contains the bitcask configuration parameters
+type option struct {
+	MaxDatafileSize         int
+	Sync                    bool
 	ValidateChecksum        bool
 	Logger                  *log.Logger
 	TempDir                 string
@@ -61,127 +57,127 @@ type Config struct {
 	FileFileModeBeforeUmask os.FileMode
 }
 
-func withMerge(src *Config) Option {
-	return func(cfg *Config) error {
-		cfg.MaxDatafileSize = src.MaxDatafileSize
-		cfg.Sync = src.Sync
-		cfg.ValidateChecksum = src.ValidateChecksum
-		cfg.Logger = src.Logger
-		cfg.TempDir = src.TempDir
-		cfg.CopyTempThreshold = src.CopyTempThreshold
-		cfg.ValueOnMemoryThreshold = src.ValueOnMemoryThreshold
-		cfg.DirFileModeBeforeUmask = src.DirFileModeBeforeUmask
-		cfg.FileFileModeBeforeUmask = src.FileFileModeBeforeUmask
-		cfg.RepliBindIP = src.RepliBindIP
-		cfg.RepliBindPort = src.RepliBindPort
-		cfg.RepliServerIP = src.RepliServerIP
-		cfg.RepliServerPort = src.RepliServerPort
-		cfg.RepliRequestTimeout = src.RepliRequestTimeout
-		cfg.NoRepliEmit = true
-		cfg.NoRepliRecv = true
+func withMerge(src *option) OptionFunc {
+	return func(opt *option) error {
+		opt.MaxDatafileSize = src.MaxDatafileSize
+		opt.Sync = src.Sync
+		opt.ValidateChecksum = src.ValidateChecksum
+		opt.Logger = src.Logger
+		opt.TempDir = src.TempDir
+		opt.CopyTempThreshold = src.CopyTempThreshold
+		opt.ValueOnMemoryThreshold = src.ValueOnMemoryThreshold
+		opt.DirFileModeBeforeUmask = src.DirFileModeBeforeUmask
+		opt.FileFileModeBeforeUmask = src.FileFileModeBeforeUmask
+		opt.RepliBindIP = src.RepliBindIP
+		opt.RepliBindPort = src.RepliBindPort
+		opt.RepliServerIP = src.RepliServerIP
+		opt.RepliServerPort = src.RepliServerPort
+		opt.RepliRequestTimeout = src.RepliRequestTimeout
+		opt.NoRepliEmit = true
+		opt.NoRepliRecv = true
 		return nil
 	}
 }
 
 // WithDirFileModeBeforeUmask sets the FileMode used for each new file created.
-func WithDirFileModeBeforeUmask(mode os.FileMode) Option {
-	return func(cfg *Config) error {
-		cfg.DirFileModeBeforeUmask = mode
+func WithDirFileModeBeforeUmask(mode os.FileMode) OptionFunc {
+	return func(opt *option) error {
+		opt.DirFileModeBeforeUmask = mode
 		return nil
 	}
 }
 
 // WithFileFileModeBeforeUmask sets the FileMode used for each new file created.
-func WithFileFileModeBeforeUmask(mode os.FileMode) Option {
-	return func(cfg *Config) error {
-		cfg.FileFileModeBeforeUmask = mode
+func WithFileFileModeBeforeUmask(mode os.FileMode) OptionFunc {
+	return func(opt *option) error {
+		opt.FileFileModeBeforeUmask = mode
 		return nil
 	}
 }
 
 // WithMaxDatafileSize sets the maximum datafile size option
-func WithMaxDatafileSize(size int) Option {
-	return func(cfg *Config) error {
-		cfg.MaxDatafileSize = size
+func WithMaxDatafileSize(size int) OptionFunc {
+	return func(opt *option) error {
+		opt.MaxDatafileSize = size
 		return nil
 	}
 }
 
 // WithSync causes Sync() to be called on every key/value written increasing
 // durability and safety at the expense of performance
-func WithSync(sync bool) Option {
-	return func(cfg *Config) error {
-		cfg.Sync = sync
+func WithSync(sync bool) OptionFunc {
+	return func(opt *option) error {
+		opt.Sync = sync
 		return nil
 	}
 }
 
-func WithRepli(bindIP string, bindPort int) Option {
-	return func(cfg *Config) error {
-		cfg.NoRepliEmit = false
-		cfg.RepliBindIP = bindIP
-		cfg.RepliBindPort = bindPort
+func WithRepli(bindIP string, bindPort int) OptionFunc {
+	return func(opt *option) error {
+		opt.NoRepliEmit = false
+		opt.RepliBindIP = bindIP
+		opt.RepliBindPort = bindPort
 		return nil
 	}
 }
 
-func WithRepliClient(serverIP string, serverPort int) Option {
-	return func(cfg *Config) error {
-		cfg.NoRepliRecv = false
-		cfg.RepliServerIP = serverIP
-		cfg.RepliServerPort = serverPort
+func WithRepliClient(serverIP string, serverPort int) OptionFunc {
+	return func(opt *option) error {
+		opt.NoRepliRecv = false
+		opt.RepliServerIP = serverIP
+		opt.RepliServerPort = serverPort
 		return nil
 	}
 }
 
-func WithRepliClientRequestTimeout(rto time.Duration) Option {
-	return func(cfg *Config) error {
-		cfg.RepliRequestTimeout = rto
+func WithRepliClientRequestTimeout(rto time.Duration) OptionFunc {
+	return func(opt *option) error {
+		opt.RepliRequestTimeout = rto
 		return nil
 	}
 }
 
-func WithValidateChecksum(enable bool) Option {
-	return func(cfg *Config) error {
-		cfg.ValidateChecksum = enable
+func WithValidateChecksum(enable bool) OptionFunc {
+	return func(opt *option) error {
+		opt.ValidateChecksum = enable
 		return nil
 	}
 }
 
-func WithLogger(logger *log.Logger) Option {
-	return func(cfg *Config) error {
-		cfg.Logger = logger
+func WithLogger(logger *log.Logger) OptionFunc {
+	return func(opt *option) error {
+		opt.Logger = logger
 		return nil
 	}
 }
 
-func WithTempDir(dir string) Option {
-	return func(cfg *Config) error {
+func WithTempDir(dir string) OptionFunc {
+	return func(opt *option) error {
 		if dir == "" {
-			cfg.TempDir = os.TempDir()
+			opt.TempDir = os.TempDir()
 		} else {
-			cfg.TempDir = dir
+			opt.TempDir = dir
 		}
 		return nil
 	}
 }
 
-func WithCopyTempThreshold(size int64) Option {
-	return func(cfg *Config) error {
-		cfg.CopyTempThreshold = size
+func WithCopyTempThreshold(size int64) OptionFunc {
+	return func(opt *option) error {
+		opt.CopyTempThreshold = size
 		return nil
 	}
 }
 
-func WithValueOnMemoryThreshold(size int64) Option {
-	return func(cfg *Config) error {
-		cfg.ValueOnMemoryThreshold = size
+func WithValueOnMemoryThreshold(size int64) OptionFunc {
+	return func(opt *option) error {
+		opt.ValueOnMemoryThreshold = size
 		return nil
 	}
 }
 
-func newDefaultConfig() *Config {
-	return &Config{
+func newDefaultOption() *option {
+	return &option{
 		MaxDatafileSize:         DefaultMaxDatafileSize,
 		Sync:                    DefaultSync,
 		ValidateChecksum:        false,
@@ -198,36 +194,5 @@ func newDefaultConfig() *Config {
 		RepliServerIP:           DefaultRepliServerIP,
 		RepliServerPort:         DefaultRepliServerPort,
 		RepliRequestTimeout:     DefaultRepliRequestTimeout,
-		DBVersion:               CurrentDBVersion,
 	}
-}
-
-// Load loads a configuration from the given path
-func ConfigLoad(path string) (*Config, error) {
-	var cfg Config
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		return nil, err
-	}
-
-	return &cfg, nil
-}
-
-// Save saves the configuration to the provided path
-func ConfigSave(path string, c *Config) error {
-	data, err := json.Marshal(c)
-	if err != nil {
-		return err
-	}
-
-	if err = os.WriteFile(path, data, c.FileFileModeBeforeUmask); err != nil {
-		return err
-	}
-
-	return nil
 }

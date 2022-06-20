@@ -120,10 +120,10 @@ func (d *repliDestination) datafileOpen(fileID int32) (datafile.Datafile, error)
 		datafile.RuntimeContext(d.b.ctx),
 		datafile.Path(d.b.path),
 		datafile.FileID(fileID),
-		datafile.FileMode(d.b.config.FileFileModeBeforeUmask),
-		datafile.TempDir(d.b.config.TempDir),
-		datafile.CopyTempThreshold(d.b.config.CopyTempThreshold),
-		datafile.ValueOnMemoryThreshold(d.b.config.ValueOnMemoryThreshold),
+		datafile.FileMode(d.b.opt.FileFileModeBeforeUmask),
+		datafile.TempDir(d.b.opt.TempDir),
+		datafile.CopyTempThreshold(d.b.opt.CopyTempThreshold),
+		datafile.ValueOnMemoryThreshold(d.b.opt.ValueOnMemoryThreshold),
 	)
 }
 

@@ -466,36 +466,6 @@ func TestMetadata(t *testing.T) {
 	})
 }
 
-func TestConfigErrors(t *testing.T) {
-	assert := assert.New(t)
-
-	t.Run("CorruptConfig", func(t *testing.T) {
-		testdir, err := ioutil.TempDir("", "bitcask")
-		assert.NoError(err)
-		defer os.RemoveAll(testdir)
-
-		db, err := Open(testdir)
-		assert.NoError(err)
-		assert.NoError(db.Close())
-
-		assert.NoError(ioutil.WriteFile(filepath.Join(testdir, "config.json"), []byte("foo bar baz"), 0600))
-
-		_, err = Open(testdir)
-		assert.Error(err)
-	})
-
-	t.Run("BadConfigPath", func(t *testing.T) {
-		testdir, err := ioutil.TempDir("", "bitcask")
-		assert.NoError(err)
-		defer os.RemoveAll(testdir)
-
-		assert.NoError(os.Mkdir(filepath.Join(testdir, "config.json"), 0700))
-
-		_, err = Open(testdir)
-		assert.Error(err)
-	})
-}
-
 func TestLoadIndexes(t *testing.T) {
 	assert := assert.New(t)
 	testdir, err1 := ioutil.TempDir("", "bitcask")
@@ -1302,8 +1272,8 @@ func TestOpenErrors(t *testing.T) {
 		assert.NoError(err)
 		defer os.RemoveAll(testdir)
 
-		withBogusOption := func() Option {
-			return func(cfg *Config) error {
+		withBogusOption := func() OptionFunc {
+			return func(opt *option) error {
 				return errors.New("mocked error")
 			}
 		}

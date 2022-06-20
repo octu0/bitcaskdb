@@ -48,7 +48,7 @@ type Bitcask struct {
 	mu         *sync.RWMutex
 	ctx        runtime.Context
 	flock      *flock.Flock
-	config     *Config
+	opt        *option
 	path       string
 	curr       datafile.Datafile
 	datafiles  map[int32]datafile.Datafile
@@ -191,7 +191,7 @@ func (b *Bitcask) putAndIndex(key []byte, value io.Reader, expiry time.Time) err
 		return err
 	}
 
-	if b.config.Sync {
+	if b.opt.Sync {
 		if err := b.curr.Sync(); err != nil {
 			return err
 		}
@@ -551,7 +551,7 @@ func (b *Bitcask) get(key []byte) (*datafile.Entry, error) {
 		return nil, err
 	}
 
-	if b.config.ValidateChecksum {
+	if b.opt.ValidateChecksum {
 		if err := e.Validate(b.ctx); err != nil {
 			return nil, err
 		}
@@ -562,7 +562,7 @@ func (b *Bitcask) get(key []byte) (*datafile.Entry, error) {
 
 func (b *Bitcask) maybeRotate() error {
 	size := b.curr.Size()
-	if size < int64(b.config.MaxDatafileSize) {
+	if size < int64(b.opt.MaxDatafileSize) {
 		return nil
 	}
 
@@ -576,9 +576,9 @@ func (b *Bitcask) maybeRotate() error {
 		datafile.RuntimeContext(b.ctx),
 		datafile.Path(b.path),
 		datafile.FileID(id),
-		datafile.TempDir(b.config.TempDir),
-		datafile.CopyTempThreshold(b.config.CopyTempThreshold),
-		datafile.ValueOnMemoryThreshold(b.config.ValueOnMemoryThreshold),
+		datafile.TempDir(b.opt.TempDir),
+		datafile.CopyTempThreshold(b.opt.CopyTempThreshold),
+		datafile.ValueOnMemoryThreshold(b.opt.ValueOnMemoryThreshold),
 	)
 	if err != nil {
 		return err
@@ -590,10 +590,10 @@ func (b *Bitcask) maybeRotate() error {
 		datafile.RuntimeContext(b.ctx),
 		datafile.Path(b.path),
 		datafile.FileID(b.curr.FileID()+1),
-		datafile.FileMode(b.config.FileFileModeBeforeUmask),
-		datafile.TempDir(b.config.TempDir),
-		datafile.CopyTempThreshold(b.config.CopyTempThreshold),
-		datafile.ValueOnMemoryThreshold(b.config.ValueOnMemoryThreshold),
+		datafile.FileMode(b.opt.FileFileModeBeforeUmask),
+		datafile.TempDir(b.opt.TempDir),
+		datafile.CopyTempThreshold(b.opt.CopyTempThreshold),
+		datafile.ValueOnMemoryThreshold(b.opt.ValueOnMemoryThreshold),
 	)
 	if err != nil {
 		return err
@@ -626,9 +626,9 @@ func (b *Bitcask) closeCurrentFile() error {
 		datafile.RuntimeContext(b.ctx),
 		datafile.Path(b.path),
 		datafile.FileID(id),
-		datafile.TempDir(b.config.TempDir),
-		datafile.CopyTempThreshold(b.config.CopyTempThreshold),
-		datafile.ValueOnMemoryThreshold(b.config.ValueOnMemoryThreshold),
+		datafile.TempDir(b.opt.TempDir),
+		datafile.CopyTempThreshold(b.opt.CopyTempThreshold),
+		datafile.ValueOnMemoryThreshold(b.opt.ValueOnMemoryThreshold),
 	)
 	if err != nil {
 		return err
@@ -645,10 +645,10 @@ func (b *Bitcask) openNewWritableFile() error {
 		datafile.RuntimeContext(b.ctx),
 		datafile.Path(b.path),
 		datafile.FileID(id),
-		datafile.FileMode(b.config.FileFileModeBeforeUmask),
-		datafile.TempDir(b.config.TempDir),
-		datafile.CopyTempThreshold(b.config.CopyTempThreshold),
-		datafile.ValueOnMemoryThreshold(b.config.ValueOnMemoryThreshold),
+		datafile.FileMode(b.opt.FileFileModeBeforeUmask),
+		datafile.TempDir(b.opt.TempDir),
+		datafile.CopyTempThreshold(b.opt.CopyTempThreshold),
+		datafile.ValueOnMemoryThreshold(b.opt.ValueOnMemoryThreshold),
 	)
 	if err != nil {
 		return err
@@ -668,7 +668,7 @@ func (b *Bitcask) Reopen() error {
 // reopen reloads a bitcask object with index and datafiles
 // caller of this method should take care of locking
 func (b *Bitcask) reopen() error {
-	datafiles, lastID, err := loadDatafiles(b.ctx, b.config, b.path)
+	datafiles, lastID, err := loadDatafiles(b.ctx, b.opt, b.path)
 	if err != nil {
 		return err
 	}
@@ -681,10 +681,10 @@ func (b *Bitcask) reopen() error {
 		datafile.RuntimeContext(b.ctx),
 		datafile.Path(b.path),
 		datafile.FileID(lastID),
-		datafile.FileMode(b.config.FileFileModeBeforeUmask),
-		datafile.TempDir(b.config.TempDir),
-		datafile.CopyTempThreshold(b.config.CopyTempThreshold),
-		datafile.ValueOnMemoryThreshold(b.config.ValueOnMemoryThreshold),
+		datafile.FileMode(b.opt.FileFileModeBeforeUmask),
+		datafile.TempDir(b.opt.TempDir),
+		datafile.CopyTempThreshold(b.opt.CopyTempThreshold),
+		datafile.ValueOnMemoryThreshold(b.opt.ValueOnMemoryThreshold),
 	)
 	if err != nil {
 		return err
@@ -741,7 +741,7 @@ func (b *Bitcask) Merge() error {
 	defer os.RemoveAll(temp)
 
 	// Create a merged database
-	mdb, err := Open(temp, withMerge(b.config))
+	mdb, err := Open(temp, withMerge(b.opt))
 	if err != nil {
 		return err
 	}
@@ -854,7 +854,7 @@ func (b *Bitcask) saveIndexes() error {
 // saveMetadata saves metadata into disk
 func (b *Bitcask) saveMetadata() error {
 	outPath := filepath.Join(b.path, "meta.json")
-	if err := util.SaveJsonToFile(b.metadata, outPath, b.config.DirFileModeBeforeUmask); err != nil {
+	if err := util.SaveJsonToFile(b.metadata, outPath, b.opt.DirFileModeBeforeUmask); err != nil {
 		return err
 	}
 	return nil
@@ -883,7 +883,7 @@ func (b *Bitcask) repliDestination() repli.Destination {
 	return newRepliDestination(b)
 }
 
-func loadDatafiles(ctx runtime.Context, config *Config, path string) (map[int32]datafile.Datafile, int32, error) {
+func loadDatafiles(ctx runtime.Context, opt *option, path string) (map[int32]datafile.Datafile, int32, error) {
 	fns, err := util.GetDatafiles(path)
 	if err != nil {
 		return nil, 0, err
@@ -900,9 +900,9 @@ func loadDatafiles(ctx runtime.Context, config *Config, path string) (map[int32]
 			datafile.RuntimeContext(ctx),
 			datafile.Path(path),
 			datafile.FileID(id),
-			datafile.TempDir(config.TempDir),
-			datafile.CopyTempThreshold(config.CopyTempThreshold),
-			datafile.ValueOnMemoryThreshold(config.ValueOnMemoryThreshold),
+			datafile.TempDir(opt.TempDir),
+			datafile.CopyTempThreshold(opt.CopyTempThreshold),
+			datafile.ValueOnMemoryThreshold(opt.ValueOnMemoryThreshold),
 		)
 		if err != nil {
 			return nil, 0, err
@@ -1002,57 +1002,32 @@ func loadMetadata(path string) (*metadata, error) {
 	return meta, nil
 }
 
-func checkVersion(cfg *Config, configPath string) error {
-	if cfg.DBVersion == CurrentDBVersion {
-		return nil
-	}
-	if cfg.DBVersion > CurrentDBVersion {
-		return ErrInvalidVersion
-	}
-	return nil
-}
-
-func createRepliEmitter(ctx runtime.Context, cfg *Config) repli.Emitter {
-	if cfg.NoRepliEmit {
+func createRepliEmitter(ctx runtime.Context, opt *option) repli.Emitter {
+	if opt.NoRepliEmit {
 		return repli.NewNoopEmitter()
 	}
-	return repli.NewStreamEmitter(ctx, cfg.Logger, cfg.TempDir, int32(cfg.CopyTempThreshold))
+	return repli.NewStreamEmitter(ctx, opt.Logger, opt.TempDir, int32(opt.CopyTempThreshold))
 }
 
-func createRepliReciver(ctx runtime.Context, cfg *Config) repli.Reciver {
-	if cfg.NoRepliRecv {
+func createRepliReciver(ctx runtime.Context, opt *option) repli.Reciver {
+	if opt.NoRepliRecv {
 		return repli.NewNoopReciver()
 	}
-	return repli.NewStreamReciver(ctx, cfg.Logger, cfg.TempDir, cfg.RepliRequestTimeout)
+	return repli.NewStreamReciver(ctx, opt.Logger, opt.TempDir, opt.RepliRequestTimeout)
 }
 
 // Open opens the database at the given path with optional options.
 // Options can be provided with the `WithXXX` functions that provide
 // configuration options as functions.
-func Open(path string, options ...Option) (*Bitcask, error) {
-	var cfg *Config
-	configPath := filepath.Join(path, "config.json")
-	if util.Exists(configPath) {
-		c, err := ConfigLoad(configPath)
-		if err != nil {
-			return nil, &ErrBadConfig{err}
-		}
-		cfg = c
-	} else {
-		cfg = newDefaultConfig()
-	}
-
-	if err := checkVersion(cfg, configPath); err != nil {
-		return nil, err
-	}
-
-	for _, opt := range options {
-		if err := opt(cfg); err != nil {
+func Open(path string, funcs ...OptionFunc) (*Bitcask, error) {
+	opt := newDefaultOption()
+	for _, fn := range funcs {
+		if err := fn(opt); err != nil {
 			return nil, err
 		}
 	}
 
-	if err := os.MkdirAll(path, cfg.DirFileModeBeforeUmask); err != nil {
+	if err := os.MkdirAll(path, opt.DirFileModeBeforeUmask); err != nil {
 		return nil, err
 	}
 
@@ -1062,13 +1037,13 @@ func Open(path string, options ...Option) (*Bitcask, error) {
 	}
 
 	ctx := runtime.DefaultContext()
-	repliEmitter := createRepliEmitter(ctx, cfg)
-	repliReciver := createRepliReciver(ctx, cfg)
+	repliEmitter := createRepliEmitter(ctx, opt)
+	repliReciver := createRepliReciver(ctx, opt)
 	bitcask := &Bitcask{
 		mu:         new(sync.RWMutex),
 		ctx:        ctx,
 		flock:      flock.New(filepath.Join(path, lockfile)),
-		config:     cfg,
+		opt:        opt,
 		path:       path,
 		indexer:    indexer.NewFilerIndexer(ctx),
 		ttlIndexer: indexer.NewTTLIndexer(ctx),
@@ -1077,7 +1052,7 @@ func Open(path string, options ...Option) (*Bitcask, error) {
 		repliRecv:  repliReciver,
 	}
 
-	if err := repliEmitter.Start(bitcask.repliSource(), cfg.RepliBindIP, cfg.RepliBindPort); err != nil {
+	if err := repliEmitter.Start(bitcask.repliSource(), opt.RepliBindIP, opt.RepliBindPort); err != nil {
 		return nil, errors.WithStack(err)
 	}
 
@@ -1089,15 +1064,11 @@ func Open(path string, options ...Option) (*Bitcask, error) {
 		return nil, ErrDatabaseLocked
 	}
 
-	if err := ConfigSave(configPath, cfg); err != nil {
-		return nil, err
-	}
-
 	if err := bitcask.Reopen(); err != nil {
 		return nil, err
 	}
 
-	if err := repliReciver.Start(bitcask.repliDestination(), cfg.RepliServerIP, cfg.RepliServerPort); err != nil {
+	if err := repliReciver.Start(bitcask.repliDestination(), opt.RepliServerIP, opt.RepliServerPort); err != nil {
 		return nil, errors.WithStack(err)
 	}
 	return bitcask, nil
