@@ -1,4 +1,4 @@
-package util
+package datafile
 
 import (
 	"path/filepath"

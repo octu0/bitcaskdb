@@ -795,7 +795,7 @@ func (b *Bitcask) Merge() error {
 		if file.IsDir() || file.Name() == lockfile {
 			continue
 		}
-		ids, err := util.ParseIds([]string{file.Name()})
+		ids, err := datafile.ParseIds([]string{file.Name()})
 		if err != nil {
 			return err
 		}
@@ -887,7 +887,7 @@ func loadDatafiles(opt *option, path string) (map[int32]datafile.Datafile, int32
 		return nil, 0, err
 	}
 
-	ids, err := util.ParseIds(fns)
+	ids, err := datafile.ParseIds(fns)
 	if err != nil {
 		return nil, 0, err
 	}
