@@ -484,29 +484,20 @@ func (b *Bitcask) Keys() chan []byte {
 
 // RunGC deletes all expired keys
 func (b *Bitcask) RunGC() error {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	return b.runGC()
-}
-
-// runGC deletes all keys that are expired
-// caller function should take care of the locking when calling this method
-func (b *Bitcask) runGC() (err error) {
 	keysToDelete := art.New()
-
+	b.mu.RLock()
 	b.ttlIndex.ForEach(func(node art.Node) (cont bool) {
-		if !b.isExpired(node.Key()) {
+		if b.isExpired(node.Key()) != true {
 			// later, return false here when the ttlIndex is sorted
 			return true
 		}
 		keysToDelete.Insert(node.Key(), true)
-		//keysToDelete = append(keysToDelete, node.Key())
 		return true
 	})
+	b.mu.RUnlock()
 
 	keysToDelete.ForEach(func(node art.Node) (cont bool) {
-		b.delete(node.Key())
+		b.Delete(node.Key())
 		return true
 	})
 
