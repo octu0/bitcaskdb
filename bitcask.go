@@ -18,7 +18,6 @@ import (
 	"github.com/octu0/bitcaskdb/datafile"
 	"github.com/octu0/bitcaskdb/indexer"
 	"github.com/octu0/bitcaskdb/repli"
-	"github.com/octu0/bitcaskdb/runtime"
 	"github.com/octu0/bitcaskdb/util"
 )
 
@@ -46,7 +45,6 @@ type metadata struct {
 // in the Riak database.
 type Bitcask struct {
 	mu         *sync.RWMutex
-	ctx        runtime.Context
 	flock      *flock.Flock
 	opt        *option
 	path       string
@@ -552,7 +550,7 @@ func (b *Bitcask) get(key []byte) (*datafile.Entry, error) {
 	}
 
 	if b.opt.ValidateChecksum {
-		if err := e.Validate(b.ctx); err != nil {
+		if err := e.Validate(b.opt.RuntimeContext); err != nil {
 			return nil, err
 		}
 	}
@@ -573,7 +571,7 @@ func (b *Bitcask) maybeRotate() error {
 	id := b.curr.FileID()
 
 	df, err := datafile.OpenReadonly(
-		datafile.RuntimeContext(b.ctx),
+		datafile.RuntimeContext(b.opt.RuntimeContext),
 		datafile.Path(b.path),
 		datafile.FileID(id),
 		datafile.TempDir(b.opt.TempDir),
@@ -587,7 +585,7 @@ func (b *Bitcask) maybeRotate() error {
 	b.datafiles[id] = df
 
 	curr, err := datafile.Open(
-		datafile.RuntimeContext(b.ctx),
+		datafile.RuntimeContext(b.opt.RuntimeContext),
 		datafile.Path(b.path),
 		datafile.FileID(b.curr.FileID()+1),
 		datafile.FileMode(b.opt.FileFileModeBeforeUmask),
@@ -623,7 +621,7 @@ func (b *Bitcask) closeCurrentFile() error {
 
 	id := b.curr.FileID()
 	df, err := datafile.OpenReadonly(
-		datafile.RuntimeContext(b.ctx),
+		datafile.RuntimeContext(b.opt.RuntimeContext),
 		datafile.Path(b.path),
 		datafile.FileID(id),
 		datafile.TempDir(b.opt.TempDir),
@@ -642,7 +640,7 @@ func (b *Bitcask) closeCurrentFile() error {
 func (b *Bitcask) openNewWritableFile() error {
 	id := b.curr.FileID() + 1
 	curr, err := datafile.Open(
-		datafile.RuntimeContext(b.ctx),
+		datafile.RuntimeContext(b.opt.RuntimeContext),
 		datafile.Path(b.path),
 		datafile.FileID(id),
 		datafile.FileMode(b.opt.FileFileModeBeforeUmask),
@@ -668,7 +666,7 @@ func (b *Bitcask) Reopen() error {
 // reopen reloads a bitcask object with index and datafiles
 // caller of this method should take care of locking
 func (b *Bitcask) reopen() error {
-	datafiles, lastID, err := loadDatafiles(b.ctx, b.opt, b.path)
+	datafiles, lastID, err := loadDatafiles(b.opt, b.path)
 	if err != nil {
 		return err
 	}
@@ -678,7 +676,7 @@ func (b *Bitcask) reopen() error {
 	}
 
 	curr, err := datafile.Open(
-		datafile.RuntimeContext(b.ctx),
+		datafile.RuntimeContext(b.opt.RuntimeContext),
 		datafile.Path(b.path),
 		datafile.FileID(lastID),
 		datafile.FileMode(b.opt.FileFileModeBeforeUmask),
@@ -883,7 +881,7 @@ func (b *Bitcask) repliDestination() repli.Destination {
 	return newRepliDestination(b)
 }
 
-func loadDatafiles(ctx runtime.Context, opt *option, path string) (map[int32]datafile.Datafile, int32, error) {
+func loadDatafiles(opt *option, path string) (map[int32]datafile.Datafile, int32, error) {
 	fns, err := util.GetDatafiles(path)
 	if err != nil {
 		return nil, 0, err
@@ -897,7 +895,7 @@ func loadDatafiles(ctx runtime.Context, opt *option, path string) (map[int32]dat
 	datafiles := make(map[int32]datafile.Datafile, len(ids))
 	for _, id := range ids {
 		d, err := datafile.OpenReadonly(
-			datafile.RuntimeContext(ctx),
+			datafile.RuntimeContext(opt.RuntimeContext),
 			datafile.Path(path),
 			datafile.FileID(id),
 			datafile.TempDir(opt.TempDir),
@@ -1002,18 +1000,18 @@ func loadMetadata(path string) (*metadata, error) {
 	return meta, nil
 }
 
-func createRepliEmitter(ctx runtime.Context, opt *option) repli.Emitter {
+func createRepliEmitter(opt *option) repli.Emitter {
 	if opt.NoRepliEmit {
 		return repli.NewNoopEmitter()
 	}
-	return repli.NewStreamEmitter(ctx, opt.Logger, opt.TempDir, int32(opt.CopyTempThreshold))
+	return repli.NewStreamEmitter(opt.RuntimeContext, opt.Logger, opt.TempDir, int32(opt.CopyTempThreshold))
 }
 
-func createRepliReciver(ctx runtime.Context, opt *option) repli.Reciver {
+func createRepliReciver(opt *option) repli.Reciver {
 	if opt.NoRepliRecv {
 		return repli.NewNoopReciver()
 	}
-	return repli.NewStreamReciver(ctx, opt.Logger, opt.TempDir, opt.RepliRequestTimeout)
+	return repli.NewStreamReciver(opt.RuntimeContext, opt.Logger, opt.TempDir, opt.RepliRequestTimeout)
 }
 
 // Open opens the database at the given path with optional options.
@@ -1036,17 +1034,15 @@ func Open(path string, funcs ...OptionFunc) (*Bitcask, error) {
 		return nil, &ErrBadMetadata{err}
 	}
 
-	ctx := runtime.DefaultContext()
-	repliEmitter := createRepliEmitter(ctx, opt)
-	repliReciver := createRepliReciver(ctx, opt)
+	repliEmitter := createRepliEmitter(opt)
+	repliReciver := createRepliReciver(opt)
 	bitcask := &Bitcask{
 		mu:         new(sync.RWMutex),
-		ctx:        ctx,
 		flock:      flock.New(filepath.Join(path, lockfile)),
 		opt:        opt,
 		path:       path,
-		indexer:    indexer.NewFilerIndexer(ctx),
-		ttlIndexer: indexer.NewTTLIndexer(ctx),
+		indexer:    indexer.NewFilerIndexer(opt.RuntimeContext),
+		ttlIndexer: indexer.NewTTLIndexer(opt.RuntimeContext),
 		metadata:   meta,
 		repliEmit:  repliEmitter,
 		repliRecv:  repliReciver,

@@ -117,7 +117,7 @@ func (d *repliDestination) datafileOpen(fileID int32) (datafile.Datafile, error)
 	}
 
 	return datafile.Open(
-		datafile.RuntimeContext(d.b.ctx),
+		datafile.RuntimeContext(d.b.opt.RuntimeContext),
 		datafile.Path(d.b.path),
 		datafile.FileID(fileID),
 		datafile.FileMode(d.b.opt.FileFileModeBeforeUmask),

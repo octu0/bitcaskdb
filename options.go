@@ -4,6 +4,8 @@ import (
 	"log"
 	"os"
 	"time"
+
+	"github.com/octu0/bitcaskdb/runtime"
 )
 
 const (
@@ -39,6 +41,7 @@ type OptionFunc func(*option) error
 
 // option contains the bitcask configuration parameters
 type option struct {
+	RuntimeContext          runtime.Context
 	MaxDatafileSize         int
 	Sync                    bool
 	ValidateChecksum        bool
@@ -59,6 +62,7 @@ type option struct {
 
 func withMerge(src *option) OptionFunc {
 	return func(opt *option) error {
+		opt.RuntimeContext = src.RuntimeContext
 		opt.MaxDatafileSize = src.MaxDatafileSize
 		opt.Sync = src.Sync
 		opt.ValidateChecksum = src.ValidateChecksum
@@ -176,8 +180,16 @@ func WithValueOnMemoryThreshold(size int64) OptionFunc {
 	}
 }
 
+func WithRuntimeContext(ctx runtime.Context) OptionFunc {
+	return func(opt *option) error {
+		opt.RuntimeContext = ctx
+		return nil
+	}
+}
+
 func newDefaultOption() *option {
 	return &option{
+		RuntimeContext:          runtime.DefaultContext(),
 		MaxDatafileSize:         DefaultMaxDatafileSize,
 		Sync:                    DefaultSync,
 		ValidateChecksum:        false,
