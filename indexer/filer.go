@@ -7,7 +7,6 @@ import (
 	art "github.com/plar/go-adaptive-radix-tree"
 
 	"github.com/octu0/bitcaskdb/runtime"
-	"github.com/octu0/bitcaskdb/util"
 )
 
 type filerIndex struct {
@@ -17,7 +16,8 @@ type filerIndex struct {
 func (i *filerIndex) Load(path string) (art.Tree, bool, error) {
 	t := art.New()
 
-	if util.Exists(path) != true {
+	if _, err := os.Stat(path); err != nil {
+		// not found
 		return t, false, nil
 	}
 

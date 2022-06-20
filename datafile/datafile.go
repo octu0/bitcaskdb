@@ -16,10 +16,6 @@ import (
 )
 
 const (
-	defaultDatafileFilename string = "%09d.data"
-)
-
-const (
 	IsEOF    bool = true
 	IsNotEOF bool = false
 )
