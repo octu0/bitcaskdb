@@ -1,11 +1,9 @@
 package util
 
 import (
-	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 )
 
@@ -28,19 +26,6 @@ func DirSize(path string) (int64, error) {
 		return err
 	})
 	return size, err
-}
-
-// GetDatafiles returns a list of all data files stored in the database path
-// given by `path`. All datafiles are identified by the the glob `*.data` and
-// the basename is represented by a monotonic increasing integer.
-// The returned files are *sorted* in increasing order.
-func GetDatafiles(path string) ([]string, error) {
-	fns, err := filepath.Glob(fmt.Sprintf("%s/*.data", path))
-	if err != nil {
-		return nil, err
-	}
-	sort.Strings(fns)
-	return fns, nil
 }
 
 // Copy copies source contents to destination

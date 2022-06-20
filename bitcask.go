@@ -882,12 +882,7 @@ func (b *Bitcask) repliDestination() repli.Destination {
 }
 
 func loadDatafiles(opt *option, path string) (map[int32]datafile.Datafile, int32, error) {
-	fns, err := util.GetDatafiles(path)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	ids, err := datafile.ParseIds(fns)
+	ids, err := datafile.ParseIdsFromDatafiles(path)
 	if err != nil {
 		return nil, 0, err
 	}
