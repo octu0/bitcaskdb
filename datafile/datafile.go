@@ -184,9 +184,14 @@ func (df *datafile) ReadAt(index, size int64) (*Entry, error) {
 	buf := pool.Get()
 	defer pool.Put(buf)
 
+	if int64(cap(buf)) < size {
+		pool.Put(buf)
+		buf = make([]byte, size)
+	}
+
 	n, err := df.readAt(buf, index, size)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	r := bytes.NewReader(buf[:n])
