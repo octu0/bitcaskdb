@@ -146,15 +146,12 @@ func (d *Decoder) createDefaultValueReader(k int32, v int64) (io.Reader, func())
 }
 
 // NewDecoder creates a streaming Entry decoder.
-func NewDecoder(ctx runtime.Context, r ReaderAtSeeker, valueOnMemory int64) *Decoder {
-	if valueOnMemory < 1 {
-		valueOnMemory = int64(ctx.Buffer().BufferSize())
-	}
+func NewDecoder(ctx runtime.Context, r ReaderAtSeeker) *Decoder {
 	return &Decoder{
 		ctx:           ctx,
 		m:             new(sync.RWMutex),
 		r:             r,
-		valueOnMemory: valueOnMemory,
+		valueOnMemory: int64(ctx.Buffer().BufferSize()),
 		offset:        int64(0),
 		closed:        false,
 	}

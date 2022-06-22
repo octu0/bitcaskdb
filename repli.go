@@ -127,7 +127,6 @@ func (d *repliDestination) datafileOpen(fileID int32) (datafile.Datafile, bool, 
 		datafile.FileMode(d.b.opt.FileFileModeBeforeUmask),
 		datafile.TempDir(d.b.opt.TempDir),
 		datafile.CopyTempThreshold(d.b.opt.CopyTempThreshold),
-		datafile.ValueOnMemoryThreshold(d.b.opt.ValueOnMemoryThreshold),
 	)
 	if err != nil {
 		return nil, false, err

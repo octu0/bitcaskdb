@@ -592,7 +592,6 @@ func (b *Bitcask) maybeRotate() error {
 		datafile.FileID(id),
 		datafile.TempDir(b.opt.TempDir),
 		datafile.CopyTempThreshold(b.opt.CopyTempThreshold),
-		datafile.ValueOnMemoryThreshold(b.opt.ValueOnMemoryThreshold),
 	)
 	if err != nil {
 		return err
@@ -607,7 +606,6 @@ func (b *Bitcask) maybeRotate() error {
 		datafile.FileMode(b.opt.FileFileModeBeforeUmask),
 		datafile.TempDir(b.opt.TempDir),
 		datafile.CopyTempThreshold(b.opt.CopyTempThreshold),
-		datafile.ValueOnMemoryThreshold(b.opt.ValueOnMemoryThreshold),
 	)
 	if err != nil {
 		return err
@@ -643,7 +641,6 @@ func (b *Bitcask) closeCurrentFile() error {
 		datafile.FileID(id),
 		datafile.TempDir(b.opt.TempDir),
 		datafile.CopyTempThreshold(b.opt.CopyTempThreshold),
-		datafile.ValueOnMemoryThreshold(b.opt.ValueOnMemoryThreshold),
 	)
 	if err != nil {
 		return err
@@ -663,7 +660,6 @@ func (b *Bitcask) openNewWritableFile() error {
 		datafile.FileMode(b.opt.FileFileModeBeforeUmask),
 		datafile.TempDir(b.opt.TempDir),
 		datafile.CopyTempThreshold(b.opt.CopyTempThreshold),
-		datafile.ValueOnMemoryThreshold(b.opt.ValueOnMemoryThreshold),
 	)
 	if err != nil {
 		return err
@@ -699,7 +695,6 @@ func (b *Bitcask) reopen() error {
 		datafile.FileMode(b.opt.FileFileModeBeforeUmask),
 		datafile.TempDir(b.opt.TempDir),
 		datafile.CopyTempThreshold(b.opt.CopyTempThreshold),
-		datafile.ValueOnMemoryThreshold(b.opt.ValueOnMemoryThreshold),
 	)
 	if err != nil {
 		return err
@@ -913,7 +908,6 @@ func loadDatafiles(opt *option, path string) (map[int32]datafile.Datafile, int32
 			datafile.FileID(id),
 			datafile.TempDir(opt.TempDir),
 			datafile.CopyTempThreshold(opt.CopyTempThreshold),
-			datafile.ValueOnMemoryThreshold(opt.ValueOnMemoryThreshold),
 		)
 		if err != nil {
 			return nil, 0, err

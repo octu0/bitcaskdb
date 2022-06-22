@@ -132,7 +132,7 @@ func (df *datafile) sectionReader(index, size int64) *io.SectionReader {
 
 func (df *datafile) ReadAtHeader(index int64) (*Header, bool, error) {
 	r := df.sectionReader(index, codec.HeaderSize)
-	d := codec.NewDecoder(df.opt.ctx, r, df.opt.valueOnMemoryThreshold)
+	d := codec.NewDecoder(df.opt.ctx, r)
 	defer d.Close()
 
 	h, err := d.DecodeHeader()
@@ -157,7 +157,7 @@ func (df *datafile) ReadAtHeader(index int64) (*Header, bool, error) {
 // ReadAt the entry located at index offset with expected serialized size
 func (df *datafile) ReadAt(index, size int64) (*Entry, error) {
 	r := df.sectionReader(index, size)
-	d := codec.NewDecoder(df.opt.ctx, r, df.opt.valueOnMemoryThreshold)
+	d := codec.NewDecoder(df.opt.ctx, r)
 	defer d.Close()
 
 	p, err := d.Decode()
@@ -250,7 +250,7 @@ func open(funcs ...datafileOptFunc) (*datafile, error) {
 
 	offset := stat.Size()
 
-	dec := codec.NewDecoder(opt.ctx, r, opt.valueOnMemoryThreshold)
+	dec := codec.NewDecoder(opt.ctx, r)
 	enc := codec.NewEncoder(opt.ctx, w, opt.tempDir, opt.copyTempThreshold)
 
 	return &datafile{
