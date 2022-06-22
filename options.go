@@ -16,13 +16,10 @@ const (
 	DefaultFileFileModeBeforeUmask = os.FileMode(0600)
 
 	// DefaultMaxDatafileSize is the default maximum datafile size in bytes
-	DefaultMaxDatafileSize = 1 << 20 // 1MB
+	DefaultMaxDatafileSize = 100 * 1024 * 1024 // 100MB
 
 	// Data size exceeding this threshold to temporarily copied to TempDir
 	DefaultCopyTempThrshold int64 = 10 * 1024 * 1024
-
-	// Data size larger than this size will be placed on RAM
-	DefaultValueOnMemoryThreshold int64 = 128 * 1024
 
 	// DefaultSync is the default file synchronization action
 	DefaultSync = false
@@ -48,7 +45,6 @@ type option struct {
 	Logger                  *log.Logger
 	TempDir                 string
 	CopyTempThreshold       int64
-	ValueOnMemoryThreshold  int64
 	NoRepliEmit             bool
 	RepliBindIP             string
 	RepliBindPort           int
@@ -69,7 +65,6 @@ func withMerge(src *option) OptionFunc {
 		opt.Logger = src.Logger
 		opt.TempDir = src.TempDir
 		opt.CopyTempThreshold = src.CopyTempThreshold
-		opt.ValueOnMemoryThreshold = src.ValueOnMemoryThreshold
 		opt.DirFileModeBeforeUmask = src.DirFileModeBeforeUmask
 		opt.FileFileModeBeforeUmask = src.FileFileModeBeforeUmask
 		opt.RepliBindIP = src.RepliBindIP
@@ -173,13 +168,6 @@ func WithCopyTempThreshold(size int64) OptionFunc {
 	}
 }
 
-func WithValueOnMemoryThreshold(size int64) OptionFunc {
-	return func(opt *option) error {
-		opt.ValueOnMemoryThreshold = size
-		return nil
-	}
-}
-
 func WithRuntimeContext(ctx runtime.Context) OptionFunc {
 	return func(opt *option) error {
 		opt.RuntimeContext = ctx
@@ -196,7 +184,6 @@ func newDefaultOption() *option {
 		Logger:                  log.Default(),
 		TempDir:                 os.TempDir(),
 		CopyTempThreshold:       DefaultCopyTempThrshold,
-		ValueOnMemoryThreshold:  DefaultValueOnMemoryThreshold,
 		DirFileModeBeforeUmask:  DefaultDirFileModeBeforeUmask,
 		FileFileModeBeforeUmask: DefaultFileFileModeBeforeUmask,
 		NoRepliEmit:             DefaultNoRepliEmit,

@@ -198,6 +198,10 @@ func (b *Bitcask) putAndIndex(key []byte, value io.Reader, expiry time.Time) err
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
+	return b.putAndIndexLocked(key, value, expiry)
+}
+
+func (b *Bitcask) putAndIndexLocked(key []byte, value io.Reader, expiry time.Time) error {
 	index, size, err := b.put(key, value, expiry)
 	if err != nil {
 		return err
@@ -269,15 +273,16 @@ func (b *Bitcask) Sift(f func(key []byte) (bool, error)) (err error) {
 
 	b.mu.RLock()
 	b.trie.ForEach(func(node art.Node) bool {
-		if b.isExpired(node.Key()) {
-			keysToDelete.Insert(node.Key(), true)
+		nodeKey := node.Key()
+		if b.isExpired(nodeKey) {
+			keysToDelete.Insert(nodeKey, true)
 			return true
 		}
 		var shouldDelete bool
-		if shouldDelete, err = f(node.Key()); err != nil {
+		if shouldDelete, err = f(nodeKey); err != nil {
 			return false
 		} else if shouldDelete {
-			keysToDelete.Insert(node.Key(), true)
+			keysToDelete.Insert(nodeKey, true)
 		}
 		return true
 	})
@@ -301,11 +306,12 @@ func (b *Bitcask) DeleteAll() (err error) {
 	defer b.mu.RUnlock()
 
 	b.trie.ForEach(func(node art.Node) bool {
-		_, _, err = b.put(node.Key(), nil, time.Time{})
+		nodeKey := node.Key()
+		_, _, err = b.put(nodeKey, nil, time.Time{})
 		if err != nil {
 			return false
 		}
-		filer, _ := b.trie.Search(node.Key())
+		filer, _ := b.trie.Search(nodeKey)
 		b.metadata.ReclaimableSpace += filer.(indexer.Filer).Size
 		return true
 	})
@@ -323,12 +329,13 @@ func (b *Bitcask) Scan(prefix []byte, f func(key []byte) error) (err error) {
 	defer b.mu.RUnlock()
 
 	b.trie.ForEachPrefix(prefix, func(node art.Node) bool {
+		nodeKey := node.Key()
 		// Skip the root node
-		if len(node.Key()) == 0 {
+		if len(nodeKey) == 0 {
 			return true
 		}
 
-		if err = f(node.Key()); err != nil {
+		if err = f(nodeKey); err != nil {
 			return false
 		}
 		return true
@@ -346,19 +353,20 @@ func (b *Bitcask) SiftScan(prefix []byte, f func(key []byte) (bool, error)) (err
 
 	b.mu.RLock()
 	b.trie.ForEachPrefix(prefix, func(node art.Node) bool {
+		nodeKey := node.Key()
 		// Skip the root node
-		if len(node.Key()) == 0 {
+		if len(nodeKey) == 0 {
 			return true
 		}
-		if b.isExpired(node.Key()) {
-			keysToDelete.Insert(node.Key(), true)
+		if b.isExpired(nodeKey) {
+			keysToDelete.Insert(nodeKey, true)
 			return true
 		}
 		var shouldDelete bool
-		if shouldDelete, err = f(node.Key()); err != nil {
+		if shouldDelete, err = f(nodeKey); err != nil {
 			return false
 		} else if shouldDelete {
-			keysToDelete.Insert(node.Key(), true)
+			keysToDelete.Insert(nodeKey, true)
 		}
 		return true
 	})
@@ -395,13 +403,14 @@ func (b *Bitcask) Range(start, end []byte, f func(key []byte) error) (err error)
 	defer b.mu.RUnlock()
 
 	b.trie.ForEachPrefix(commonPrefix, func(node art.Node) bool {
-		if bytes.Compare(node.Key(), start) >= 0 && bytes.Compare(node.Key(), end) <= 0 {
+		nodeKey := node.Key()
+		if bytes.Compare(nodeKey, start) >= 0 && bytes.Compare(nodeKey, end) <= 0 {
 			if err = f(node.Key()); err != nil {
 				return false
 			}
 			return true
 		}
-		if bytes.Compare(node.Key(), start) >= 0 && bytes.Compare(node.Key(), end) > 0 {
+		if bytes.Compare(nodeKey, start) >= 0 && bytes.Compare(nodeKey, end) > 0 {
 			return false
 		}
 		return true
@@ -429,20 +438,21 @@ func (b *Bitcask) SiftRange(start, end []byte, f func(key []byte) (bool, error))
 
 	b.mu.RLock()
 	b.trie.ForEachPrefix(commonPrefix, func(node art.Node) bool {
-		if bytes.Compare(node.Key(), start) >= 0 && bytes.Compare(node.Key(), end) <= 0 {
-			if b.isExpired(node.Key()) {
-				keysToDelete.Insert(node.Key(), true)
+		nodeKey := node.Key()
+		if bytes.Compare(nodeKey, start) >= 0 && bytes.Compare(nodeKey, end) <= 0 {
+			if b.isExpired(nodeKey) {
+				keysToDelete.Insert(nodeKey, true)
 				return true
 			}
 			var shouldDelete bool
-			if shouldDelete, err = f(node.Key()); err != nil {
+			if shouldDelete, err = f(nodeKey); err != nil {
 				return false
 			} else if shouldDelete {
-				keysToDelete.Insert(node.Key(), true)
+				keysToDelete.Insert(nodeKey, true)
 			}
 			return true
 		}
-		if bytes.Compare(node.Key(), start) >= 0 && bytes.Compare(node.Key(), end) > 0 {
+		if bytes.Compare(nodeKey, start) >= 0 && bytes.Compare(nodeKey, end) > 0 {
 			return false
 		}
 		return true
@@ -582,7 +592,6 @@ func (b *Bitcask) maybeRotate() error {
 		datafile.FileID(id),
 		datafile.TempDir(b.opt.TempDir),
 		datafile.CopyTempThreshold(b.opt.CopyTempThreshold),
-		datafile.ValueOnMemoryThreshold(b.opt.ValueOnMemoryThreshold),
 	)
 	if err != nil {
 		return err
@@ -597,7 +606,6 @@ func (b *Bitcask) maybeRotate() error {
 		datafile.FileMode(b.opt.FileFileModeBeforeUmask),
 		datafile.TempDir(b.opt.TempDir),
 		datafile.CopyTempThreshold(b.opt.CopyTempThreshold),
-		datafile.ValueOnMemoryThreshold(b.opt.ValueOnMemoryThreshold),
 	)
 	if err != nil {
 		return err
@@ -633,7 +641,6 @@ func (b *Bitcask) closeCurrentFile() error {
 		datafile.FileID(id),
 		datafile.TempDir(b.opt.TempDir),
 		datafile.CopyTempThreshold(b.opt.CopyTempThreshold),
-		datafile.ValueOnMemoryThreshold(b.opt.ValueOnMemoryThreshold),
 	)
 	if err != nil {
 		return err
@@ -653,7 +660,6 @@ func (b *Bitcask) openNewWritableFile() error {
 		datafile.FileMode(b.opt.FileFileModeBeforeUmask),
 		datafile.TempDir(b.opt.TempDir),
 		datafile.CopyTempThreshold(b.opt.CopyTempThreshold),
-		datafile.ValueOnMemoryThreshold(b.opt.ValueOnMemoryThreshold),
 	)
 	if err != nil {
 		return err
@@ -689,7 +695,6 @@ func (b *Bitcask) reopen() error {
 		datafile.FileMode(b.opt.FileFileModeBeforeUmask),
 		datafile.TempDir(b.opt.TempDir),
 		datafile.CopyTempThreshold(b.opt.CopyTempThreshold),
-		datafile.ValueOnMemoryThreshold(b.opt.ValueOnMemoryThreshold),
 	)
 	if err != nil {
 		return err
@@ -713,15 +718,15 @@ func (b *Bitcask) Merge() error {
 		return ErrMergeInProgress
 	}
 	b.isMerging = true
-
 	b.mu.Unlock()
+
 	defer func() {
 		b.isMerging = false
 	}()
-	b.mu.RLock()
 
+	b.mu.Lock()
 	if err := b.closeCurrentFile(); err != nil {
-		b.mu.RUnlock()
+		b.mu.Unlock()
 		return err
 	}
 	filesToMerge := make([]int32, 0, len(b.datafiles))
@@ -729,10 +734,10 @@ func (b *Bitcask) Merge() error {
 		filesToMerge = append(filesToMerge, id)
 	}
 	if err := b.openNewWritableFile(); err != nil {
-		b.mu.RUnlock()
+		b.mu.Unlock()
 		return err
 	}
-	b.mu.RUnlock()
+	b.mu.Unlock()
 
 	sort.Slice(filesToMerge, func(i, j int) bool {
 		return filesToMerge[i] < filesToMerge[j]
@@ -753,38 +758,40 @@ func (b *Bitcask) Merge() error {
 	// Rewrite all key/value pairs into merged database
 	// Doing this automatically strips deleted keys and
 	// old key/value pairs
-	if err := b.Fold(func(key []byte) error {
-		filer, _ := b.trie.Search(key)
-		// if key was updated after start of merge operation, nothing to do
-		if filesToMerge[len(filesToMerge)-1] < filer.(indexer.Filer).FileID {
+	if err := func() error {
+		mdb.mu.Lock()
+		defer mdb.mu.Unlock()
+		return b.Fold(func(key []byte) error {
+			v, _ := b.trie.Search(key)
+			filer := v.(indexer.Filer)
+			// if key was updated after start of merge operation, nothing to do
+			if filesToMerge[len(filesToMerge)-1] < filer.FileID {
+				return nil
+			}
+
+			e, err := b.get(key)
+			if err != nil {
+				return err
+			}
+			defer e.Close()
+
+			if err := mdb.putAndIndexLocked(key, e.Value, e.Expiry); err != nil {
+				return err
+			}
 			return nil
-		}
-		e, err := b.get(key)
-		if err != nil {
-			return err
-		}
-		defer e.Close()
-
-		if e.Expiry.IsZero() != true {
-			if err := mdb.PutWithTTL(key, e.Value, time.Until(e.Expiry)); err != nil {
-				return err
-			}
-		} else {
-			if err := mdb.Put(key, e.Value); err != nil {
-				return err
-			}
-		}
-
-		return nil
-	}); err != nil {
+		})
+	}(); err != nil {
 		return err
 	}
+
 	if err := mdb.Sync(); err != nil {
 		return err
 	}
+
 	if err := mdb.Close(); err != nil {
 		return err
 	}
+
 	// no reads and writes till we reopen
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -901,7 +908,6 @@ func loadDatafiles(opt *option, path string) (map[int32]datafile.Datafile, int32
 			datafile.FileID(id),
 			datafile.TempDir(opt.TempDir),
 			datafile.CopyTempThreshold(opt.CopyTempThreshold),
-			datafile.ValueOnMemoryThreshold(opt.ValueOnMemoryThreshold),
 		)
 		if err != nil {
 			return nil, 0, err

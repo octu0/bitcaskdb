@@ -47,7 +47,7 @@ func (e *Encoder) read(tempData *temporaryData, src io.Reader) (int64, uint32, e
 	for {
 		n, err := src.Read(buf)
 		if n < 0 {
-			return 0, 0, errNegativeRead
+			return 0, 0, errors.WithStack(errNegativeRead)
 		}
 
 		size += int64(n)
@@ -72,27 +72,23 @@ func (e *Encoder) read(tempData *temporaryData, src io.Reader) (int64, uint32, e
 // Messages are framed with a key-length and value-length prefix.
 func (e *Encoder) Encode(key []byte, r io.Reader, expiry time.Time) (int64, error) {
 	if len(key) < 1 {
-		return 0, errInvalidKeyOrValueSize
+		return 0, errors.WithStack(errInvalidKeyOrValueSize)
 	}
 
 	if r == nil {
 		return e.encodeNoValue(key)
 	}
 
-	pool := e.ctx.Buffer().BufioReaderPool()
-	bfr := pool.Get(r)
-	defer pool.Put(bfr)
-
 	tempData := newTemopraryData(e.ctx, e.tempDir, e.threshold)
 	defer tempData.Close()
 
-	valueSize, checksum, err := e.read(tempData, bfr)
+	valueSize, checksum, err := e.read(tempData, r)
 	if err != nil {
 		return 0, errors.WithStack(err)
 	}
 
 	if valueSize < 1 {
-		return 0, errInvalidKeyOrValueSize
+		return 0, errors.WithStack(errInvalidKeyOrValueSize)
 	}
 
 	// keySize

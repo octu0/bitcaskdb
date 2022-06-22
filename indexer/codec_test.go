@@ -121,27 +121,6 @@ func TestFilerReadCorruptedData(t *testing.T) {
 			tt.Errorf("errTruncatedKeySize! %+v", err)
 		}
 	})
-	t.Run("keysize/large", func(tt *testing.T) {
-		b := bytes.NewBuffer(nil)
-		if err := binary.Write(b, binary.BigEndian, uint32(1024*1024)); err != nil {
-			tt.Errorf("no error: %+v", err)
-		}
-		if _, err := b.Write([]byte("test")); err != nil {
-			tt.Errorf("no error: %+v", err)
-		}
-		if err := writeFiler(b, Filer{0, 0, 0}); err != nil {
-			tt.Errorf("no error: %+v", err)
-		}
-
-		at := art.New()
-		err := readFilerIndex(ctx, b, at)
-		if err == nil {
-			tt.Errorf("must error")
-		}
-		if errors.Is(err, errKeySizeTooLarge) != true {
-			tt.Errorf("errKeySizeTooLarge! %+v", err)
-		}
-	})
 }
 
 func TestTTLReadCorruptedData(t *testing.T) {
@@ -165,27 +144,6 @@ func TestTTLReadCorruptedData(t *testing.T) {
 		}
 		if errors.Is(err, errTruncatedKeySize) != true {
 			tt.Errorf("errTruncatedKeySize! %+v", err)
-		}
-	})
-	t.Run("keysize/large", func(tt *testing.T) {
-		b := bytes.NewBuffer(nil)
-		if err := binary.Write(b, binary.BigEndian, uint32(1024*1024)); err != nil {
-			tt.Errorf("no error: %+v", err)
-		}
-		if _, err := b.Write([]byte("test")); err != nil {
-			tt.Errorf("no error: %+v", err)
-		}
-		if err := writeTTL(b, time.Time{}); err != nil {
-			tt.Errorf("no error: %+v", err)
-		}
-
-		at := art.New()
-		err := readFilerIndex(ctx, b, at)
-		if err == nil {
-			tt.Errorf("must error")
-		}
-		if errors.Is(err, errKeySizeTooLarge) != true {
-			tt.Errorf("errKeySizeTooLarge! %+v", err)
 		}
 	})
 }

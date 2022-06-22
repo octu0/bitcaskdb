@@ -92,10 +92,14 @@ func (d *repliDestination) Insert(fileID int32, index int64, checksum uint32, ke
 	d.b.mu.Lock()
 	defer d.b.mu.Unlock()
 
-	df, err := d.datafileOpen(fileID)
+	df, newOpen, err := d.datafileOpen(fileID)
 	if err != nil {
 		return errors.WithStack(err)
 	}
+	if newOpen {
+		defer df.Close()
+	}
+
 	index, size, err := df.Write(key, r, expiry)
 	if err != nil {
 		return errors.WithStack(err)
@@ -111,20 +115,23 @@ func (d *repliDestination) Insert(fileID int32, index int64, checksum uint32, ke
 	return d.b.maybeRotate()
 }
 
-func (d *repliDestination) datafileOpen(fileID int32) (datafile.Datafile, error) {
+func (d *repliDestination) datafileOpen(fileID int32) (datafile.Datafile, bool, error) {
 	if d.b.curr.FileID() == fileID {
-		return d.b.curr, nil
+		return d.b.curr, false, nil
 	}
 
-	return datafile.Open(
+	df, err := datafile.Open(
 		datafile.RuntimeContext(d.b.opt.RuntimeContext),
 		datafile.Path(d.b.path),
 		datafile.FileID(fileID),
 		datafile.FileMode(d.b.opt.FileFileModeBeforeUmask),
 		datafile.TempDir(d.b.opt.TempDir),
 		datafile.CopyTempThreshold(d.b.opt.CopyTempThreshold),
-		datafile.ValueOnMemoryThreshold(d.b.opt.ValueOnMemoryThreshold),
 	)
+	if err != nil {
+		return nil, false, err
+	}
+	return df, true, nil
 }
 
 func (d *repliDestination) Delete(key []byte) error {

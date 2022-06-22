@@ -1,7 +1,6 @@
 package datafile
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -121,47 +120,24 @@ func (df *datafile) Read() (*Entry, error) {
 	return e, nil
 }
 
-func (df *datafile) readAt(buf []byte, index, size int64) (int, error) {
+func (df *datafile) sectionReader(index, size int64) *io.SectionReader {
 	df.RLock()
 	defer df.RUnlock()
 
-	n := int(0)
 	if df.ra != nil {
-		readed, err := df.ra.ReadAt(buf[:size], index)
-		if err != nil {
-			return 0, err
-		}
-		n = readed
-	} else {
-		readed, err := df.r.ReadAt(buf[:size], index)
-		if err != nil {
-			return 0, err
-		}
-		n = readed
+		return io.NewSectionReader(df.ra, index, size)
 	}
-	if int64(n) != size {
-		return 0, errReadError
-	}
-	return n, nil
+	return io.NewSectionReader(df.r, index, size)
 }
 
 func (df *datafile) ReadAtHeader(index int64) (*Header, bool, error) {
-	pool := df.opt.ctx.Buffer().BytePool()
-	buf := pool.Get()
-	defer pool.Put(buf)
-
-	n, err := df.readAt(buf, index, codec.HeaderSize)
-	if err != nil {
-		return nil, IsEOF, err
-	}
-
-	r := bytes.NewReader(buf[:n])
-	d := codec.NewDecoder(df.opt.ctx, r, df.opt.valueOnMemoryThreshold)
+	r := df.sectionReader(index, codec.HeaderSize)
+	d := codec.NewDecoder(df.opt.ctx, r)
 	defer d.Close()
 
 	h, err := d.DecodeHeader()
 	if err != nil {
-		return nil, IsEOF, err
+		return nil, IsEOF, errors.WithStack(err)
 	}
 
 	header := &Header{
@@ -180,22 +156,13 @@ func (df *datafile) ReadAtHeader(index int64) (*Header, bool, error) {
 
 // ReadAt the entry located at index offset with expected serialized size
 func (df *datafile) ReadAt(index, size int64) (*Entry, error) {
-	pool := df.opt.ctx.Buffer().BytePool()
-	buf := pool.Get()
-	defer pool.Put(buf)
-
-	n, err := df.readAt(buf, index, size)
-	if err != nil {
-		return nil, err
-	}
-
-	r := bytes.NewReader(buf[:n])
-	d := codec.NewDecoder(df.opt.ctx, r, df.opt.valueOnMemoryThreshold)
+	r := df.sectionReader(index, size)
+	d := codec.NewDecoder(df.opt.ctx, r)
 	defer d.Close()
 
 	p, err := d.Decode()
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	e := &Entry{
@@ -215,7 +182,7 @@ func (df *datafile) ReadAt(index, size int64) (*Entry, error) {
 
 func (df *datafile) Write(key []byte, value io.Reader, expiry time.Time) (int64, int64, error) {
 	if df.w == nil {
-		return -1, 0, errReadonly
+		return -1, 0, errors.WithStack(errReadonly)
 	}
 
 	df.Lock()
@@ -225,7 +192,7 @@ func (df *datafile) Write(key []byte, value io.Reader, expiry time.Time) (int64,
 
 	size, err := df.enc.Encode(key, value, expiry)
 	if err != nil {
-		return -1, 0, err
+		return -1, 0, errors.WithStack(err)
 	}
 	df.offset += size
 
@@ -261,7 +228,7 @@ func open(funcs ...datafileOptFunc) (*datafile, error) {
 	if opt.readonly != true {
 		w, err = os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, opt.fileMode)
 		if err != nil {
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
 	}
 
@@ -283,7 +250,7 @@ func open(funcs ...datafileOptFunc) (*datafile, error) {
 
 	offset := stat.Size()
 
-	dec := codec.NewDecoder(opt.ctx, r, opt.valueOnMemoryThreshold)
+	dec := codec.NewDecoder(opt.ctx, r)
 	enc := codec.NewEncoder(opt.ctx, w, opt.tempDir, opt.copyTempThreshold)
 
 	return &datafile{

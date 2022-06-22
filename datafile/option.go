@@ -9,14 +9,13 @@ import (
 type datafileOptFunc func(*datafileOpt)
 
 type datafileOpt struct {
-	ctx                    runtime.Context
-	path                   string
-	fileID                 int32
-	readonly               bool
-	fileMode               os.FileMode
-	tempDir                string
-	copyTempThreshold      int64
-	valueOnMemoryThreshold int64
+	ctx               runtime.Context
+	path              string
+	fileID            int32
+	readonly          bool
+	fileMode          os.FileMode
+	tempDir           string
+	copyTempThreshold int64
 }
 
 func RuntimeContext(ctx runtime.Context) datafileOptFunc {
@@ -52,12 +51,6 @@ func TempDir(dir string) datafileOptFunc {
 func CopyTempThreshold(threshold int64) datafileOptFunc {
 	return func(opt *datafileOpt) {
 		opt.copyTempThreshold = threshold
-	}
-}
-
-func ValueOnMemoryThreshold(threshold int64) datafileOptFunc {
-	return func(opt *datafileOpt) {
-		opt.valueOnMemoryThreshold = threshold
 	}
 }
 

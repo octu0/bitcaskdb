@@ -33,7 +33,8 @@ func readKeyBytes(ctx runtime.Context, r io.Reader) ([]byte, func(), error) {
 
 	key := pool.Get()
 	if uint32(cap(key)) < size {
-		return nil, nil, errors.WithStack(errKeySizeTooLarge)
+		pool.Put(key)
+		key = make([]byte, size)
 	}
 
 	if _, err := r.Read(key[:size]); err != nil {

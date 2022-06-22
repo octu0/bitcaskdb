@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/octu0/bitcaskdb/runtime"
@@ -12,6 +13,16 @@ import (
 const (
 	defaultTempDataTruncateThreshold int64         = 100 * 1024 * 1024
 	truncateInterval                 time.Duration = 100 * time.Millisecond
+)
+
+// Memory management is handled by sync.Pool,
+// instead of shared by runtime.Buffer, since large bytes.Buffer may be allocated.
+var (
+	tempMemoryPool = &sync.Pool{
+		New: func() interface{} {
+			return bytes.NewBuffer(make([]byte, 0, 1*1024*1024)) // 1 MB
+		},
+	}
 )
 
 type temporaryData struct {
@@ -100,7 +111,8 @@ func (t *temporaryData) Close() error {
 	}
 	t.closed = true
 
-	t.ctx.Buffer().BufferPool().Put(t.memory)
+	t.memory.Reset()
+	tempMemoryPool.Put(t.memory)
 
 	if t.file != nil {
 		return t.closeFile()
@@ -117,7 +129,7 @@ func newTemopraryData(ctx runtime.Context, tempDir string, threshold int64) *tem
 	}
 	return &temporaryData{
 		ctx:               ctx,
-		memory:            ctx.Buffer().BufferPool().Get(),
+		memory:            tempMemoryPool.Get().(*bytes.Buffer),
 		file:              nil,
 		written:           0,
 		closed:            false,

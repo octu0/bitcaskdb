@@ -25,7 +25,7 @@ func TestDecoderShortPrefix(t *testing.T) {
 
 	truncBytesCount := int64(2)
 	buf := bytes.NewReader(prefix[:headerKeySize+headerValueSize-truncBytesCount])
-	decoder := NewDecoder(runtime.DefaultContext(), buf, 0)
+	decoder := NewDecoder(runtime.DefaultContext(), buf)
 	defer decoder.Close()
 
 	_, err := decoder.Decode()
@@ -55,7 +55,7 @@ func TestDecoderInvalidValueKeySizes(t *testing.T) {
 			binary.BigEndian.PutUint64(prefix[headerKeySize:headerKeySize+headerValueSize], tests[i].valueSize)
 
 			buf := bytes.NewReader(prefix)
-			decoder := NewDecoder(runtime.DefaultContext(), buf, 0)
+			decoder := NewDecoder(runtime.DefaultContext(), buf)
 			defer decoder.Close()
 
 			_, err := decoder.Decode()
@@ -94,7 +94,7 @@ func TestDecoderTruncatedData(t *testing.T) {
 		t.Run(tests[i].name, func(tt *testing.T) {
 			tt.Parallel()
 			buf := bytes.NewReader(tests[i].data)
-			decoder := NewDecoder(runtime.DefaultContext(), buf, 0)
+			decoder := NewDecoder(runtime.DefaultContext(), buf)
 			defer decoder.Close()
 
 			_, err := decoder.Decode()
@@ -117,7 +117,7 @@ func TestDecoderPayload(t *testing.T) {
 	copy(data[HeaderSize:HeaderSize+1], []byte("a"))
 	copy(data[HeaderSize+1:HeaderSize+2], []byte("b"))
 
-	d := NewDecoder(runtime.DefaultContext(), bytes.NewReader(data), 0)
+	d := NewDecoder(runtime.DefaultContext(), bytes.NewReader(data))
 	defer d.Close()
 
 	p, err := d.Decode()
@@ -147,7 +147,7 @@ func TestDecoderPayload(t *testing.T) {
 func TestDecodeNoValue(t *testing.T) {
 	// encoder_test#TestEncodeNoValue
 	b, _ := base64.StdEncoding.DecodeString(b64EmptyValue)
-	d := NewDecoder(runtime.DefaultContext(), bytes.NewReader(b), 0)
+	d := NewDecoder(runtime.DefaultContext(), bytes.NewReader(b))
 	defer d.Close()
 
 	p, err := d.Decode()
@@ -197,7 +197,7 @@ func TestDecoderIOCount(t *testing.T) {
 			r: bytes.NewReader(data),
 			c: 0,
 		}
-		d := NewDecoder(runtime.DefaultContext(), counter, 0)
+		d := NewDecoder(runtime.DefaultContext(), counter)
 		defer d.Close()
 
 		p, err := d.Decode()
@@ -223,7 +223,7 @@ func TestDecoderIOCount(t *testing.T) {
 			r: bytes.NewReader(data),
 			c: 0,
 		}
-		d := NewDecoder(runtime.DefaultContext(), counter, 0)
+		d := NewDecoder(runtime.DefaultContext(), counter)
 		defer d.Close()
 
 		p, err := d.Decode()
