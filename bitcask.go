@@ -719,15 +719,15 @@ func (b *Bitcask) Merge() error {
 		return ErrMergeInProgress
 	}
 	b.isMerging = true
-
 	b.mu.Unlock()
+
 	defer func() {
 		b.isMerging = false
 	}()
-	b.mu.RLock()
 
+	b.mu.Lock()
 	if err := b.closeCurrentFile(); err != nil {
-		b.mu.RUnlock()
+		b.mu.Unlock()
 		return err
 	}
 	filesToMerge := make([]int32, 0, len(b.datafiles))
@@ -735,10 +735,10 @@ func (b *Bitcask) Merge() error {
 		filesToMerge = append(filesToMerge, id)
 	}
 	if err := b.openNewWritableFile(); err != nil {
-		b.mu.RUnlock()
+		b.mu.Unlock()
 		return err
 	}
-	b.mu.RUnlock()
+	b.mu.Unlock()
 
 	sort.Slice(filesToMerge, func(i, j int) bool {
 		return filesToMerge[i] < filesToMerge[j]
@@ -791,6 +791,7 @@ func (b *Bitcask) Merge() error {
 	if err := mdb.Close(); err != nil {
 		return err
 	}
+
 	// no reads and writes till we reopen
 	b.mu.Lock()
 	defer b.mu.Unlock()
