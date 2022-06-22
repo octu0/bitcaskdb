@@ -187,7 +187,7 @@ type benchPrologicBitcaskGet struct {
 }
 
 func (t *benchPrologicBitcaskGet) Name() string {
-	return "prologic/bitcasb"
+	return "prologic/bitcask"
 }
 
 func (t *benchPrologicBitcaskGet) Setup(testdir string, key []byte, value []byte) error {
