@@ -129,18 +129,18 @@ func (df *datafile) readAt(buf []byte, index, size int64) (int, error) {
 	if df.ra != nil {
 		readed, err := df.ra.ReadAt(buf[:size], index)
 		if err != nil {
-			return 0, err
+			return 0, errors.WithStack(err)
 		}
 		n = readed
 	} else {
 		readed, err := df.r.ReadAt(buf[:size], index)
 		if err != nil {
-			return 0, err
+			return 0, errors.WithStack(err)
 		}
 		n = readed
 	}
 	if int64(n) != size {
-		return 0, errReadError
+		return 0, errors.WithStack(errReadError)
 	}
 	return n, nil
 }
@@ -152,7 +152,7 @@ func (df *datafile) ReadAtHeader(index int64) (*Header, bool, error) {
 
 	n, err := df.readAt(buf, index, codec.HeaderSize)
 	if err != nil {
-		return nil, IsEOF, err
+		return nil, IsEOF, errors.WithStack(err)
 	}
 
 	r := bytes.NewReader(buf[:n])
@@ -161,7 +161,7 @@ func (df *datafile) ReadAtHeader(index int64) (*Header, bool, error) {
 
 	h, err := d.DecodeHeader()
 	if err != nil {
-		return nil, IsEOF, err
+		return nil, IsEOF, errors.WithStack(err)
 	}
 
 	header := &Header{
@@ -195,7 +195,7 @@ func (df *datafile) ReadAt(index, size int64) (*Entry, error) {
 
 	p, err := d.Decode()
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	e := &Entry{
@@ -215,7 +215,7 @@ func (df *datafile) ReadAt(index, size int64) (*Entry, error) {
 
 func (df *datafile) Write(key []byte, value io.Reader, expiry time.Time) (int64, int64, error) {
 	if df.w == nil {
-		return -1, 0, errReadonly
+		return -1, 0, errors.WithStack(errReadonly)
 	}
 
 	df.Lock()
@@ -225,7 +225,7 @@ func (df *datafile) Write(key []byte, value io.Reader, expiry time.Time) (int64,
 
 	size, err := df.enc.Encode(key, value, expiry)
 	if err != nil {
-		return -1, 0, err
+		return -1, 0, errors.WithStack(err)
 	}
 	df.offset += size
 
@@ -261,7 +261,7 @@ func open(funcs ...datafileOptFunc) (*datafile, error) {
 	if opt.readonly != true {
 		w, err = os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, opt.fileMode)
 		if err != nil {
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
 	}
 
