@@ -16,7 +16,7 @@ const (
 	DefaultFileFileModeBeforeUmask = os.FileMode(0600)
 
 	// DefaultMaxDatafileSize is the default maximum datafile size in bytes
-	DefaultMaxDatafileSize = 1 << 20 // 1MB
+	DefaultMaxDatafileSize = 100 * 1024 * 1024 // 100MB
 
 	// Data size exceeding this threshold to temporarily copied to TempDir
 	DefaultCopyTempThrshold int64 = 10 * 1024 * 1024

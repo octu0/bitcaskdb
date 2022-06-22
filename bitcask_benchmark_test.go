@@ -278,7 +278,7 @@ func (t *benchPrologicBitcaskMerge) Name() string {
 }
 
 func (t *benchPrologicBitcaskMerge) Setup(testdir string) error {
-	db, err := bitcask.Open(testdir, bitcask.WithMaxValueSize(512*1024))
+	db, err := bitcask.Open(testdir, bitcask.WithMaxValueSize(512*1024), bitcask.WithMaxDatafileSize(100*1024*1024))
 	if err != nil {
 		return err
 	}
