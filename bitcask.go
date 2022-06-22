@@ -198,6 +198,10 @@ func (b *Bitcask) putAndIndex(key []byte, value io.Reader, expiry time.Time) err
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
+	return b.putAndIndexLocked(key, value, expiry)
+}
+
+func (b *Bitcask) putAndIndexLocked(key []byte, value io.Reader, expiry time.Time) error {
 	index, size, err := b.put(key, value, expiry)
 	if err != nil {
 		return err
@@ -759,35 +763,36 @@ func (b *Bitcask) Merge() error {
 	// Rewrite all key/value pairs into merged database
 	// Doing this automatically strips deleted keys and
 	// old key/value pairs
-	if err := b.Fold(func(key []byte) error {
-		filer, _ := b.trie.Search(key)
-		// if key was updated after start of merge operation, nothing to do
-		if filesToMerge[len(filesToMerge)-1] < filer.(indexer.Filer).FileID {
+	if err := func() error {
+		mdb.mu.Lock()
+		defer mdb.mu.Unlock()
+		return b.Fold(func(key []byte) error {
+			v, _ := b.trie.Search(key)
+			filer := v.(indexer.Filer)
+			// if key was updated after start of merge operation, nothing to do
+			if filesToMerge[len(filesToMerge)-1] < filer.FileID {
+				return nil
+			}
+
+			e, err := b.get(key)
+			if err != nil {
+				return err
+			}
+			defer e.Close()
+
+			if err := mdb.putAndIndexLocked(key, e.Value, e.Expiry); err != nil {
+				return err
+			}
 			return nil
-		}
-		e, err := b.get(key)
-		if err != nil {
-			return err
-		}
-		defer e.Close()
-
-		if e.Expiry.IsZero() != true {
-			if err := mdb.PutWithTTL(key, e.Value, time.Until(e.Expiry)); err != nil {
-				return err
-			}
-		} else {
-			if err := mdb.Put(key, e.Value); err != nil {
-				return err
-			}
-		}
-
-		return nil
-	}); err != nil {
+		})
+	}(); err != nil {
 		return err
 	}
+
 	if err := mdb.Sync(); err != nil {
 		return err
 	}
+
 	if err := mdb.Close(); err != nil {
 		return err
 	}
