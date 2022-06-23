@@ -712,16 +712,22 @@ func (b *Bitcask) reopen() error {
 // and deleted keys removes. Duplicate key/value pairs are also removed.
 // Call this function periodically to reclaim disk space.
 func (b *Bitcask) Merge() error {
-	b.mu.Lock()
-	if b.isMerging {
-		b.mu.Unlock()
+	b.mu.RLock()
+	currentMerging := b.isMerging
+	b.mu.RUnlock()
+
+	if currentMerging {
 		return ErrMergeInProgress
 	}
+
+	b.mu.Lock()
 	b.isMerging = true
 	b.mu.Unlock()
 
 	defer func() {
+		b.mu.Lock()
 		b.isMerging = false
+		b.mu.Unlock()
 	}()
 
 	b.mu.Lock()

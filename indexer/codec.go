@@ -117,12 +117,8 @@ func writeTTL(w io.Writer, expiry time.Time) error {
 
 // ReadIndex reads a persisted from a io.Reader into a Tree
 func readFilerIndex(ctx runtime.Context, r io.Reader, t art.Tree) error {
-	pool := ctx.Buffer().BufioReaderPool()
-	bfr := pool.Get(r)
-	defer pool.Put(bfr)
-
 	for {
-		key, done, err := readKeyBytes(ctx, bfr)
+		key, done, err := readKeyBytes(ctx, r)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				break
@@ -131,7 +127,7 @@ func readFilerIndex(ctx runtime.Context, r io.Reader, t art.Tree) error {
 		}
 		defer done()
 
-		f, err := readFiler(bfr)
+		f, err := readFiler(r)
 		if err != nil {
 			return errors.WithStack(err)
 		}
@@ -169,12 +165,8 @@ func writeFilerIndex(ctx runtime.Context, w io.Writer, t art.Tree) (lastErr erro
 }
 
 func readTTLIndex(ctx runtime.Context, r io.Reader, t art.Tree) error {
-	pool := ctx.Buffer().BufioReaderPool()
-	bfr := pool.Get(r)
-	defer pool.Put(bfr)
-
 	for {
-		key, done, err := readKeyBytes(ctx, bfr)
+		key, done, err := readKeyBytes(ctx, r)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				break
@@ -183,7 +175,7 @@ func readTTLIndex(ctx runtime.Context, r io.Reader, t art.Tree) error {
 		}
 		defer done()
 
-		ttl, err := readTTL(bfr)
+		ttl, err := readTTL(r)
 		if err != nil {
 			return errors.WithStack(err)
 		}
