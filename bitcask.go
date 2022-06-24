@@ -233,6 +233,15 @@ func (b *Bitcask) putAndIndexLocked(key []byte, value io.Reader, expiry time.Tim
 	return nil
 }
 
+// put inserts a new (key, value). Both key and value are valid inputs.
+func (b *Bitcask) put(key []byte, value io.Reader, expiry time.Time) (int64, int64, error) {
+	if err := b.maybeRotate(); err != nil {
+		return -1, 0, errors.Wrap(err, "error rotating active datafile")
+	}
+
+	return b.curr.Write(key, value, expiry)
+}
+
 // Delete deletes the named key.
 func (b *Bitcask) Delete(key []byte) error {
 	b.mu.Lock()
@@ -619,22 +628,15 @@ func (b *Bitcask) maybeRotate() error {
 	return nil
 }
 
-// put inserts a new (key, value). Both key and value are valid inputs.
-func (b *Bitcask) put(key []byte, value io.Reader, expiry time.Time) (int64, int64, error) {
-	if err := b.maybeRotate(); err != nil {
-		return -1, 0, errors.Wrap(err, "error rotating active datafile")
-	}
-
-	return b.curr.Write(key, value, expiry)
-}
 
 // closeCurrentFile closes current datafile and makes it read only.
-func (b *Bitcask) closeCurrentFile() error {
+func (b *Bitcask) closeCurrentFile() (int32, error) {
+	id := b.curr.FileID()
+
 	if err := b.curr.Close(); err != nil {
-		return err
+		return 0, errors.WithStack(err)
 	}
 
-	id := b.curr.FileID()
 	df, err := datafile.OpenReadonly(
 		datafile.RuntimeContext(b.opt.RuntimeContext),
 		datafile.Path(b.path),
