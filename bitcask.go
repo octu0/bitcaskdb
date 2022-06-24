@@ -347,6 +347,11 @@ func (b *Bitcask) Scan(prefix []byte, f func(key []byte) error) (err error) {
 			return true
 		}
 
+		// skip expired
+		if b.isExpired(nodeKey) {
+			return true
+		}
+
 		if err = f(nodeKey); err != nil {
 			return false
 		}
