@@ -431,38 +431,38 @@ func TestMetadata(t *testing.T) {
 		assert.Equal(false, db.metadata.IndexUpToDate)
 	})
 	t.Run("Reclaimable", func(t *testing.T) {
-		assert.Equal(int64(0), db.Reclaimable())
+		assert.Equal(int64(0), db.metadata.ReclaimableSpace)
 	})
 	t.Run("ReclaimableAfterNewPut", func(t *testing.T) {
 		assert.NoError(db.PutBytes([]byte("hello"), []byte("world")))
-		assert.Equal(int64(0), db.Reclaimable())
+		assert.Equal(int64(0), db.metadata.ReclaimableSpace)
 	})
 	t.Run("ReclaimableAfterRepeatedPut", func(t *testing.T) {
 		assert.NoError(db.PutBytes([]byte("hello"), []byte("world")))
-		assert.Equal(int64(34), db.Reclaimable())
+		assert.Equal(int64(34), db.metadata.ReclaimableSpace)
 	})
 	t.Run("ReclaimableAfterDelete", func(t *testing.T) {
 		assert.NoError(db.Delete([]byte("hello")))
-		assert.Equal(int64(68), db.Reclaimable())
+		assert.Equal(int64(68), db.metadata.ReclaimableSpace)
 	})
 	t.Run("ReclaimableAfterNonExistingDelete", func(t *testing.T) {
 		assert.NoError(db.Delete([]byte("hello1")))
-		assert.Equal(int64(68), db.Reclaimable())
+		assert.Equal(int64(68), db.metadata.ReclaimableSpace)
 	})
 	t.Run("ReclaimableAfterDeleteAll", func(t *testing.T) {
 		assert.NoError(db.DeleteAll())
-		assert.Equal(int64(130), db.Reclaimable())
+		assert.Equal(int64(130), db.metadata.ReclaimableSpace)
 	})
 	t.Run("ReclaimableAfterMerge", func(t *testing.T) {
 		assert.NoError(db.Merge())
-		assert.Equal(int64(0), db.Reclaimable())
+		assert.Equal(int64(0), db.metadata.ReclaimableSpace)
 	})
 	t.Run("IndexUptoDateAfterMerge", func(t *testing.T) {
 		assert.Equal(true, db.metadata.IndexUpToDate)
 	})
 	t.Run("ReclaimableAfterMergeAndDeleteAll", func(t *testing.T) {
 		assert.NoError(db.DeleteAll())
-		assert.Equal(int64(0), db.Reclaimable())
+		assert.Equal(int64(0), db.metadata.ReclaimableSpace)
 	})
 }
 

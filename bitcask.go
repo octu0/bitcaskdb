@@ -30,9 +30,10 @@ const (
 
 // Stats is a struct returned by Stats() on an open Bitcask instance
 type Stats struct {
-	Datafiles int
-	Keys      int
-	Size      int64
+	Datafiles        int
+	Keys             int
+	Size             int64
+	ReclaimableSpace int64
 }
 
 type metadata struct {
@@ -71,12 +72,14 @@ func (b *Bitcask) Stats() (Stats, error) {
 	b.mu.RLock()
 	datafiles := len(b.datafiles)
 	keys := b.trie.Size()
+	rs := b.metadata.ReclaimableSpace
 	b.mu.RUnlock()
 
 	return Stats{
-		Datafiles: datafiles,
-		Keys:      keys,
-		Size:      dirSize,
+		Datafiles:        datafiles,
+		Keys:             keys,
+		Size:             dirSize,
+		ReclaimableSpace: rs,
 	}, nil
 }
 
@@ -878,11 +881,6 @@ func (b *Bitcask) saveMetadata() error {
 		return errors.WithStack(err)
 	}
 	return nil
-}
-
-// Reclaimable returns space that can be reclaimed
-func (b *Bitcask) Reclaimable() int64 {
-	return b.metadata.ReclaimableSpace
 }
 
 // isExpired returns true if a key has expired
