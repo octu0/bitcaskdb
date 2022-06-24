@@ -311,8 +311,8 @@ func (b *Bitcask) Sift(f func(key []byte) (bool, error)) (err error) {
 
 // DeleteAll deletes all the keys. If an I/O error occurs the error is returned.
 func (b *Bitcask) DeleteAll() (err error) {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
+	b.mu.Lock()
+	defer b.mu.Unlock()
 
 	b.trie.ForEach(func(node art.Node) bool {
 		nodeKey := node.Key()
