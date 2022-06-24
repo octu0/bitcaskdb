@@ -263,7 +263,7 @@ func (t *mergeTempDB) mergeDatafileLocked(m map[int32]datafile.Datafile) error {
 		defer e.Close()
 
 		// no merge expired
-		if t.mdb.isExpiredFromTime(e.Expiry) {
+		if isExpiredFromTime(e.Expiry) {
 			return true
 		}
 		if err := t.mdb.putAndIndexLocked(e.Key, e.Value, e.Expiry); err != nil {

@@ -753,14 +753,7 @@ func (b *Bitcask) isExpired(key []byte) bool {
 	if found != true {
 		return false
 	}
-	return b.isExpiredFromTime(expiry.(time.Time))
-}
-
-func (b *Bitcask) isExpiredFromTime(expiry time.Time) bool {
-	if expiry.IsZero() {
-		return false
-	}
-	return expiry.Before(time.Now().UTC())
+	return isExpiredFromTime(expiry.(time.Time))
 }
 
 func (b *Bitcask) repliSource() repli.Source {
@@ -769,6 +762,13 @@ func (b *Bitcask) repliSource() repli.Source {
 
 func (b *Bitcask) repliDestination() repli.Destination {
 	return newRepliDestination(b)
+}
+
+func isExpiredFromTime(expiry time.Time) bool {
+	if expiry.IsZero() {
+		return false
+	}
+	return expiry.Before(time.Now().UTC())
 }
 
 func loadDatafiles(opt *option, path string) (map[int32]datafile.Datafile, int32, error) {
