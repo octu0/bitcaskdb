@@ -155,8 +155,8 @@ func (m *merger) removeArchive(b *Bitcask, currentFileID int32) error {
 
 		if 0 < len(ids) {
 			fileID := ids[0]
-			// keep current
-			if currentFileID == fileID {
+			// keep currentFileID or newer
+			if currentFileID <= fileID {
 				continue
 			}
 		}
