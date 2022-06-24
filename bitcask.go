@@ -592,38 +592,15 @@ func (b *Bitcask) maybeRotate() error {
 		return nil
 	}
 
-	if err := b.curr.Close(); err != nil {
-		return err
-	}
-
-	id := b.curr.FileID()
-
-	df, err := datafile.OpenReadonly(
-		datafile.RuntimeContext(b.opt.RuntimeContext),
-		datafile.Path(b.path),
-		datafile.FileID(id),
-		datafile.TempDir(b.opt.TempDir),
-		datafile.CopyTempThreshold(b.opt.CopyTempThreshold),
-	)
+	currentFileID, err := b.closeCurrentFile()
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
-	b.datafiles[id] = df
-
-	curr, err := datafile.Open(
-		datafile.RuntimeContext(b.opt.RuntimeContext),
-		datafile.Path(b.path),
-		datafile.FileID(b.curr.FileID()+1),
-		datafile.FileMode(b.opt.FileFileModeBeforeUmask),
-		datafile.TempDir(b.opt.TempDir),
-		datafile.CopyTempThreshold(b.opt.CopyTempThreshold),
-	)
-	if err != nil {
-		return err
+	if err := b.openWritableFile(currentFileID + 1); err != nil {
+		return errors.WithStack(err)
 	}
 
-	b.curr = curr
 	if err := b.saveIndexes(); err != nil {
 		return err
 	}
