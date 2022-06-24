@@ -6,9 +6,11 @@ import (
 	goruntime "runtime"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/pkg/errors"
 	art "github.com/plar/go-adaptive-radix-tree"
+	"golang.org/x/time/rate"
 
 	"github.com/octu0/bitcaskdb/datafile"
 	"github.com/octu0/bitcaskdb/indexer"
@@ -30,7 +32,7 @@ func (m *merger) isMerging() bool {
 	return m.merging
 }
 
-func (m *merger) Merge(b *Bitcask) error {
+func (m *merger) Merge(b *Bitcask, lim *rate.Limiter) error {
 	if m.isMerging() {
 		return errors.WithStack(ErrMergeInProgress)
 	}
@@ -50,7 +52,7 @@ func (m *merger) Merge(b *Bitcask) error {
 		return errors.WithStack(err)
 	}
 
-	temp, err := m.renewMergedDB(b, mergeFileIds)
+	temp, err := m.renewMergedDB(b, mergeFileIds, lim)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -68,7 +70,7 @@ func (m *merger) Merge(b *Bitcask) error {
 		return errors.Wrap(err, "failed to close()")
 	}
 
-	if err := m.moveMerged(b, temp.DBPath()); err != nil {
+	if err := m.moveMerged(b, temp.DBPath(), lim); err != nil {
 		return errors.WithStack(err)
 	}
 
@@ -106,13 +108,13 @@ func (m *merger) forwardCurrentDafafile(b *Bitcask) ([]int32, error) {
 	return mergeFileIds, nil
 }
 
-func (m *merger) renewMergedDB(b *Bitcask, mergeFileIds []int32) (*mergeTempDB, error) {
+func (m *merger) renewMergedDB(b *Bitcask, mergeFileIds []int32, lim *rate.Limiter) (*mergeTempDB, error) {
 	temp, err := openMergeTempDB(b.path, b.opt)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 
-	if err := temp.Merge(b, mergeFileIds); err != nil {
+	if err := temp.Merge(b, mergeFileIds, lim); err != nil {
 		return nil, errors.WithStack(err)
 	}
 
@@ -122,10 +124,10 @@ func (m *merger) renewMergedDB(b *Bitcask, mergeFileIds []int32) (*mergeTempDB, 
 	return temp, nil
 }
 
-func (m *merger) moveMerged(b *Bitcask, mergedDBPath string) error {
+func (m *merger) moveMerged(b *Bitcask, mergedDBPath string, lim *rate.Limiter) error {
 	currentFileID := b.curr.FileID()
 
-	if err := m.removeArchive(b, currentFileID); err != nil {
+	if err := m.removeArchive(b, currentFileID, lim); err != nil {
 		return errors.WithStack(err)
 	}
 	if err := m.moveDBFiles(b, mergedDBPath); err != nil {
@@ -134,7 +136,7 @@ func (m *merger) moveMerged(b *Bitcask, mergedDBPath string) error {
 	return nil
 }
 
-func (m *merger) removeArchive(b *Bitcask, currentFileID int32) error {
+func (m *merger) removeArchive(b *Bitcask, currentFileID int32, lim *rate.Limiter) error {
 	files, err := os.ReadDir(b.path)
 	if err != nil {
 		return errors.WithStack(err)
@@ -162,8 +164,23 @@ func (m *merger) removeArchive(b *Bitcask, currentFileID int32) error {
 		}
 
 		path := filepath.Join(b.path, filename)
+		stat, err := os.Stat(path)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		filesize := stat.Size()
+
 		if err := os.Remove(path); err != nil {
 			return errors.WithStack(err)
+		}
+
+		r := lim.ReserveN(time.Now(), int(filesize))
+		if r.OK() != true {
+			continue
+		}
+
+		if d := r.Delay(); 0 < d {
+			time.Sleep(d)
 		}
 	}
 	return nil
@@ -213,13 +230,12 @@ func (t *mergeTempDB) DB() *Bitcask {
 // Rewrite all key/value pairs into merged database
 // Doing this automatically strips deleted keys and
 // old key/value pairs
-func (t *mergeTempDB) Merge(src *Bitcask, mergeFileIds []int32) error {
+func (t *mergeTempDB) Merge(src *Bitcask, mergeFileIds []int32, lim *rate.Limiter) error {
 	t.mdb.mu.Lock()
 	defer t.mdb.mu.Unlock()
 
 	m := make(map[int32]datafile.Datafile, len(mergeFileIds))
-	datafiles := make([]datafile.Datafile, len(mergeFileIds))
-	for i, fileID := range mergeFileIds {
+	for _, fileID := range mergeFileIds {
 		df, err := datafile.OpenReadonly(
 			datafile.RuntimeContext(src.opt.RuntimeContext),
 			datafile.Path(src.path),
@@ -230,28 +246,28 @@ func (t *mergeTempDB) Merge(src *Bitcask, mergeFileIds []int32) error {
 		if err != nil {
 			return errors.WithStack(err)
 		}
-		datafiles[i] = df
 		m[fileID] = df
 	}
 	defer func() {
-		for _, df := range datafiles {
+		for _, df := range m {
 			df.Close()
 		}
 	}()
 
-	for _, df := range datafiles {
-		if err := loadIndexFromDatafile(t.mdb.trie, t.mdb.ttlIndex, df); err != nil {
+	for _, fileID := range mergeFileIds {
+		df := m[fileID]
+		if err := loadIndexFromDatafile(t.mdb.trie, t.mdb.ttlIndex, df, lim); err != nil {
 			return errors.WithStack(err)
 		}
 	}
 
-	if err := t.mergeDatafileLocked(m); err != nil {
+	if err := t.mergeDatafileLocked(m, lim); err != nil {
 		return errors.WithStack(err)
 	}
 	return nil
 }
 
-func (t *mergeTempDB) mergeDatafileLocked(m map[int32]datafile.Datafile) error {
+func (t *mergeTempDB) mergeDatafileLocked(m map[int32]datafile.Datafile, lim *rate.Limiter) error {
 	var lastErr error
 	t.mdb.trie.ForEach(func(node art.Node) bool {
 		filer := node.Value().(indexer.Filer)
@@ -270,6 +286,16 @@ func (t *mergeTempDB) mergeDatafileLocked(m map[int32]datafile.Datafile) error {
 			lastErr = errors.WithStack(err)
 			return false
 		}
+
+		r := lim.ReserveN(time.Now(), int(e.TotalSize))
+		if r.OK() != true {
+			return true
+		}
+
+		if d := r.Delay(); 0 < d {
+			time.Sleep(d)
+		}
+
 		return true
 	})
 	if lastErr != nil {

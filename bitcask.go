@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -14,6 +15,7 @@ import (
 	"github.com/gofrs/flock"
 	"github.com/pkg/errors"
 	art "github.com/plar/go-adaptive-radix-tree"
+	"golang.org/x/time/rate"
 
 	"github.com/octu0/bitcaskdb/datafile"
 	"github.com/octu0/bitcaskdb/indexer"
@@ -700,7 +702,15 @@ func (b *Bitcask) reopen() error {
 // and deleted keys removes. Duplicate key/value pairs are also removed.
 // Call this function periodically to reclaim disk space.
 func (b *Bitcask) Merge() error {
-	return b.merger.Merge(b)
+	return b.merger.Merge(b, rate.NewLimiter(rate.Inf, math.MaxInt))
+}
+
+func (b *Bitcask) MergeWithWaitLimit(lim *rate.Limiter) error {
+	return b.merger.Merge(b, lim)
+}
+
+func (b *Bitcask) MergeWithWaitLimitByBytesPerSecond(bytesPerSecond int) error {
+	return b.merger.Merge(b, rate.NewLimiter(rate.Limit(float64(bytesPerSecond)), bytesPerSecond))
 }
 
 // saveIndex saves index and ttl_index currently in RAM to disk
@@ -781,17 +791,6 @@ func loadDatafiles(opt *option, path string) (map[int32]datafile.Datafile, int32
 	return datafiles, lastID, nil
 }
 
-func getSortedDatafiles(datafiles map[int32]datafile.Datafile) []datafile.Datafile {
-	out := make([]datafile.Datafile, 0, len(datafiles))
-	for _, df := range datafiles {
-		out = append(out, df)
-	}
-	sort.Slice(out, func(i, j int) bool {
-		return out[i].FileID() < out[j].FileID()
-	})
-	return out
-}
-
 // loadIndexes loads index from disk to memory. If index is not available or partially available (last bitcask process crashed)
 // then it iterates over last datafile and construct index
 // we construct ttl_index here also along with normal index
@@ -808,22 +807,34 @@ func loadIndexes(b *Bitcask, datafiles map[int32]datafile.Datafile, lastID int32
 		return t, ttlIndex, nil
 	}
 	if found {
-		if err := loadIndexFromDatafile(t, ttlIndex, datafiles[lastID]); err != nil {
+		if err := loadIndexFromDatafile(t, ttlIndex, datafiles[lastID], nil); err != nil {
 			return nil, ttlIndex, err
 		}
 		return t, ttlIndex, nil
 	}
 
-	sortedDatafiles := getSortedDatafiles(datafiles)
-	for _, df := range sortedDatafiles {
-		if err := loadIndexFromDatafile(t, ttlIndex, df); err != nil {
+	fileIds := make([]int32, 0, len(datafiles))
+	for _, df := range datafiles {
+		fileIds = append(fileIds, df.FileID())
+	}
+	sort.Slice(fileIds, func(i, j int) bool {
+		return fileIds[i] < fileIds[j]
+	})
+
+	for _, fileID := range fileIds {
+		df := datafiles[fileID]
+		if err := loadIndexFromDatafile(t, ttlIndex, df, nil); err != nil {
 			return nil, ttlIndex, err
 		}
 	}
 	return t, ttlIndex, nil
 }
 
-func loadIndexFromDatafile(t art.Tree, ttlIndex art.Tree, df datafile.Datafile) error {
+func loadIndexFromDatafile(t art.Tree, ttlIndex art.Tree, df datafile.Datafile, lim *rate.Limiter) error {
+	if lim == nil {
+		lim = rate.NewLimiter(rate.Inf, math.MaxInt)
+	}
+
 	index := int64(0)
 	for {
 		e, err := df.Read()
@@ -835,22 +846,29 @@ func loadIndexFromDatafile(t art.Tree, ttlIndex art.Tree, df datafile.Datafile) 
 		}
 		defer e.Close()
 
-		if e.ValueSize == 0 {
+		if 0 < e.ValueSize {
+			t.Insert(e.Key, indexer.Filer{
+				FileID: df.FileID(),
+				Index:  index,
+				Size:   e.TotalSize,
+			})
+			if e.Expiry.IsZero() != true {
+				ttlIndex.Insert(e.Key, e.Expiry)
+			}
+			index += e.TotalSize
+		} else {
 			// Tombstone value  (deleted key)
 			t.Delete(e.Key)
 			index += e.TotalSize
-			continue
 		}
 
-		t.Insert(e.Key, indexer.Filer{
-			FileID: df.FileID(),
-			Index:  index,
-			Size:   e.TotalSize,
-		})
-		if e.Expiry.IsZero() != true {
-			ttlIndex.Insert(e.Key, e.Expiry)
+		r := lim.ReserveN(time.Now(), int(e.TotalSize))
+		if r.OK() != true {
+			continue
 		}
-		index += e.TotalSize
+		if d := r.Delay(); 0 < d {
+			time.Sleep(d)
+		}
 	}
 	return nil
 }
