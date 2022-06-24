@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"io"
 	"os"
-	"path"
 	"path/filepath"
 	"sort"
 	"sync"
@@ -26,6 +25,7 @@ const (
 	filerIndexFile string = "index"
 	ttlIndexFile   string = "ttl_index"
 	metadataFile   string = "meta.json"
+	tempIndexFile  string = "index.tmp"
 )
 
 // Stats is a struct returned by Stats() on an open Bitcask instance
@@ -58,7 +58,7 @@ type Bitcask struct {
 	metadata   *metadata
 	repliEmit  repli.Emitter
 	repliRecv  repli.Reciver
-	isMerging  bool
+	merger     *merger
 }
 
 // Stats returns statistics about the database including the number of
@@ -718,158 +718,21 @@ func (b *Bitcask) reopen() error {
 // and deleted keys removes. Duplicate key/value pairs are also removed.
 // Call this function periodically to reclaim disk space.
 func (b *Bitcask) Merge() error {
-	b.mu.RLock()
-	currentMerging := b.isMerging
-	b.mu.RUnlock()
-
-	if currentMerging {
-		return ErrMergeInProgress
-	}
-
-	b.mu.Lock()
-	b.isMerging = true
-	b.mu.Unlock()
-
-	defer func() {
-		b.mu.Lock()
-		b.isMerging = false
-		b.mu.Unlock()
-	}()
-
-	b.mu.Lock()
-	if err := b.closeCurrentFile(); err != nil {
-		b.mu.Unlock()
-		return err
-	}
-	filesToMerge := make([]int32, 0, len(b.datafiles))
-	for id, _ := range b.datafiles {
-		filesToMerge = append(filesToMerge, id)
-	}
-	if err := b.openNewWritableFile(); err != nil {
-		b.mu.Unlock()
-		return err
-	}
-	b.mu.Unlock()
-
-	sort.Slice(filesToMerge, func(i, j int) bool {
-		return filesToMerge[i] < filesToMerge[j]
-	})
-
-	// Temporary merged database path
-	temp, err := os.MkdirTemp(b.path, "merge")
-	if err != nil {
-		return err
-	}
-	defer os.RemoveAll(temp)
-
-	// Create a merged database
-	mdb, err := Open(temp, withMerge(b.opt))
-	if err != nil {
-		return err
-	}
-	// Rewrite all key/value pairs into merged database
-	// Doing this automatically strips deleted keys and
-	// old key/value pairs
-	if err := func() error {
-		mdb.mu.Lock()
-		defer mdb.mu.Unlock()
-		return b.Fold(func(key []byte) error {
-			v, _ := b.trie.Search(key)
-			filer := v.(indexer.Filer)
-			// if key was updated after start of merge operation, nothing to do
-			if filesToMerge[len(filesToMerge)-1] < filer.FileID {
-				return nil
-			}
-
-			e, err := b.get(key)
-			if err != nil {
-				return err
-			}
-			defer e.Close()
-
-			if err := mdb.putAndIndexLocked(key, e.Value, e.Expiry); err != nil {
-				return err
-			}
-			return nil
-		})
-	}(); err != nil {
-		return err
-	}
-
-	if err := mdb.Sync(); err != nil {
-		return err
-	}
-
-	if err := mdb.Close(); err != nil {
-		return err
-	}
-
-	// no reads and writes till we reopen
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	if err := b.close(); err != nil {
-		return err
-	}
-
-	// Remove data files
-	files, err := os.ReadDir(b.path)
-	if err != nil {
-		return err
-	}
-	for _, file := range files {
-		if file.IsDir() || file.Name() == lockfile {
-			continue
-		}
-		ids, err := datafile.ParseIds([]string{file.Name()})
-		if err != nil {
-			return err
-		}
-		// if datafile was created after start of merge, skip
-		if 0 < len(ids) && filesToMerge[len(filesToMerge)-1] < ids[0] {
-			continue
-		}
-		if err := os.RemoveAll(path.Join(b.path, file.Name())); err != nil {
-			return err
-		}
-	}
-
-	// Rename all merged data files
-	files, err = os.ReadDir(mdb.path)
-	if err != nil {
-		return err
-	}
-	for _, file := range files {
-		// see #225
-		if file.Name() == lockfile {
-			continue
-		}
-		if err := os.Rename(
-			path.Join([]string{mdb.path, file.Name()}...),
-			path.Join([]string{b.path, file.Name()}...),
-		); err != nil {
-			return err
-		}
-	}
-	b.metadata.ReclaimableSpace = 0
-
-	// And finally reopen the database
-	return b.reopen()
+	return b.merger.Merge(b)
 }
 
 // saveIndex saves index and ttl_index currently in RAM to disk
 func (b *Bitcask) saveIndexes() error {
-	tempIdx := "temp_index"
-	if err := b.indexer.Save(b.trie, filepath.Join(b.path, tempIdx)); err != nil {
+	if err := b.indexer.Save(b.trie, filepath.Join(b.path, tempIndexFile)); err != nil {
 		return err
 	}
-	if err := os.Rename(filepath.Join(b.path, tempIdx), filepath.Join(b.path, filerIndexFile)); err != nil {
+	if err := os.Rename(filepath.Join(b.path, tempIndexFile), filepath.Join(b.path, filerIndexFile)); err != nil {
 		return err
 	}
-	if err := b.ttlIndexer.Save(b.ttlIndex, filepath.Join(b.path, tempIdx)); err != nil {
+	if err := b.ttlIndexer.Save(b.ttlIndex, filepath.Join(b.path, tempIndexFile)); err != nil {
 		return err
 	}
-	if err := os.Rename(filepath.Join(b.path, tempIdx), filepath.Join(b.path, ttlIndexFile)); err != nil {
+	if err := os.Rename(filepath.Join(b.path, tempIndexFile), filepath.Join(b.path, ttlIndexFile)); err != nil {
 		return err
 	}
 	return nil
@@ -890,7 +753,14 @@ func (b *Bitcask) isExpired(key []byte) bool {
 	if found != true {
 		return false
 	}
-	return expiry.(time.Time).Before(time.Now().UTC())
+	return b.isExpiredFromTime(expiry.(time.Time))
+}
+
+func (b *Bitcask) isExpiredFromTime(expiry time.Time) bool {
+	if expiry.IsZero() {
+		return false
+	}
+	return expiry.Before(time.Now().UTC())
 }
 
 func (b *Bitcask) repliSource() repli.Source {
@@ -981,6 +851,8 @@ func loadIndexFromDatafile(t art.Tree, ttlIndex art.Tree, df datafile.Datafile) 
 			}
 			return err
 		}
+		defer e.Close()
+
 		if e.ValueSize == 0 {
 			// Tombstone value  (deleted key)
 			t.Delete(e.Key)
@@ -1102,6 +974,7 @@ func Open(path string, funcs ...OptionFunc) (*Bitcask, error) {
 		metadata:   meta,
 		repliEmit:  repliEmitter,
 		repliRecv:  repliReciver,
+		merger:     newMerger(),
 	}
 
 	if err := repliEmitter.Start(bitcask.repliSource(), opt.RepliBindIP, opt.RepliBindPort); err != nil {
