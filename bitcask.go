@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"io"
 	"os"
-	"path"
 	"path/filepath"
 	"sort"
 	"sync"
@@ -26,13 +25,15 @@ const (
 	filerIndexFile string = "index"
 	ttlIndexFile   string = "ttl_index"
 	metadataFile   string = "meta.json"
+	tempIndexFile  string = "index.tmp"
 )
 
 // Stats is a struct returned by Stats() on an open Bitcask instance
 type Stats struct {
-	Datafiles int
-	Keys      int
-	Size      int64
+	Datafiles        int
+	Keys             int
+	Size             int64
+	ReclaimableSpace int64
 }
 
 type metadata struct {
@@ -57,7 +58,7 @@ type Bitcask struct {
 	metadata   *metadata
 	repliEmit  repli.Emitter
 	repliRecv  repli.Reciver
-	isMerging  bool
+	merger     *merger
 }
 
 // Stats returns statistics about the database including the number of
@@ -71,12 +72,14 @@ func (b *Bitcask) Stats() (Stats, error) {
 	b.mu.RLock()
 	datafiles := len(b.datafiles)
 	keys := b.trie.Size()
+	rs := b.metadata.ReclaimableSpace
 	b.mu.RUnlock()
 
 	return Stats{
-		Datafiles: datafiles,
-		Keys:      keys,
-		Size:      dirSize,
+		Datafiles:        datafiles,
+		Keys:             keys,
+		Size:             dirSize,
+		ReclaimableSpace: rs,
 	}, nil
 }
 
@@ -233,6 +236,15 @@ func (b *Bitcask) putAndIndexLocked(key []byte, value io.Reader, expiry time.Tim
 	return nil
 }
 
+// put inserts a new (key, value). Both key and value are valid inputs.
+func (b *Bitcask) put(key []byte, value io.Reader, expiry time.Time) (int64, int64, error) {
+	if err := b.maybeRotate(); err != nil {
+		return -1, 0, errors.Wrap(err, "error rotating active datafile")
+	}
+
+	return b.curr.Write(key, value, expiry)
+}
+
 // Delete deletes the named key.
 func (b *Bitcask) Delete(key []byte) error {
 	b.mu.Lock()
@@ -302,8 +314,8 @@ func (b *Bitcask) Sift(f func(key []byte) (bool, error)) (err error) {
 
 // DeleteAll deletes all the keys. If an I/O error occurs the error is returned.
 func (b *Bitcask) DeleteAll() (err error) {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
+	b.mu.Lock()
+	defer b.mu.Unlock()
 
 	b.trie.ForEach(func(node art.Node) bool {
 		nodeKey := node.Key()
@@ -332,6 +344,11 @@ func (b *Bitcask) Scan(prefix []byte, f func(key []byte) error) (err error) {
 		nodeKey := node.Key()
 		// Skip the root node
 		if len(nodeKey) == 0 {
+			return true
+		}
+
+		// skip expired
+		if b.isExpired(nodeKey) {
 			return true
 		}
 
@@ -580,38 +597,15 @@ func (b *Bitcask) maybeRotate() error {
 		return nil
 	}
 
-	if err := b.curr.Close(); err != nil {
-		return err
-	}
-
-	id := b.curr.FileID()
-
-	df, err := datafile.OpenReadonly(
-		datafile.RuntimeContext(b.opt.RuntimeContext),
-		datafile.Path(b.path),
-		datafile.FileID(id),
-		datafile.TempDir(b.opt.TempDir),
-		datafile.CopyTempThreshold(b.opt.CopyTempThreshold),
-	)
+	currentFileID, err := b.closeCurrentFile()
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
-	b.datafiles[id] = df
-
-	curr, err := datafile.Open(
-		datafile.RuntimeContext(b.opt.RuntimeContext),
-		datafile.Path(b.path),
-		datafile.FileID(b.curr.FileID()+1),
-		datafile.FileMode(b.opt.FileFileModeBeforeUmask),
-		datafile.TempDir(b.opt.TempDir),
-		datafile.CopyTempThreshold(b.opt.CopyTempThreshold),
-	)
-	if err != nil {
-		return err
+	if err := b.openWritableFile(currentFileID + 1); err != nil {
+		return errors.WithStack(err)
 	}
 
-	b.curr = curr
 	if err := b.saveIndexes(); err != nil {
 		return err
 	}
@@ -619,22 +613,14 @@ func (b *Bitcask) maybeRotate() error {
 	return nil
 }
 
-// put inserts a new (key, value). Both key and value are valid inputs.
-func (b *Bitcask) put(key []byte, value io.Reader, expiry time.Time) (int64, int64, error) {
-	if err := b.maybeRotate(); err != nil {
-		return -1, 0, errors.Wrap(err, "error rotating active datafile")
-	}
-
-	return b.curr.Write(key, value, expiry)
-}
-
 // closeCurrentFile closes current datafile and makes it read only.
-func (b *Bitcask) closeCurrentFile() error {
+func (b *Bitcask) closeCurrentFile() (int32, error) {
+	id := b.curr.FileID()
+
 	if err := b.curr.Close(); err != nil {
-		return err
+		return 0, errors.WithStack(err)
 	}
 
-	id := b.curr.FileID()
 	df, err := datafile.OpenReadonly(
 		datafile.RuntimeContext(b.opt.RuntimeContext),
 		datafile.Path(b.path),
@@ -643,20 +629,22 @@ func (b *Bitcask) closeCurrentFile() error {
 		datafile.CopyTempThreshold(b.opt.CopyTempThreshold),
 	)
 	if err != nil {
-		return err
+		if err2 := b.openWritableFile(id); err2 != nil {
+			return 0, errors.Wrapf(err2, "failed reopen datafile(writable) %s(%d) cause:%+v", b.path, id, err)
+		}
+		return 0, errors.Wrapf(err, "failed to open datafile(readonly) %s(%d)", b.path, id)
 	}
 
 	b.datafiles[id] = df
-	return nil
+	return id, nil
 }
 
-// openNewWritableFile opens new datafile for writing data
-func (b *Bitcask) openNewWritableFile() error {
-	id := b.curr.FileID() + 1
+// openWritableFile opens new datafile for writing data
+func (b *Bitcask) openWritableFile(fileID int32) error {
 	curr, err := datafile.Open(
 		datafile.RuntimeContext(b.opt.RuntimeContext),
 		datafile.Path(b.path),
-		datafile.FileID(id),
+		datafile.FileID(fileID),
 		datafile.FileMode(b.opt.FileFileModeBeforeUmask),
 		datafile.TempDir(b.opt.TempDir),
 		datafile.CopyTempThreshold(b.opt.CopyTempThreshold),
@@ -712,158 +700,21 @@ func (b *Bitcask) reopen() error {
 // and deleted keys removes. Duplicate key/value pairs are also removed.
 // Call this function periodically to reclaim disk space.
 func (b *Bitcask) Merge() error {
-	b.mu.RLock()
-	currentMerging := b.isMerging
-	b.mu.RUnlock()
-
-	if currentMerging {
-		return ErrMergeInProgress
-	}
-
-	b.mu.Lock()
-	b.isMerging = true
-	b.mu.Unlock()
-
-	defer func() {
-		b.mu.Lock()
-		b.isMerging = false
-		b.mu.Unlock()
-	}()
-
-	b.mu.Lock()
-	if err := b.closeCurrentFile(); err != nil {
-		b.mu.Unlock()
-		return err
-	}
-	filesToMerge := make([]int32, 0, len(b.datafiles))
-	for id, _ := range b.datafiles {
-		filesToMerge = append(filesToMerge, id)
-	}
-	if err := b.openNewWritableFile(); err != nil {
-		b.mu.Unlock()
-		return err
-	}
-	b.mu.Unlock()
-
-	sort.Slice(filesToMerge, func(i, j int) bool {
-		return filesToMerge[i] < filesToMerge[j]
-	})
-
-	// Temporary merged database path
-	temp, err := os.MkdirTemp(b.path, "merge")
-	if err != nil {
-		return err
-	}
-	defer os.RemoveAll(temp)
-
-	// Create a merged database
-	mdb, err := Open(temp, withMerge(b.opt))
-	if err != nil {
-		return err
-	}
-	// Rewrite all key/value pairs into merged database
-	// Doing this automatically strips deleted keys and
-	// old key/value pairs
-	if err := func() error {
-		mdb.mu.Lock()
-		defer mdb.mu.Unlock()
-		return b.Fold(func(key []byte) error {
-			v, _ := b.trie.Search(key)
-			filer := v.(indexer.Filer)
-			// if key was updated after start of merge operation, nothing to do
-			if filesToMerge[len(filesToMerge)-1] < filer.FileID {
-				return nil
-			}
-
-			e, err := b.get(key)
-			if err != nil {
-				return err
-			}
-			defer e.Close()
-
-			if err := mdb.putAndIndexLocked(key, e.Value, e.Expiry); err != nil {
-				return err
-			}
-			return nil
-		})
-	}(); err != nil {
-		return err
-	}
-
-	if err := mdb.Sync(); err != nil {
-		return err
-	}
-
-	if err := mdb.Close(); err != nil {
-		return err
-	}
-
-	// no reads and writes till we reopen
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	if err := b.close(); err != nil {
-		return err
-	}
-
-	// Remove data files
-	files, err := os.ReadDir(b.path)
-	if err != nil {
-		return err
-	}
-	for _, file := range files {
-		if file.IsDir() || file.Name() == lockfile {
-			continue
-		}
-		ids, err := datafile.ParseIds([]string{file.Name()})
-		if err != nil {
-			return err
-		}
-		// if datafile was created after start of merge, skip
-		if 0 < len(ids) && filesToMerge[len(filesToMerge)-1] < ids[0] {
-			continue
-		}
-		if err := os.RemoveAll(path.Join(b.path, file.Name())); err != nil {
-			return err
-		}
-	}
-
-	// Rename all merged data files
-	files, err = os.ReadDir(mdb.path)
-	if err != nil {
-		return err
-	}
-	for _, file := range files {
-		// see #225
-		if file.Name() == lockfile {
-			continue
-		}
-		if err := os.Rename(
-			path.Join([]string{mdb.path, file.Name()}...),
-			path.Join([]string{b.path, file.Name()}...),
-		); err != nil {
-			return err
-		}
-	}
-	b.metadata.ReclaimableSpace = 0
-
-	// And finally reopen the database
-	return b.reopen()
+	return b.merger.Merge(b)
 }
 
 // saveIndex saves index and ttl_index currently in RAM to disk
 func (b *Bitcask) saveIndexes() error {
-	tempIdx := "temp_index"
-	if err := b.indexer.Save(b.trie, filepath.Join(b.path, tempIdx)); err != nil {
+	if err := b.indexer.Save(b.trie, filepath.Join(b.path, tempIndexFile)); err != nil {
 		return err
 	}
-	if err := os.Rename(filepath.Join(b.path, tempIdx), filepath.Join(b.path, filerIndexFile)); err != nil {
+	if err := os.Rename(filepath.Join(b.path, tempIndexFile), filepath.Join(b.path, filerIndexFile)); err != nil {
 		return err
 	}
-	if err := b.ttlIndexer.Save(b.ttlIndex, filepath.Join(b.path, tempIdx)); err != nil {
+	if err := b.ttlIndexer.Save(b.ttlIndex, filepath.Join(b.path, tempIndexFile)); err != nil {
 		return err
 	}
-	if err := os.Rename(filepath.Join(b.path, tempIdx), filepath.Join(b.path, ttlIndexFile)); err != nil {
+	if err := os.Rename(filepath.Join(b.path, tempIndexFile), filepath.Join(b.path, ttlIndexFile)); err != nil {
 		return err
 	}
 	return nil
@@ -877,11 +728,6 @@ func (b *Bitcask) saveMetadata() error {
 	return nil
 }
 
-// Reclaimable returns space that can be reclaimed
-func (b *Bitcask) Reclaimable() int64 {
-	return b.metadata.ReclaimableSpace
-}
-
 // isExpired returns true if a key has expired
 // it returns false if key does not exist in ttl index
 func (b *Bitcask) isExpired(key []byte) bool {
@@ -889,7 +735,7 @@ func (b *Bitcask) isExpired(key []byte) bool {
 	if found != true {
 		return false
 	}
-	return expiry.(time.Time).Before(time.Now().UTC())
+	return isExpiredFromTime(expiry.(time.Time))
 }
 
 func (b *Bitcask) repliSource() repli.Source {
@@ -898,6 +744,13 @@ func (b *Bitcask) repliSource() repli.Source {
 
 func (b *Bitcask) repliDestination() repli.Destination {
 	return newRepliDestination(b)
+}
+
+func isExpiredFromTime(expiry time.Time) bool {
+	if expiry.IsZero() {
+		return false
+	}
+	return expiry.Before(time.Now().UTC())
 }
 
 func loadDatafiles(opt *option, path string) (map[int32]datafile.Datafile, int32, error) {
@@ -980,6 +833,8 @@ func loadIndexFromDatafile(t art.Tree, ttlIndex art.Tree, df datafile.Datafile) 
 			}
 			return err
 		}
+		defer e.Close()
+
 		if e.ValueSize == 0 {
 			// Tombstone value  (deleted key)
 			t.Delete(e.Key)
@@ -1101,6 +956,7 @@ func Open(path string, funcs ...OptionFunc) (*Bitcask, error) {
 		metadata:   meta,
 		repliEmit:  repliEmitter,
 		repliRecv:  repliReciver,
+		merger:     newMerger(),
 	}
 
 	if err := repliEmitter.Start(bitcask.repliSource(), opt.RepliBindIP, opt.RepliBindPort); err != nil {
