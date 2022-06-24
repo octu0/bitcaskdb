@@ -628,7 +628,6 @@ func (b *Bitcask) maybeRotate() error {
 	return nil
 }
 
-
 // closeCurrentFile closes current datafile and makes it read only.
 func (b *Bitcask) closeCurrentFile() (int32, error) {
 	id := b.curr.FileID()
@@ -645,20 +644,22 @@ func (b *Bitcask) closeCurrentFile() (int32, error) {
 		datafile.CopyTempThreshold(b.opt.CopyTempThreshold),
 	)
 	if err != nil {
-		return err
+		if err2 := b.openWritableFile(id); err2 != nil {
+			return 0, errors.Wrapf(err2, "failed reopen datafile(writable) %s(%d) cause:%+v", b.path, id, err)
+		}
+		return 0, errors.Wrapf(err, "failed to open datafile(readonly) %s(%d)", b.path, id)
 	}
 
 	b.datafiles[id] = df
-	return nil
+	return id, nil
 }
 
-// openNewWritableFile opens new datafile for writing data
-func (b *Bitcask) openNewWritableFile() error {
-	id := b.curr.FileID() + 1
+// openWritableFile opens new datafile for writing data
+func (b *Bitcask) openWritableFile(fileID int32) error {
 	curr, err := datafile.Open(
 		datafile.RuntimeContext(b.opt.RuntimeContext),
 		datafile.Path(b.path),
-		datafile.FileID(id),
+		datafile.FileID(fileID),
 		datafile.FileMode(b.opt.FileFileModeBeforeUmask),
 		datafile.TempDir(b.opt.TempDir),
 		datafile.CopyTempThreshold(b.opt.CopyTempThreshold),
