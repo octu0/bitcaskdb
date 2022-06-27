@@ -1327,7 +1327,7 @@ func (t *testRepliStreamReciverDestCounterAndEntries) Insert(fileID int32, index
 		return err
 	}
 
-	d := codec.NewDecoder(runtime.DefaultContext(), bytes.NewReader(buf.Bytes()), 0)
+	d := codec.NewDecoder(runtime.DefaultContext(), bytes.NewReader(buf.Bytes()))
 	defer d.Close()
 
 	p, err := d.Decode()
@@ -1815,12 +1815,16 @@ func testRepliStreamReciverRepliDestinationBehindSourceProcessing(t *testing.T) 
 		Size:   s4,
 	})
 
+	time.Sleep(100 * time.Millisecond)
+
 	if err := r.Stop(); err != nil {
 		t.Errorf("no error %+v", err)
 	}
 	if err := e.Stop(); err != nil {
 		t.Errorf("no error %+v", err)
 	}
+
+	time.Sleep(100 * time.Millisecond)
 
 	if src.countFileIds != 1 {
 		t.Errorf("fist access")

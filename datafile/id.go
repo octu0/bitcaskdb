@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/pkg/errors"
 )
 
 const (
@@ -19,7 +21,7 @@ const (
 func getDatafiles(path string) ([]string, error) {
 	fns, err := filepath.Glob(fmt.Sprintf("%s/*.data", path))
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 	sort.Strings(fns)
 	return fns, nil
@@ -36,9 +38,13 @@ func ParseIds(fns []string) ([]int32, error) {
 		if ext != ".data" {
 			continue
 		}
+		// skip hidden file
+		if 0 < len(fn) && fn[0] == '.' {
+			continue
+		}
 		id, err := strconv.ParseInt(strings.TrimSuffix(fn, ext), 10, 32)
 		if err != nil {
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
 		ids = append(ids, int32(id))
 	}
@@ -51,7 +57,7 @@ func ParseIds(fns []string) ([]int32, error) {
 func ParseIdsFromDatafiles(path string) ([]int32, error) {
 	fns, err := getDatafiles(path)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 	return ParseIds(fns)
 }

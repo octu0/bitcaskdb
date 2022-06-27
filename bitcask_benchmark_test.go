@@ -5,8 +5,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"git.mills.io/prologic/bitcask"
 )
@@ -46,6 +50,16 @@ type (
 		Name() string
 		Setup(testdir string) error
 		LoadData(value []byte, putCount int) error
+		Merge() error
+		Teardown()
+	}
+
+	factoryBenchMiddlewareMergeThroughput func() benchMiddlewareMergeThroughput
+	benchMiddlewareMergeThroughput        interface {
+		Name() string
+		Setup(testdir string, datafilesize int) error
+		Put(key, value []byte) time.Duration
+		Get(key []byte) time.Duration
 		Merge() error
 		Teardown()
 	}
@@ -177,6 +191,47 @@ func (t *benchOctu0bitcaskdbMerge) Merge() error {
 	return t.db.Merge()
 }
 
+type benchOctu0bitcaskdbMergeThroughput struct {
+	db *Bitcask
+}
+
+func (t *benchOctu0bitcaskdbMergeThroughput) Name() string {
+	return "octu0/bitcaskdb"
+}
+
+func (t *benchOctu0bitcaskdbMergeThroughput) Setup(testdir string, datafilesize int) error {
+	db, err := Open(testdir, WithMaxDatafileSize(datafilesize))
+	if err != nil {
+		return err
+	}
+	t.db = db
+	return nil
+}
+
+func (t *benchOctu0bitcaskdbMergeThroughput) Teardown() {
+	t.db.Close()
+}
+
+func (t *benchOctu0bitcaskdbMergeThroughput) Put(key, value []byte) time.Duration {
+	start := time.Now()
+	_ = t.db.PutBytes(key, value)
+	return time.Since(start)
+}
+
+func (t *benchOctu0bitcaskdbMergeThroughput) Get(key []byte) time.Duration {
+	start := time.Now()
+	v, err := t.db.Get(key)
+	if err == nil {
+		defer v.Close()
+	}
+
+	return time.Since(start)
+}
+
+func (t *benchOctu0bitcaskdbMergeThroughput) Merge() error {
+	return t.db.Merge()
+}
+
 // ----- }}} octu0/bitcaskdb
 
 // ----- {{{ prologic/bitcask
@@ -300,6 +355,43 @@ func (t *benchPrologicBitcaskMerge) LoadData(value []byte, putCount int) error {
 }
 
 func (t *benchPrologicBitcaskMerge) Merge() error {
+	return t.db.Merge()
+}
+
+type benchPrologicBitcaskMergeThroughput struct {
+	db *bitcask.Bitcask
+}
+
+func (t *benchPrologicBitcaskMergeThroughput) Name() string {
+	return "prologic/bitcask"
+}
+
+func (t *benchPrologicBitcaskMergeThroughput) Setup(testdir string, datafilesize int) error {
+	db, err := bitcask.Open(testdir, bitcask.WithMaxValueSize(512*1024), bitcask.WithMaxDatafileSize(datafilesize))
+	if err != nil {
+		return err
+	}
+	t.db = db
+	return nil
+}
+
+func (t *benchPrologicBitcaskMergeThroughput) Teardown() {
+	t.db.Close()
+}
+
+func (t *benchPrologicBitcaskMergeThroughput) Put(key, value []byte) time.Duration {
+	start := time.Now()
+	_ = t.db.Put(key, value)
+	return time.Since(start)
+}
+
+func (t *benchPrologicBitcaskMergeThroughput) Get(key []byte) time.Duration {
+	start := time.Now()
+	_, _ = t.db.Get(key)
+	return time.Since(start)
+}
+
+func (t *benchPrologicBitcaskMergeThroughput) Merge() error {
 	return t.db.Merge()
 }
 
@@ -434,6 +526,116 @@ func benchMerge(b *testing.B, tt benchmarkTestCase, middleware benchMiddlewareMe
 	middleware.Teardown()
 }
 
+func benchMergeThroughput(b *testing.B, tt benchmarkTestCase, middleware benchMiddlewareMergeThroughput) {
+	testdir, err := os.MkdirTemp("", "bitcask_bench*")
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer os.RemoveAll(testdir)
+
+	valueSize := 128 * 1024
+	value := []byte(strings.Repeat("@", valueSize))
+
+	if err := middleware.Setup(testdir, tt.size); err != nil {
+		b.Fatalf("%+v", err)
+	}
+
+	N := 500
+	b.ResetTimer()
+	putSpeed := make([]time.Duration, N+3)
+	getSpeed := make([]time.Duration, N+3)
+	for i := 0; i < N; i += 3 {
+		wg := new(sync.WaitGroup)
+		wg.Add(6)
+		go func(w *sync.WaitGroup, id int) {
+			defer w.Done()
+
+			key := []byte(strconv.Itoa(id))
+			dur := middleware.Put(key, value)
+			putSpeed[id] = dur
+		}(wg, i)
+		go func(w *sync.WaitGroup, id int) {
+			defer w.Done()
+
+			key := []byte(strconv.Itoa(id + 1))
+			dur := middleware.Put(key, value)
+			putSpeed[id+1] = dur
+		}(wg, i)
+		go func(w *sync.WaitGroup, id int) {
+			defer w.Done()
+
+			key := []byte(strconv.Itoa(id + 2))
+			dur := middleware.Put(key, value)
+			putSpeed[id+2] = dur
+		}(wg, i)
+
+		go func(w *sync.WaitGroup, id int) {
+			defer w.Done()
+
+			time.Sleep(50 * time.Millisecond)
+			key := []byte(strconv.Itoa(id))
+			dur := middleware.Get(key)
+			getSpeed[id] = dur
+		}(wg, i)
+		go func(w *sync.WaitGroup, id int) {
+			defer w.Done()
+
+			time.Sleep(50 * time.Millisecond)
+			key := []byte(strconv.Itoa(id + 1))
+			dur := middleware.Get(key)
+			getSpeed[id+1] = dur
+		}(wg, i)
+		go func(w *sync.WaitGroup, id int) {
+			defer w.Done()
+
+			time.Sleep(50 * time.Millisecond)
+			key := []byte(strconv.Itoa(id + 2))
+			dur := middleware.Get(key)
+			getSpeed[id+2] = dur
+		}(wg, i)
+
+		if err := middleware.Merge(); err != nil {
+			b.Fatalf("%+v", err)
+		}
+
+		b.StopTimer()
+		wg.Wait()
+		b.StartTimer()
+	}
+	b.StopTimer()
+	middleware.Teardown()
+
+	stat := func(durs []time.Duration) string {
+		size := len(durs)
+		sum := time.Duration(0)
+		for _, dur := range durs {
+			sum += dur
+		}
+		sort.Slice(durs, func(i, j int) bool {
+			return durs[i] < durs[j]
+		})
+		min := durs[0]
+		avg := time.Duration(float64(sum) / float64(size))
+		max := durs[len(durs)-1]
+		p50 := durs[int(float64(size)*0.50)]
+		p90 := durs[int(float64(size)*0.90)]
+		p95 := durs[int(float64(size)*0.95)]
+		p99 := durs[int(float64(size)*0.99)]
+		return fmt.Sprintf(
+			"min/avg/max/p50/p90/p95/p99 = %s/%s/%s/%s/%s/%s/%s",
+			min,
+			avg,
+			max,
+			p50,
+			p90,
+			p95,
+			p99,
+		)
+	}
+	b.Logf("Put %s", stat(putSpeed))
+	b.Logf("Get %s", stat(getSpeed))
+}
+
 func BenchmarkGet(b *testing.B) {
 	tests := []benchmarkTestCase{
 		{"128B", 128},
@@ -563,6 +765,30 @@ func BenchmarkMerge(b *testing.B) {
 			testName := fmt.Sprintf("%s/%s", middleware.Name(), tt.name)
 			b.Run(testName, func(tb *testing.B) {
 				benchMerge(tb, tt, middleware)
+			})
+		}
+	}
+}
+
+func BenchmarkMergeThroughput(b *testing.B) {
+	tests := []benchmarkTestCase{
+		{"4MB", 4194304},
+		{"8MB", 8388608},
+		{"16MB", 16777216},
+		{"32MB", 33554432},
+	}
+
+	benchmarkMiddleware := []factoryBenchMiddlewareMergeThroughput{
+		func() benchMiddlewareMergeThroughput { return new(benchPrologicBitcaskMergeThroughput) },
+		func() benchMiddlewareMergeThroughput { return new(benchOctu0bitcaskdbMergeThroughput) },
+	}
+
+	for _, f := range benchmarkMiddleware {
+		for _, tt := range tests {
+			middleware := f()
+			testName := fmt.Sprintf("%s/%s", middleware.Name(), tt.name)
+			b.Run(testName, func(tb *testing.B) {
+				benchMergeThroughput(tb, tt, middleware)
 			})
 		}
 	}

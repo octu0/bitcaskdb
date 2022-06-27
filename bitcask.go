@@ -949,17 +949,17 @@ func Open(path string, funcs ...OptionFunc) (*Bitcask, error) {
 	opt := newDefaultOption()
 	for _, fn := range funcs {
 		if err := fn(opt); err != nil {
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
 	}
 
 	if err := os.MkdirAll(path, opt.DirFileModeBeforeUmask); err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	meta, err := loadMetadata(path)
 	if err != nil {
-		return nil, &ErrBadMetadata{err}
+		return nil, errors.WithStack(err)
 	}
 
 	repliEmitter := createRepliEmitter(opt)
