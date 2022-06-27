@@ -1815,12 +1815,16 @@ func testRepliStreamReciverRepliDestinationBehindSourceProcessing(t *testing.T) 
 		Size:   s4,
 	})
 
+	time.Sleep(100 * time.Millisecond)
+
 	if err := r.Stop(); err != nil {
 		t.Errorf("no error %+v", err)
 	}
 	if err := e.Stop(); err != nil {
 		t.Errorf("no error %+v", err)
 	}
+
+	time.Sleep(100 * time.Millisecond)
 
 	if src.countFileIds != 1 {
 		t.Errorf("fist access")
