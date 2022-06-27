@@ -371,6 +371,7 @@ func (t *mergeTempDB) Destroy(lim *rate.Limiter) {
 		return
 	}
 	removeFileSlowly(files, lim)
+	os.RemoveAll(t.tempDir)
 	t.destroyed = true
 }
 
