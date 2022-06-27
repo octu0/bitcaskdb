@@ -23,6 +23,7 @@ import (
 const (
 	mergeDirPattern  string = "merge*"
 	removeParkPrefix string = ".mark.%s"
+	snapshotTrieFile string = "snapshot_trie"
 )
 
 const (
@@ -218,7 +219,7 @@ func (m *merger) markArchive(b *Bitcask, currentFileID int32) ([]string, error) 
 		}
 
 		fromFile := filepath.Join(b.path, filename)
-		toFile := filepath.Join(b.path, fmt.Sprintf(".mark.%s", filename))
+		toFile := filepath.Join(b.path, fmt.Sprintf(removeParkPrefix, filename))
 		if err := os.Rename(fromFile, toFile); err != nil {
 			return nil, errors.WithStack(err)
 		}
@@ -371,6 +372,7 @@ func (t *mergeTempDB) Destroy(lim *rate.Limiter) {
 		return
 	}
 	removeFileSlowly(files, lim)
+	os.RemoveAll(t.tempDir)
 	t.destroyed = true
 }
 
@@ -460,7 +462,7 @@ func finalizeSnapshotTrie(st *snapshotTrie) {
 }
 
 func openSnapshotTrie(tempDir string) (*snapshotTrie, error) {
-	f, err := os.CreateTemp(tempDir, "snapshot_trie")
+	f, err := os.CreateTemp(tempDir, snapshotTrieFile)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}

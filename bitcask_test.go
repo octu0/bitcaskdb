@@ -1530,12 +1530,16 @@ func TestSift(t *testing.T) {
 		err = db.Sift(func(key []byte) (bool, error) {
 			return false, ErrMockError
 		})
-		assert.Equal(ErrMockError, err)
+		if errors.Is(err, ErrMockError) != true {
+			t.Errorf("resolv my error ErrMockError")
+		}
 
 		err = db.SiftScan([]byte("fo"), func(key []byte) (bool, error) {
 			return true, ErrMockError
 		})
-		assert.Equal(ErrMockError, err)
+		if errors.Is(err, ErrMockError) != true {
+			t.Errorf("resolv my error ErrMockError")
+		}
 	})
 }
 func TestSiftScan(t *testing.T) {
@@ -1650,7 +1654,9 @@ func TestScan(t *testing.T) {
 			return ErrMockError
 		})
 		assert.Error(err)
-		assert.Equal(ErrMockError, err)
+		if errors.Is(err, ErrMockError) != true {
+			t.Errorf("resolv my error: ErrMockErr")
+		}
 	})
 }
 func TestSiftRange(t *testing.T) {

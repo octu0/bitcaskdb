@@ -209,12 +209,12 @@ func (b *Bitcask) putAndIndex(key []byte, value io.Reader, expiry time.Time) err
 func (b *Bitcask) putAndIndexLocked(key []byte, value io.Reader, expiry time.Time) error {
 	index, size, err := b.put(key, value, expiry)
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
 	if b.opt.Sync {
 		if err := b.curr.Sync(); err != nil {
-			return err
+			return errors.WithStack(err)
 		}
 	}
 
@@ -260,8 +260,9 @@ func (b *Bitcask) Delete(key []byte) error {
 func (b *Bitcask) delete(key []byte) error {
 	_, _, err := b.put(key, nil, time.Time{})
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
+
 	v, found := b.trie.Search(key)
 	if found {
 		f := v.(indexer.Filer)
@@ -282,9 +283,10 @@ func (b *Bitcask) delete(key []byte) error {
 // deleted from the database.
 // If the function returns an error on any key, no further keys are processed, no
 // keys are deleted, and the first error is returned.
-func (b *Bitcask) Sift(f func(key []byte) (bool, error)) (err error) {
+func (b *Bitcask) Sift(f func(key []byte) (bool, error)) error {
 	keysToDelete := art.New()
 
+	var lastErr error
 	b.mu.RLock()
 	b.trie.ForEach(func(node art.Node) bool {
 		nodeKey := node.Key()
@@ -293,17 +295,21 @@ func (b *Bitcask) Sift(f func(key []byte) (bool, error)) (err error) {
 			return true
 		}
 		var shouldDelete bool
-		if shouldDelete, err = f(nodeKey); err != nil {
+		shouldDelete, err := f(nodeKey)
+		if err != nil {
+			lastErr = errors.WithStack(err)
 			return false
-		} else if shouldDelete {
+		}
+		if shouldDelete {
 			keysToDelete.Insert(nodeKey, true)
 		}
 		return true
 	})
 	b.mu.RUnlock()
-	if err != nil {
-		return
+	if lastErr != nil {
+		return errors.WithStack(lastErr)
 	}
+
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -311,20 +317,22 @@ func (b *Bitcask) Sift(f func(key []byte) (bool, error)) (err error) {
 		b.delete(node.Key())
 		return true
 	})
-	return
+	return nil
 }
 
 // DeleteAll deletes all the keys. If an I/O error occurs the error is returned.
-func (b *Bitcask) DeleteAll() (err error) {
+func (b *Bitcask) DeleteAll() error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
+	var lastErr error
 	b.trie.ForEach(func(node art.Node) bool {
 		nodeKey := node.Key()
-		_, _, err = b.put(nodeKey, nil, time.Time{})
-		if err != nil {
+		if _, _, err := b.put(nodeKey, nil, time.Time{}); err != nil {
+			lastErr = errors.WithStack(err)
 			return false
 		}
+
 		filer, _ := b.trie.Search(nodeKey)
 		b.metadata.ReclaimableSpace += filer.(indexer.Filer).Size
 		return true
@@ -332,16 +340,20 @@ func (b *Bitcask) DeleteAll() (err error) {
 	b.trie = art.New()
 	b.ttlIndex = art.New()
 
-	return
+	if lastErr != nil {
+		return errors.WithStack(lastErr)
+	}
+	return nil
 }
 
 // Scan performs a prefix scan of keys matching the given prefix and calling
 // the function `f` with the keys found. If the function returns an error
 // no further keys are processed and the first error is returned.
-func (b *Bitcask) Scan(prefix []byte, f func(key []byte) error) (err error) {
+func (b *Bitcask) Scan(prefix []byte, f func(key []byte) error) error {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
+	var lastErr error
 	b.trie.ForEachPrefix(prefix, func(node art.Node) bool {
 		nodeKey := node.Key()
 		// Skip the root node
@@ -354,12 +366,16 @@ func (b *Bitcask) Scan(prefix []byte, f func(key []byte) error) (err error) {
 			return true
 		}
 
-		if err = f(nodeKey); err != nil {
+		if err := f(nodeKey); err != nil {
+			lastErr = errors.WithStack(err)
 			return false
 		}
 		return true
 	})
-	return
+	if lastErr != nil {
+		return errors.WithStack(lastErr)
+	}
+	return nil
 }
 
 // SiftScan iterates over all keys in the database beginning with the given
@@ -581,12 +597,12 @@ func (b *Bitcask) get(key []byte) (*datafile.Entry, error) {
 
 	e, err := df.ReadAt(filer.Index, filer.Size)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	if b.opt.ValidateChecksum {
 		if err := e.Validate(b.opt.RuntimeContext); err != nil {
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
 	}
 
@@ -609,7 +625,7 @@ func (b *Bitcask) maybeRotate() error {
 	}
 
 	if err := b.saveIndexes(); err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
 	return nil
@@ -652,7 +668,7 @@ func (b *Bitcask) openWritableFile(fileID int32) error {
 		datafile.CopyTempThreshold(b.opt.CopyTempThreshold),
 	)
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 	b.curr = curr
 	return nil
@@ -671,11 +687,11 @@ func (b *Bitcask) Reopen() error {
 func (b *Bitcask) reopen() error {
 	datafiles, lastID, err := loadDatafiles(b.opt, b.path)
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 	t, ttlIndex, err := loadIndexes(b, datafiles, lastID)
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
 	curr, err := datafile.Open(
@@ -687,7 +703,7 @@ func (b *Bitcask) reopen() error {
 		datafile.CopyTempThreshold(b.opt.CopyTempThreshold),
 	)
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
 	b.trie = t
@@ -779,7 +795,7 @@ func loadDatafiles(opt *option, path string) (map[int32]datafile.Datafile, int32
 			datafile.CopyTempThreshold(opt.CopyTempThreshold),
 		)
 		if err != nil {
-			return nil, 0, err
+			return nil, 0, errors.WithStack(err)
 		}
 		datafiles[id] = d
 	}
@@ -797,18 +813,18 @@ func loadDatafiles(opt *option, path string) (map[int32]datafile.Datafile, int32
 func loadIndexes(b *Bitcask, datafiles map[int32]datafile.Datafile, lastID int32) (art.Tree, art.Tree, error) {
 	t, found, err := b.indexer.Load(filepath.Join(b.path, filerIndexFile))
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, errors.WithStack(err)
 	}
 	ttlIndex, _, err := b.ttlIndexer.Load(filepath.Join(b.path, ttlIndexFile))
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, errors.WithStack(err)
 	}
 	if found && b.metadata.IndexUpToDate {
 		return t, ttlIndex, nil
 	}
 	if found {
 		if err := loadIndexFromDatafile(t, ttlIndex, datafiles[lastID], nil); err != nil {
-			return nil, ttlIndex, err
+			return nil, ttlIndex, errors.WithStack(err)
 		}
 		return t, ttlIndex, nil
 	}
@@ -824,7 +840,7 @@ func loadIndexes(b *Bitcask, datafiles map[int32]datafile.Datafile, lastID int32
 	for _, fileID := range fileIds {
 		df := datafiles[fileID]
 		if err := loadIndexFromDatafile(t, ttlIndex, df, nil); err != nil {
-			return nil, ttlIndex, err
+			return nil, ttlIndex, errors.WithStack(err)
 		}
 	}
 	return t, ttlIndex, nil
@@ -842,7 +858,7 @@ func loadIndexFromDatafile(t art.Tree, ttlIndex art.Tree, df datafile.Datafile, 
 			if errors.Is(err, io.EOF) {
 				break
 			}
-			return err
+			return errors.WithStack(err)
 		}
 		defer e.Close()
 
@@ -916,7 +932,7 @@ func calcDirSize(path string) (int64, error) {
 	size := int64(0)
 	if err := filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
 		if err != nil {
-			return err
+			return errors.WithStack(err)
 		}
 		if info.IsDir() != true {
 			size += info.Size()
@@ -983,14 +999,14 @@ func Open(path string, funcs ...OptionFunc) (*Bitcask, error) {
 
 	ok, err := bitcask.flock.TryLock()
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 	if ok != true {
 		return nil, ErrDatabaseLocked
 	}
 
 	if err := bitcask.Reopen(); err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	if err := repliReciver.Start(bitcask.repliDestination(), opt.RepliServerIP, opt.RepliServerPort); err != nil {
