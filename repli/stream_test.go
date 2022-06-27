@@ -1327,7 +1327,7 @@ func (t *testRepliStreamReciverDestCounterAndEntries) Insert(fileID int32, index
 		return err
 	}
 
-	d := codec.NewDecoder(runtime.DefaultContext(), bytes.NewReader(buf.Bytes()), 0)
+	d := codec.NewDecoder(runtime.DefaultContext(), bytes.NewReader(buf.Bytes()))
 	defer d.Close()
 
 	p, err := d.Decode()
