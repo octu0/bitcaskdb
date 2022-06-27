@@ -90,7 +90,7 @@ func TestMergeErrors(t *testing.T) {
 	})
 }
 
-func TestLockingAfterMerge(t *testing.T) {
+func TestMergeLockingAfterMerge(t *testing.T) {
 	assert := assert.New(t)
 
 	testdir, err := ioutil.TempDir("", "bitcask")

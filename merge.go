@@ -1,6 +1,10 @@
 package bitcaskdb
 
 import (
+	"encoding/gob"
+	"fmt"
+	"io"
+	"math"
 	"os"
 	"path/filepath"
 	goruntime "runtime"
@@ -17,7 +21,12 @@ import (
 )
 
 const (
-	mergeDirPattern string = "merge*"
+	mergeDirPattern  string = "merge*"
+	removeParkPrefix string = ".mark.%s"
+)
+
+const (
+	defaultTruncateThreshold int64 = 100 * 1024 * 1024
 )
 
 type merger struct {
@@ -52,12 +61,29 @@ func (m *merger) Merge(b *Bitcask, lim *rate.Limiter) error {
 		return errors.WithStack(err)
 	}
 
-	temp, err := m.renewMergedDB(b, mergeFileIds, lim)
+	snapshot, err := m.snapshotIndexer(b)
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	defer temp.Destroy()
+	defer snapshot.Destroy(lim)
 
+	temp, err := m.renewMergedDB(b, mergeFileIds, snapshot, lim)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	defer temp.Destroy(lim)
+
+	// Reduce b blocking time by performing b.mu.Lock/Unlock within merger.reopen()
+	removeMarkedFiles, err := m.reopen(b, temp)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	removeFileSlowly(removeMarkedFiles, lim)
+	return nil
+}
+
+func (m *merger) reopen(b *Bitcask, temp *mergeTempDB) ([]string, error) {
 	// no reads and writes till we reopen
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -65,22 +91,24 @@ func (m *merger) Merge(b *Bitcask, lim *rate.Limiter) error {
 	if err := b.close(); err != nil {
 		// try recovery
 		if err2 := b.reopen(); err2 != nil {
-			return errors.Wrapf(err2, "failed close() / reopen() cause:%+v", err)
+			return nil, errors.Wrapf(err2, "failed close() / reopen() cause:%+v", err)
 		}
-		return errors.Wrap(err, "failed to close()")
+		return nil, errors.Wrap(err, "failed to close()")
 	}
 
-	if err := m.moveMerged(b, temp.DBPath(), lim); err != nil {
-		return errors.WithStack(err)
+	removeMarkedFiles, err := m.moveMerged(b, temp.DBPath())
+	if err != nil {
+		return nil, errors.WithStack(err)
 	}
 
 	b.metadata.ReclaimableSpace = 0
 
 	// And finally reopen the database
 	if err := b.reopen(); err != nil {
-		return errors.WithStack(err)
+		removeFileSlowly(removeMarkedFiles, nil)
+		return nil, errors.WithStack(err)
 	}
-	return nil
+	return removeMarkedFiles, nil
 }
 
 func (m *merger) forwardCurrentDafafile(b *Bitcask) ([]int32, error) {
@@ -108,13 +136,36 @@ func (m *merger) forwardCurrentDafafile(b *Bitcask) ([]int32, error) {
 	return mergeFileIds, nil
 }
 
-func (m *merger) renewMergedDB(b *Bitcask, mergeFileIds []int32, lim *rate.Limiter) (*mergeTempDB, error) {
+func (m *merger) snapshotIndexer(b *Bitcask) (*snapshotTrie, error) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	st, err := openSnapshotTrie(b.opt.TempDir)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed open snapshot trie")
+	}
+
+	var lastErr error
+	b.trie.ForEach(func(node art.Node) bool {
+		if err := st.Write(node.Key(), node.Value().(indexer.Filer)); err != nil {
+			lastErr = errors.WithStack(err)
+			return false
+		}
+		return true
+	})
+	if lastErr != nil {
+		return nil, errors.WithStack(lastErr)
+	}
+	return st, nil
+}
+
+func (m *merger) renewMergedDB(b *Bitcask, mergeFileIds []int32, st *snapshotTrie, lim *rate.Limiter) (*mergeTempDB, error) {
 	temp, err := openMergeTempDB(b.path, b.opt)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 
-	if err := temp.Merge(b, mergeFileIds, lim); err != nil {
+	if err := temp.Merge(b, mergeFileIds, st, lim); err != nil {
 		return nil, errors.WithStack(err)
 	}
 
@@ -124,23 +175,26 @@ func (m *merger) renewMergedDB(b *Bitcask, mergeFileIds []int32, lim *rate.Limit
 	return temp, nil
 }
 
-func (m *merger) moveMerged(b *Bitcask, mergedDBPath string, lim *rate.Limiter) error {
+func (m *merger) moveMerged(b *Bitcask, mergedDBPath string) ([]string, error) {
 	currentFileID := b.curr.FileID()
 
-	if err := m.removeArchive(b, currentFileID, lim); err != nil {
-		return errors.WithStack(err)
+	removeMarkedFiles, err := m.markArchive(b, currentFileID)
+	if err != nil {
+		return nil, errors.WithStack(err)
 	}
 	if err := m.moveDBFiles(b, mergedDBPath); err != nil {
-		return errors.WithStack(err)
+		return nil, errors.WithStack(err)
 	}
-	return nil
+	return removeMarkedFiles, nil
 }
 
-func (m *merger) removeArchive(b *Bitcask, currentFileID int32, lim *rate.Limiter) error {
+func (m *merger) markArchive(b *Bitcask, currentFileID int32) ([]string, error) {
 	files, err := os.ReadDir(b.path)
 	if err != nil {
-		return errors.WithStack(err)
+		return nil, errors.WithStack(err)
 	}
+
+	removeMark := make([]string, 0, len(files))
 	for _, file := range files {
 		if file.IsDir() {
 			continue
@@ -152,7 +206,7 @@ func (m *merger) removeArchive(b *Bitcask, currentFileID int32, lim *rate.Limite
 
 		ids, err := datafile.ParseIds([]string{filename})
 		if err != nil {
-			return errors.WithStack(err)
+			return nil, errors.WithStack(err)
 		}
 
 		if 0 < len(ids) {
@@ -163,27 +217,14 @@ func (m *merger) removeArchive(b *Bitcask, currentFileID int32, lim *rate.Limite
 			}
 		}
 
-		path := filepath.Join(b.path, filename)
-		stat, err := os.Stat(path)
-		if err != nil {
-			return errors.WithStack(err)
+		fromFile := filepath.Join(b.path, filename)
+		toFile := filepath.Join(b.path, fmt.Sprintf(".mark.%s", filename))
+		if err := os.Rename(fromFile, toFile); err != nil {
+			return nil, errors.WithStack(err)
 		}
-		filesize := stat.Size()
-
-		if err := os.Remove(path); err != nil {
-			return errors.WithStack(err)
-		}
-
-		r := lim.ReserveN(time.Now(), int(filesize))
-		if r.OK() != true {
-			continue
-		}
-
-		if d := r.Delay(); 0 < d {
-			time.Sleep(d)
-		}
+		removeMark = append(removeMark, toFile)
 	}
-	return nil
+	return removeMark, nil
 }
 
 func (m *merger) moveDBFiles(b *Bitcask, fromDBPath string) error {
@@ -198,6 +239,7 @@ func (m *merger) moveDBFiles(b *Bitcask, fromDBPath string) error {
 		if filename == lockfile {
 			continue
 		}
+
 		fromFile := filepath.Join(fromDBPath, filename)
 		toFile := filepath.Join(b.path, filename)
 		if err := os.Rename(fromFile, toFile); err != nil {
@@ -215,8 +257,10 @@ func newMerger() *merger {
 }
 
 type mergeTempDB struct {
-	tempDir string
-	mdb     *Bitcask
+	tempDir   string
+	mdb       *Bitcask
+	closed    bool
+	destroyed bool
 }
 
 func (t *mergeTempDB) DBPath() string {
@@ -230,7 +274,7 @@ func (t *mergeTempDB) DB() *Bitcask {
 // Rewrite all key/value pairs into merged database
 // Doing this automatically strips deleted keys and
 // old key/value pairs
-func (t *mergeTempDB) Merge(src *Bitcask, mergeFileIds []int32, lim *rate.Limiter) error {
+func (t *mergeTempDB) Merge(src *Bitcask, mergeFileIds []int32, st *snapshotTrie, lim *rate.Limiter) error {
 	t.mdb.mu.Lock()
 	defer t.mdb.mu.Unlock()
 
@@ -254,73 +298,84 @@ func (t *mergeTempDB) Merge(src *Bitcask, mergeFileIds []int32, lim *rate.Limite
 		}
 	}()
 
-	for _, fileID := range mergeFileIds {
-		df := m[fileID]
-		if err := loadIndexFromDatafile(t.mdb.trie, t.mdb.ttlIndex, df, lim); err != nil {
-			return errors.WithStack(err)
-		}
-	}
-
-	if err := t.mergeDatafileLocked(m, lim); err != nil {
+	if err := t.mergeDatafileLocked(st, m, lim); err != nil {
 		return errors.WithStack(err)
 	}
 	return nil
 }
 
-func (t *mergeTempDB) mergeDatafileLocked(m map[int32]datafile.Datafile, lim *rate.Limiter) error {
-	var lastErr error
-	t.mdb.trie.ForEach(func(node art.Node) bool {
-		filer := node.Value().(indexer.Filer)
-		e, err := m[filer.FileID].ReadAt(filer.Index, filer.Size)
+func (t *mergeTempDB) mergeDatafileLocked(st *snapshotTrie, m map[int32]datafile.Datafile, lim *rate.Limiter) error {
+	return st.ReadAll(func(data snapshotTrieData) error {
+		filer := data.Value
+
+		df, ok := m[filer.FileID]
+		if ok != true {
+			// if fileID was updated after start of merge operation, nothing to do
+			// markArchive() to keep the new FileID
+			return nil
+		}
+
+		e, err := df.ReadAt(filer.Index, filer.Size)
 		if err != nil {
-			lastErr = errors.WithStack(err)
-			return false
+			return errors.WithStack(err)
 		}
 		defer e.Close()
 
 		// no merge expired
 		if isExpiredFromTime(e.Expiry) {
-			return true
+			return nil
 		}
 		if err := t.mdb.putAndIndexLocked(e.Key, e.Value, e.Expiry); err != nil {
-			lastErr = errors.WithStack(err)
-			return false
+			return errors.WithStack(err)
 		}
 
 		r := lim.ReserveN(time.Now(), int(e.TotalSize))
 		if r.OK() != true {
-			return true
+			return nil
 		}
 
 		if d := r.Delay(); 0 < d {
 			time.Sleep(d)
 		}
-
-		return true
+		return nil
 	})
-	if lastErr != nil {
-		return errors.WithStack(lastErr)
-	}
-	return nil
 }
 
 func (t *mergeTempDB) SyncAndClose() error {
+	if t.closed {
+		return nil
+	}
+
 	if err := t.mdb.Sync(); err != nil {
 		return errors.WithStack(err)
 	}
 	if err := t.mdb.Close(); err != nil {
 		return errors.WithStack(err)
 	}
+	t.closed = true
 	return nil
 }
 
-func (t *mergeTempDB) Destroy() {
+func (t *mergeTempDB) Destroy(lim *rate.Limiter) {
+	if t.destroyed {
+		return
+	}
+
 	goruntime.SetFinalizer(t, nil) // clear
-	os.RemoveAll(t.tempDir)
+	t.SyncAndClose()
+
+	files, err := filepath.Glob(filepath.Join(t.tempDir, "*"))
+	if err != nil {
+		os.RemoveAll(t.tempDir)
+		t.destroyed = true
+		return
+	}
+	removeFileSlowly(files, lim)
+	t.destroyed = true
 }
 
 func finalizeMergeTempDB(t *mergeTempDB) {
-	t.Destroy()
+	t.Destroy(nil)
 }
 
 func openMergeTempDB(basedir string, opt *option) (*mergeTempDB, error) {
@@ -333,7 +388,129 @@ func openMergeTempDB(basedir string, opt *option) (*mergeTempDB, error) {
 		os.RemoveAll(tempDir)
 		return nil, errors.WithStack(err)
 	}
-	t := &mergeTempDB{tempDir, mdb}
-	goruntime.SetFinalizer(t, finalizeMergeTempDB)
-	return t, nil
+	st := &mergeTempDB{
+		tempDir:   tempDir,
+		mdb:       mdb,
+		closed:    false,
+		destroyed: false,
+	}
+	goruntime.SetFinalizer(st, finalizeMergeTempDB)
+	return st, nil
+}
+
+type snapshotTrie struct {
+	file      *os.File
+	enc       *gob.Encoder
+	closed    bool
+	destroyed bool
+}
+
+type snapshotTrieData struct {
+	Key   []byte
+	Value indexer.Filer
+}
+
+func (st *snapshotTrie) Close() {
+	if st.closed {
+		return
+	}
+	st.file.Close()
+	st.closed = true
+}
+
+func (st *snapshotTrie) Write(key []byte, value indexer.Filer) error {
+	return st.enc.Encode(snapshotTrieData{
+		Key:   key,
+		Value: value,
+	})
+}
+
+func (st *snapshotTrie) ReadAll(fn func(snapshotTrieData) error) error {
+	st.file.Seek(0, io.SeekStart)
+
+	dec := gob.NewDecoder(st.file)
+	for {
+		data := snapshotTrieData{}
+		if err := dec.Decode(&data); err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			return errors.WithStack(err)
+		}
+		if err := fn(data); err != nil {
+			return errors.WithStack(err)
+		}
+	}
+	return nil
+}
+
+func (st *snapshotTrie) Destroy(lim *rate.Limiter) {
+	if st.destroyed {
+		return
+	}
+
+	goruntime.SetFinalizer(st, nil)
+	st.Close()
+	removeFileSlowly([]string{st.file.Name()}, lim)
+	st.destroyed = true
+}
+
+func finalizeSnapshotTrie(st *snapshotTrie) {
+	st.Destroy(nil)
+}
+
+func openSnapshotTrie(tempDir string) (*snapshotTrie, error) {
+	f, err := os.CreateTemp(tempDir, "snapshot_trie")
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	st := &snapshotTrie{
+		file:      f,
+		enc:       gob.NewEncoder(f),
+		closed:    false,
+		destroyed: false,
+	}
+	goruntime.SetFinalizer(st, finalizeSnapshotTrie)
+	return st, nil
+}
+
+func removeFileSlowly(files []string, lim *rate.Limiter) error {
+	if lim == nil {
+		lim = rate.NewLimiter(rate.Inf, math.MaxInt)
+	}
+
+	for _, file := range files {
+		stat, err := os.Stat(file)
+		if err != nil {
+			continue
+		}
+		if stat.IsDir() {
+			continue
+		}
+		filesize := stat.Size()
+
+		if defaultTruncateThreshold < filesize {
+			truncate(file, filesize, lim)
+		}
+		if err := os.Remove(file); err != nil {
+			return errors.WithStack(err)
+		}
+	}
+	return nil
+}
+
+func truncate(path string, size int64, lim *rate.Limiter) {
+	truncateCount := (size - 1) / defaultTruncateThreshold
+	for i := int64(0); i < truncateCount; i += 1 {
+		nextSize := defaultTruncateThreshold * (truncateCount - i)
+		os.Truncate(path, nextSize)
+
+		r := lim.ReserveN(time.Now(), int(nextSize))
+		if r.OK() != true {
+			continue
+		}
+		if d := r.Delay(); 0 < d {
+			time.Sleep(d)
+		}
+	}
 }
