@@ -6,7 +6,6 @@ require (
 	git.mills.io/prologic/bitcask v1.0.2
 	github.com/abcum/lcp v0.0.0-20201209214815-7a3f3840be81
 	github.com/gofrs/flock v0.8.0
-	github.com/juju/ratelimit v1.0.1
 	github.com/nats-io/nats-server/v2 v2.8.4
 	github.com/nats-io/nats.go v1.16.0
 	github.com/octu0/bp v1.2.0
@@ -14,6 +13,7 @@ require (
 	github.com/plar/go-adaptive-radix-tree v1.0.4
 	github.com/stretchr/testify v1.7.0
 	golang.org/x/exp v0.0.0-20200228211341-fcea875c7e85
+	golang.org/x/time v0.0.0-20220609170525-579cf78fd858
 )
 
 require (
@@ -27,6 +27,5 @@ require (
 	github.com/sirupsen/logrus v1.8.1 // indirect
 	golang.org/x/crypto v0.0.0-20220315160706-3147a52a75dd // indirect
 	golang.org/x/sys v0.0.0-20220111092808-5a964db01320 // indirect
-	golang.org/x/time v0.0.0-20220609170525-579cf78fd858 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 )
