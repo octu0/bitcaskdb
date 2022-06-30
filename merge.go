@@ -289,6 +289,11 @@ func (t *mergeTempDB) Merge(src *Bitcask, mergeFileIds []int32, st *snapshotTrie
 	defer t.mdb.mu.Unlock()
 
 	m := make(map[int32]datafile.Datafile, len(mergeFileIds))
+	defer func() {
+		for _, df := range m {
+			df.Close()
+		}
+	}()
 	for _, fileID := range mergeFileIds {
 		df, err := datafile.OpenReadonly(
 			datafile.RuntimeContext(src.opt.RuntimeContext),
@@ -302,11 +307,6 @@ func (t *mergeTempDB) Merge(src *Bitcask, mergeFileIds []int32, st *snapshotTrie
 		}
 		m[fileID] = df
 	}
-	defer func() {
-		for _, df := range m {
-			df.Close()
-		}
-	}()
 
 	if err := t.mergeDatafileLocked(st, m, lim); err != nil {
 		return errors.WithStack(err)
