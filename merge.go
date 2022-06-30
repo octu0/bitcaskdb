@@ -62,7 +62,7 @@ func (m *merger) Merge(b *Bitcask, lim *rate.Limiter) error {
 		return errors.WithStack(err)
 	}
 
-	snapshot, err := m.snapshotIndexer(b)
+	snapshot, err := m.snapshotIndexer(b, lim)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -137,7 +137,7 @@ func (m *merger) forwardCurrentDafafile(b *Bitcask) ([]int32, error) {
 	return mergeFileIds, nil
 }
 
-func (m *merger) snapshotIndexer(b *Bitcask) (*snapshotTrie, error) {
+func (m *merger) snapshotIndexer(b *Bitcask, lim *rate.Limiter) (*snapshotTrie, error) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
@@ -151,6 +151,15 @@ func (m *merger) snapshotIndexer(b *Bitcask) (*snapshotTrie, error) {
 		if err := st.Write(node.Key(), node.Value().(indexer.Filer)); err != nil {
 			lastErr = errors.WithStack(err)
 			return false
+		}
+
+		r := lim.ReserveN(time.Now(), indexer.FilerByte)
+		if r.OK() != true {
+			return true
+		}
+
+		if d := r.Delay(); 0 < d {
+			time.Sleep(d)
 		}
 		return true
 	})

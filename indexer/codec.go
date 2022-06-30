@@ -11,6 +11,10 @@ import (
 	"github.com/octu0/bitcaskdb/runtime"
 )
 
+const (
+	FilerByte int = 4 + 8 + 8
+)
+
 // Filer represents the location of the value on disk. This is used by the
 // internal Adaptive Radix Tree to hold an in-memory structure mapping keys to
 // locations on disk of where the value(s) can be read from.
