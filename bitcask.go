@@ -102,13 +102,13 @@ func (b *Bitcask) Close() error {
 		return errors.WithStack(err)
 	}
 
-	if err := b.close(); err != nil {
+	if err := b.closeLocked(); err != nil {
 		return errors.WithStack(err)
 	}
 	return nil
 }
 
-func (b *Bitcask) close() error {
+func (b *Bitcask) closeLocked() error {
 	if err := b.saveIndexes(); err != nil {
 		return errors.WithStack(err)
 	}
@@ -150,13 +150,51 @@ func (b *Bitcask) Get(key []byte) (io.ReadCloser, error) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
-	return b.get(key)
+	return b.getLocked(key)
+}
+
+// get retrieves the value of the given key
+func (b *Bitcask) getLocked(key []byte) (*datafile.Entry, error) {
+	value, found := b.trie.Search(key)
+	if found != true {
+		return nil, ErrKeyNotFound
+	}
+	if b.isExpired(key) {
+		return nil, ErrKeyExpired
+	}
+
+	filer := value.(indexer.Filer)
+
+	var df datafile.Datafile
+	if filer.FileID == b.curr.FileID() {
+		df = b.curr
+	} else {
+		df = b.datafiles[filer.FileID]
+	}
+
+	e, err := df.ReadAt(filer.Index, filer.Size)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	if b.opt.ValidateChecksum {
+		if err := e.Validate(b.opt.RuntimeContext); err != nil {
+			return nil, errors.WithStack(err)
+		}
+	}
+
+	return e, nil
 }
 
 // Has returns true if the key exists in the database, false otherwise.
 func (b *Bitcask) Has(key []byte) bool {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
+
+	return b.hasLocked(key)
+}
+
+func (b *Bitcask) hasLocked(key []byte) bool {
 	_, found := b.trie.Search(key)
 	if found != true {
 		return false
@@ -252,12 +290,12 @@ func (b *Bitcask) Delete(key []byte) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	return b.delete(key)
+	return b.deleteLocked(key)
 }
 
 // delete deletes the named key. If the key doesn't exist or an I/O error
 // occurs the error is returned.
-func (b *Bitcask) delete(key []byte) error {
+func (b *Bitcask) deleteLocked(key []byte) error {
 	_, _, err := b.put(key, nil, time.Time{})
 	if err != nil {
 		return errors.WithStack(err)
@@ -314,7 +352,7 @@ func (b *Bitcask) Sift(f func(key []byte) (bool, error)) error {
 	defer b.mu.Unlock()
 
 	keysToDelete.ForEach(func(node art.Node) (cont bool) {
-		b.delete(node.Key())
+		b.deleteLocked(node.Key())
 		return true
 	})
 	return nil
@@ -413,8 +451,9 @@ func (b *Bitcask) SiftScan(prefix []byte, f func(key []byte) (bool, error)) (err
 
 	b.mu.Lock()
 	defer b.mu.Unlock()
+
 	keysToDelete.ForEach(func(node art.Node) (cont bool) {
-		b.delete(node.Key())
+		b.deleteLocked(node.Key())
 		return true
 	})
 	return
@@ -502,7 +541,7 @@ func (b *Bitcask) SiftRange(start, end []byte, f func(key []byte) (bool, error))
 	defer b.mu.Unlock()
 
 	keysToDelete.ForEach(func(node art.Node) (cont bool) {
-		b.delete(node.Key())
+		b.deleteLocked(node.Key())
 		return true
 	})
 
@@ -576,39 +615,6 @@ func (b *Bitcask) Fold(f func(key []byte) error) (err error) {
 	return
 }
 
-// get retrieves the value of the given key
-func (b *Bitcask) get(key []byte) (*datafile.Entry, error) {
-	value, found := b.trie.Search(key)
-	if found != true {
-		return nil, ErrKeyNotFound
-	}
-	if b.isExpired(key) {
-		return nil, ErrKeyExpired
-	}
-
-	filer := value.(indexer.Filer)
-
-	var df datafile.Datafile
-	if filer.FileID == b.curr.FileID() {
-		df = b.curr
-	} else {
-		df = b.datafiles[filer.FileID]
-	}
-
-	e, err := df.ReadAt(filer.Index, filer.Size)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-
-	if b.opt.ValidateChecksum {
-		if err := e.Validate(b.opt.RuntimeContext); err != nil {
-			return nil, errors.WithStack(err)
-		}
-	}
-
-	return e, nil
-}
-
 func (b *Bitcask) maybeRotate() error {
 	size := b.curr.Size()
 	if size < int64(b.opt.MaxDatafileSize) {
@@ -679,12 +685,12 @@ func (b *Bitcask) Reopen() error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	return b.reopen()
+	return b.reopenLocked()
 }
 
 // reopen reloads a bitcask object with index and datafiles
 // caller of this method should take care of locking
-func (b *Bitcask) reopen() error {
+func (b *Bitcask) reopenLocked() error {
 	datafiles, lastID, err := loadDatafiles(b.opt, b.path)
 	if err != nil {
 		return errors.WithStack(err)

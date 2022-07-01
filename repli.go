@@ -138,7 +138,7 @@ func (d *repliDestination) Delete(key []byte) error {
 	d.b.mu.Lock()
 	defer d.b.mu.Unlock()
 
-	return d.b.delete(key)
+	return d.b.deleteLocked(key)
 }
 
 func newRepliDestination(b *Bitcask) *repliDestination {
