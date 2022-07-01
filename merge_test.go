@@ -1,9 +1,12 @@
 package bitcaskdb
 
 import (
-	"io/ioutil"
+	"context"
+	"fmt"
 	"os"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -16,7 +19,7 @@ func TestMerge(t *testing.T) {
 
 	assert := assert.New(t)
 
-	testdir, err := ioutil.TempDir("", "bitcask")
+	testdir, err := os.MkdirTemp("", "bitcask")
 	assert.NoError(err)
 
 	t.Run("Setup", func(t *testing.T) {
@@ -76,7 +79,7 @@ func TestMergeErrors(t *testing.T) {
 	assert := assert.New(t)
 
 	t.Run("RemoveDatabaseDirectory", func(t *testing.T) {
-		testdir, err := ioutil.TempDir("", "bitcask")
+		testdir, err := os.MkdirTemp("", "bitcask")
 		assert.NoError(err)
 		defer os.RemoveAll(testdir)
 
@@ -93,7 +96,7 @@ func TestMergeErrors(t *testing.T) {
 func TestMergeLockingAfterMerge(t *testing.T) {
 	assert := assert.New(t)
 
-	testdir, err := ioutil.TempDir("", "bitcask")
+	testdir, err := os.MkdirTemp("", "bitcask")
 	assert.NoError(err)
 
 	db, err := Open(testdir)
@@ -109,4 +112,72 @@ func TestMergeLockingAfterMerge(t *testing.T) {
 	// This should still error.
 	_, err = Open(testdir)
 	assert.Error(err)
+}
+
+func TestMergeGoroutine(t *testing.T) {
+	testdir, err := os.MkdirTemp("", "bitcask")
+	if err != nil {
+		t.Fatalf("no error! %+v", err)
+	}
+	db, err := Open(testdir, WithMaxDatafileSize(32))
+	if err != nil {
+		t.Fatalf("no error! %+v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	wg := new(sync.WaitGroup)
+	for i := 0; i < 100; i += 1 {
+		wg.Add(1)
+		go func(ctx context.Context, w *sync.WaitGroup, id int) {
+			defer w.Done()
+
+			j := 0
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+				j += 1
+
+				key := []byte(fmt.Sprintf("%d-%d", id, j))
+				if err := db.PutBytes(key, key); err != nil {
+					t.Errorf("no error %+v", err)
+				}
+				if db.Has(key) != true {
+					t.Errorf("%s exists!", key)
+				}
+				e, err := db.Get(key)
+				if err != nil {
+					t.Errorf("no error! %+v", err)
+				}
+				defer e.Close()
+			}
+		}(ctx, wg, i)
+	}
+
+	wg.Add(1)
+	go func(ctx context.Context, w *sync.WaitGroup) {
+		defer w.Done()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			t.Logf("merge start")
+			if err := db.Merge(); err != nil {
+				t.Errorf("no error! %+v", err)
+			}
+			t.Logf("merged")
+		}
+	}(ctx, wg)
+
+	<-ctx.Done()
+	wg.Wait()
+	db.Close()
 }

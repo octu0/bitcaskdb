@@ -57,7 +57,7 @@ func (m *merger) Merge(b *Bitcask, lim *rate.Limiter) error {
 		m.mutex.Unlock()
 	}()
 
-	mergeFileIds, err := m.forwardCurrentDafafile(b)
+	lastFileID, mergeFileIds, err := m.forwardCurrentDafafile(b)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -75,7 +75,7 @@ func (m *merger) Merge(b *Bitcask, lim *rate.Limiter) error {
 	defer temp.Destroy(lim)
 
 	// Reduce b blocking time by performing b.mu.Lock/Unlock within merger.reopen()
-	removeMarkedFiles, err := m.reopen(b, temp)
+	removeMarkedFiles, err := m.reopen(b, temp, lastFileID)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -84,20 +84,20 @@ func (m *merger) Merge(b *Bitcask, lim *rate.Limiter) error {
 	return nil
 }
 
-func (m *merger) reopen(b *Bitcask, temp *mergeTempDB) ([]string, error) {
+func (m *merger) reopen(b *Bitcask, temp *mergeTempDB, lastFileID int32) ([]string, error) {
 	// no reads and writes till we reopen
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	if err := b.close(); err != nil {
+	if err := b.closeLocked(); err != nil {
 		// try recovery
-		if err2 := b.reopen(); err2 != nil {
+		if err2 := b.reopenLocked(); err2 != nil {
 			return nil, errors.Wrapf(err2, "failed close() / reopen() cause:%+v", err)
 		}
 		return nil, errors.Wrap(err, "failed to close()")
 	}
 
-	removeMarkedFiles, err := m.moveMerged(b, temp.DBPath())
+	removeMarkedFiles, err := m.moveMerged(b, lastFileID, temp.DBPath())
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -105,20 +105,20 @@ func (m *merger) reopen(b *Bitcask, temp *mergeTempDB) ([]string, error) {
 	b.metadata.ReclaimableSpace = 0
 
 	// And finally reopen the database
-	if err := b.reopen(); err != nil {
+	if err := b.reopenLocked(); err != nil {
 		removeFileSlowly(removeMarkedFiles, nil)
 		return nil, errors.WithStack(err)
 	}
 	return removeMarkedFiles, nil
 }
 
-func (m *merger) forwardCurrentDafafile(b *Bitcask) ([]int32, error) {
+func (m *merger) forwardCurrentDafafile(b *Bitcask) (int32, []int32, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	currentFileID, err := b.closeCurrentFile()
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return 0, nil, errors.WithStack(err)
 	}
 
 	mergeFileIds := make([]int32, 0, len(b.datafiles))
@@ -127,14 +127,14 @@ func (m *merger) forwardCurrentDafafile(b *Bitcask) ([]int32, error) {
 	}
 
 	if err := b.openWritableFile(currentFileID + 1); err != nil {
-		return nil, errors.WithStack(err)
+		return 0, nil, errors.WithStack(err)
 	}
 
 	sort.Slice(mergeFileIds, func(i, j int) bool {
 		return mergeFileIds[i] < mergeFileIds[j]
 	})
 
-	return mergeFileIds, nil
+	return currentFileID, mergeFileIds, nil
 }
 
 func (m *merger) snapshotIndexer(b *Bitcask, lim *rate.Limiter) (*snapshotTrie, error) {
@@ -175,7 +175,7 @@ func (m *merger) renewMergedDB(b *Bitcask, mergeFileIds []int32, st *snapshotTri
 		return nil, errors.WithStack(err)
 	}
 
-	if err := temp.Merge(b, mergeFileIds, st, lim); err != nil {
+	if err := temp.MergeDatafiles(b, mergeFileIds, st, lim); err != nil {
 		return nil, errors.WithStack(err)
 	}
 
@@ -185,10 +185,8 @@ func (m *merger) renewMergedDB(b *Bitcask, mergeFileIds []int32, st *snapshotTri
 	return temp, nil
 }
 
-func (m *merger) moveMerged(b *Bitcask, mergedDBPath string) ([]string, error) {
-	currentFileID := b.curr.FileID()
-
-	removeMarkedFiles, err := m.markArchive(b, currentFileID)
+func (m *merger) moveMerged(b *Bitcask, lastFileID int32, mergedDBPath string) ([]string, error) {
+	removeMarkedFiles, err := m.markArchive(b, lastFileID)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -198,7 +196,7 @@ func (m *merger) moveMerged(b *Bitcask, mergedDBPath string) ([]string, error) {
 	return removeMarkedFiles, nil
 }
 
-func (m *merger) markArchive(b *Bitcask, currentFileID int32) ([]string, error) {
+func (m *merger) markArchive(b *Bitcask, lastFileID int32) ([]string, error) {
 	files, err := os.ReadDir(b.path)
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -222,7 +220,7 @@ func (m *merger) markArchive(b *Bitcask, currentFileID int32) ([]string, error) 
 		if 0 < len(ids) {
 			fileID := ids[0]
 			// keep currentFileID or newer
-			if currentFileID <= fileID {
+			if lastFileID < fileID {
 				continue
 			}
 		}
@@ -247,6 +245,10 @@ func (m *merger) moveDBFiles(b *Bitcask, fromDBPath string) error {
 		filename := file.Name()
 		// see https://git.mills.io/prologic/bitcask/issues/225
 		if filename == lockfile {
+			continue
+		}
+		// keep current index
+		if filename == filerIndexFile || filename == ttlIndexFile {
 			continue
 		}
 
@@ -284,7 +286,7 @@ func (t *mergeTempDB) DB() *Bitcask {
 // Rewrite all key/value pairs into merged database
 // Doing this automatically strips deleted keys and
 // old key/value pairs
-func (t *mergeTempDB) Merge(src *Bitcask, mergeFileIds []int32, st *snapshotTrie, lim *rate.Limiter) error {
+func (t *mergeTempDB) MergeDatafiles(src *Bitcask, mergeFileIds []int32, st *snapshotTrie, lim *rate.Limiter) error {
 	t.mdb.mu.Lock()
 	defer t.mdb.mu.Unlock()
 
@@ -320,8 +322,6 @@ func (t *mergeTempDB) mergeDatafileLocked(st *snapshotTrie, m map[int32]datafile
 
 		df, ok := m[filer.FileID]
 		if ok != true {
-			// if fileID was updated after start of merge operation, nothing to do
-			// markArchive() to keep the new FileID
 			return nil
 		}
 
@@ -335,7 +335,7 @@ func (t *mergeTempDB) mergeDatafileLocked(st *snapshotTrie, m map[int32]datafile
 		if isExpiredFromTime(e.Expiry) {
 			return nil
 		}
-		if err := t.mdb.putAndIndexLocked(e.Key, e.Value, e.Expiry); err != nil {
+		if _, _, err := t.mdb.put(e.Key, e.Value, e.Expiry); err != nil {
 			return errors.WithStack(err)
 		}
 
