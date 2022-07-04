@@ -69,6 +69,10 @@ func newIdGenerator(src rand.Source) *defaultIdGenerator {
 	}
 }
 
+const (
+	FileIDByteSize int = 8 + 8
+)
+
 type FileID struct {
 	Time int64
 	Rand int64
