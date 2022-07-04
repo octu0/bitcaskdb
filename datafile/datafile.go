@@ -1,10 +1,8 @@
 package datafile
 
 import (
-	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"sync"
 	"time"
 
@@ -14,33 +12,35 @@ import (
 	"github.com/octu0/bitcaskdb/codec"
 )
 
+type EOFtype bool
+
 const (
-	IsEOF    bool = true
-	IsNotEOF bool = false
+	IsEOF    EOFtype = true
+	IsNotEOF EOFtype = false
 )
 
 var (
-	_ Datafile = (*datafile)(nil)
+	_ Datafile = (*defaultDatafile)(nil)
 )
 
 // Datafile is an interface  that represents a readable and writeable datafile
 type Datafile interface {
-	FileID() int32
+	FileID() FileID
 	Name() string
 	Close() error
 	Sync() error
 	Size() int64
 	Read() (*Entry, error)
 	ReadAt(index, size int64) (*Entry, error)
-	ReadAtHeader(index int64) (*Header, bool, error)
+	ReadAtHeader(index int64) (*Header, EOFtype, error)
 	Write(key []byte, value io.Reader, expiry time.Time) (int64, int64, error)
 }
 
-type datafile struct {
+type defaultDatafile struct {
 	sync.RWMutex
 
 	opt    *datafileOpt
-	id     int32
+	id     FileID
 	r      *os.File
 	ra     *mmap.ReaderAt
 	w      *os.File
@@ -49,15 +49,15 @@ type datafile struct {
 	enc    *codec.Encoder
 }
 
-func (df *datafile) FileID() int32 {
+func (df *defaultDatafile) FileID() FileID {
 	return df.id
 }
 
-func (df *datafile) Name() string {
+func (df *defaultDatafile) Name() string {
 	return df.r.Name()
 }
 
-func (df *datafile) Close() error {
+func (df *defaultDatafile) Close() error {
 	defer func() {
 		if df.ra != nil {
 			df.ra.Close()
@@ -80,7 +80,7 @@ func (df *datafile) Close() error {
 	return df.w.Close()
 }
 
-func (df *datafile) Sync() error {
+func (df *defaultDatafile) Sync() error {
 	if df.w == nil {
 		return nil
 	}
@@ -88,7 +88,7 @@ func (df *datafile) Sync() error {
 	return df.w.Sync()
 }
 
-func (df *datafile) Size() int64 {
+func (df *defaultDatafile) Size() int64 {
 	df.RLock()
 	defer df.RUnlock()
 
@@ -96,7 +96,7 @@ func (df *datafile) Size() int64 {
 }
 
 // Read reads the next entry from the datafile
-func (df *datafile) Read() (*Entry, error) {
+func (df *defaultDatafile) Read() (*Entry, error) {
 	df.Lock()
 	defer df.Unlock()
 
@@ -120,7 +120,7 @@ func (df *datafile) Read() (*Entry, error) {
 	return e, nil
 }
 
-func (df *datafile) sectionReader(index, size int64) *io.SectionReader {
+func (df *defaultDatafile) sectionReader(index, size int64) *io.SectionReader {
 	df.RLock()
 	defer df.RUnlock()
 
@@ -130,7 +130,7 @@ func (df *datafile) sectionReader(index, size int64) *io.SectionReader {
 	return io.NewSectionReader(df.r, index, size)
 }
 
-func (df *datafile) ReadAtHeader(index int64) (*Header, bool, error) {
+func (df *defaultDatafile) ReadAtHeader(index int64) (*Header, EOFtype, error) {
 	r := df.sectionReader(index, codec.HeaderSize)
 	d := codec.NewDecoder(df.opt.ctx, r)
 	defer d.Close()
@@ -155,7 +155,7 @@ func (df *datafile) ReadAtHeader(index int64) (*Header, bool, error) {
 }
 
 // ReadAt the entry located at index offset with expected serialized size
-func (df *datafile) ReadAt(index, size int64) (*Entry, error) {
+func (df *defaultDatafile) ReadAt(index, size int64) (*Entry, error) {
 	r := df.sectionReader(index, size)
 	d := codec.NewDecoder(df.opt.ctx, r)
 	defer d.Close()
@@ -180,7 +180,7 @@ func (df *datafile) ReadAt(index, size int64) (*Entry, error) {
 	return e, nil
 }
 
-func (df *datafile) Write(key []byte, value io.Reader, expiry time.Time) (int64, int64, error) {
+func (df *defaultDatafile) Write(key []byte, value io.Reader, expiry time.Time) (int64, int64, error) {
 	if df.w == nil {
 		return -1, 0, errors.WithStack(errReadonly)
 	}
@@ -199,68 +199,82 @@ func (df *datafile) Write(key []byte, value io.Reader, expiry time.Time) (int64,
 	return prevOffset, size, nil
 }
 
-func OpenReadonly(funcs ...datafileOptFunc) (*datafile, error) {
+func OpenReadonly(id FileID, dir string, funcs ...datafileOptFunc) (*defaultDatafile, error) {
 	opts := append(funcs, FileMode(os.FileMode(0400)), readonly(true))
-	return open(opts...)
+	return open(id, dir, opts...)
 }
 
-func Open(funcs ...datafileOptFunc) (*datafile, error) {
+func Open(id FileID, dir string, funcs ...datafileOptFunc) (*defaultDatafile, error) {
 	opts := append(funcs, readonly(false))
-	return open(opts...)
+	return open(id, dir, opts...)
+}
+
+func openWrite(path string, opt *datafileOpt) (*os.File, error) {
+	if opt.readonly {
+		return nil, nil
+	}
+
+	w, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, opt.fileMode)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return w, nil
+}
+
+func openRead(path string, opt *datafileOpt) (*os.File, os.FileInfo, error) {
+	r, err := os.Open(path)
+	if err != nil {
+		return nil, nil, errors.WithStack(err)
+	}
+	stat, err := r.Stat()
+	if err != nil {
+		return nil, nil, errors.WithStack(err)
+	}
+	return r, stat, nil
+}
+
+func openReaderAt(path string, opt *datafileOpt) (*mmap.ReaderAt, error) {
+	if opt.readonly != true {
+		return nil, nil
+	}
+	ra, err := mmap.Open(path)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return ra, nil
 }
 
 // NewDatafile opens an existing datafile
-func open(funcs ...datafileOptFunc) (*datafile, error) {
+func open(id FileID, dir string, funcs ...datafileOptFunc) (*defaultDatafile, error) {
 	opt := new(datafileOpt)
 	for _, fn := range funcs {
 		fn(opt)
 	}
+	initDatafileOpt(opt)
 
-	var (
-		r   *os.File
-		ra  *mmap.ReaderAt
-		w   *os.File
-		err error
-	)
+	path := formatDatafilePath(dir, id)
 
-	path := filepath.Join(opt.path, fmt.Sprintf(defaultDatafileFilename, opt.fileID))
-
-	if opt.readonly != true {
-		w, err = os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, opt.fileMode)
-		if err != nil {
-			return nil, errors.WithStack(err)
-		}
-	}
-
-	r, err = os.Open(path)
+	w, err := openWrite(path, opt)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failing open file:%s", path)
+		return nil, errors.WithStack(err)
 	}
-	stat, err := r.Stat()
+	r, stat, err := openRead(path, opt)
 	if err != nil {
-		return nil, errors.Wrap(err, "error calling Stat()")
+		return nil, errors.WithStack(err)
+	}
+	ra, err := openReaderAt(path, opt)
+	if err != nil {
+		return nil, errors.WithStack(err)
 	}
 
-	if opt.readonly {
-		ra, err = mmap.Open(path)
-		if err != nil {
-			return nil, errors.Wrapf(err, "mmap.Open file:%s", path)
-		}
-	}
-
-	offset := stat.Size()
-
-	dec := codec.NewDecoder(opt.ctx, r)
-	enc := codec.NewEncoder(opt.ctx, w, opt.tempDir, opt.copyTempThreshold)
-
-	return &datafile{
+	return &defaultDatafile{
 		opt:    opt,
-		id:     opt.fileID,
+		id:     id,
 		r:      r,
 		ra:     ra,
 		w:      w,
-		offset: offset,
-		dec:    dec,
-		enc:    enc,
+		offset: stat.Size(),
+		dec:    codec.NewDecoder(opt.ctx, r),
+		enc:    codec.NewEncoder(opt.ctx, w, opt.tempDir, opt.copyTempThreshold),
 	}, nil
 }

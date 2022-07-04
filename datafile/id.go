@@ -2,62 +2,184 @@ package datafile
 
 import (
 	"fmt"
+	"math/rand"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/pkg/errors"
 )
 
 const (
-	defaultDatafileFilename string = "%09d.data"
+	defaultIdFormat        string = "%016x-%016x"
+	defaultIdFormatLen     int    = 33
+	defaultDatafileSuffix  string = ".data"
+	datafileFilenameFormat string = "%s.data"
+	datafileGlobPattern    string = "*.data"
 )
 
-// GetDatafiles returns a list of all data files stored in the database path
-// given by `path`. All datafiles are identified by the the glob `*.data` and
-// the basename is represented by a monotonic increasing integer.
-// The returned files are *sorted* in increasing order.
-func getDatafiles(path string) ([]string, error) {
-	fns, err := filepath.Glob(fmt.Sprintf("%s/*.data", path))
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-	sort.Strings(fns)
-	return fns, nil
+var (
+	idGen = newIdGenerator(rand.NewSource(time.Now().UnixNano()))
+)
+
+type defaultIdGenerator struct {
+	mutex    *sync.Mutex
+	rnd      *rand.Rand
+	lastTime int64
+	lastRand int64
 }
 
-// Exists returns `true` if the given `path` on the current file system exists
-// ParseIds will parse a list of datafiles as returned by `GetDatafiles` and
-// extract the id part and return a slice of ints.
-func ParseIds(fns []string) ([]int32, error) {
-	ids := make([]int32, 0, len(fns))
-	for _, fn := range fns {
-		fn = filepath.Base(fn)
-		ext := filepath.Ext(fn)
-		if ext != ".data" {
-			continue
-		}
-		// skip hidden file
-		if 0 < len(fn) && fn[0] == '.' {
-			continue
-		}
-		id, err := strconv.ParseInt(strings.TrimSuffix(fn, ext), 10, 32)
-		if err != nil {
-			return nil, errors.WithStack(err)
-		}
-		ids = append(ids, int32(id))
+func (g *defaultIdGenerator) Next() (int64, int64) {
+	g.mutex.Lock()
+	defer g.mutex.Unlock()
+
+	return g.nextIdLocked()
+}
+
+func (g *defaultIdGenerator) nextIdLocked() (int64, int64) {
+	now := g.now()
+	r := g.rand(now)
+
+	g.lastTime = now
+	g.lastRand = r
+
+	return now, r
+}
+
+func (g *defaultIdGenerator) now() int64 {
+	return time.Now().UTC().UnixNano()
+}
+
+func (g *defaultIdGenerator) rand(now int64) int64 {
+	if g.lastTime < now {
+		return g.rnd.Int63()
 	}
-	sort.Slice(ids, func(i, j int) bool {
-		return ids[i] < ids[j]
+	return g.lastRand + 1
+}
+
+func newIdGenerator(src rand.Source) *defaultIdGenerator {
+	return &defaultIdGenerator{
+		mutex:    new(sync.Mutex),
+		rnd:      rand.New(src),
+		lastTime: 0,
+		lastRand: 0,
+	}
+}
+
+type FileID struct {
+	Time int64
+	Rand int64
+}
+
+func (f FileID) Equal(target FileID) bool {
+	return target.Time == f.Time && target.Rand == f.Rand
+}
+
+func (f FileID) Newer(target FileID) bool {
+	if f.Equal(target) {
+		return false
+	}
+	if f.Time < target.Time {
+		return true
+	}
+	if f.Time == target.Time {
+		if f.Rand < target.Rand {
+			return true
+		}
+	}
+	return false
+}
+
+func (f FileID) String() string {
+	return fmt.Sprintf(defaultIdFormat, f.Time, f.Rand)
+}
+
+func CreateFileID(t, r int64) FileID {
+	return FileID{
+		Time: t,
+		Rand: r,
+	}
+}
+
+func NextFileID() FileID {
+	return CreateFileID(idGen.Next())
+}
+
+func formatDatafilePath(path string, id FileID) string {
+	return filepath.Join(path, fmt.Sprintf(datafileFilenameFormat, id.String()))
+}
+
+func IsDatafile(fileName string) bool {
+	if strings.HasSuffix(fileName, ".data") != true {
+		return false
+	}
+	index := strings.LastIndex(fileName, defaultDatafileSuffix)
+	fileID := fileName[0:index]
+	if len(fileID) != defaultIdFormatLen {
+		return false
+	}
+	timeField := fileID[0:16]
+	separator := fileID[16 : 16+1]
+	randField := fileID[16+1:]
+	if separator != "-" {
+		return false
+	}
+	if _, err := strconv.ParseInt(timeField, 16, 64); err != nil {
+		return false
+	}
+	if _, err := strconv.ParseInt(randField, 16, 64); err != nil {
+		return false
+	}
+	return true
+}
+
+func GrepFileIds(fileNames []string) []FileID {
+	grepFile := make([]string, 0, len(fileNames))
+	for _, name := range fileNames {
+		if IsDatafile(name) != true {
+			continue
+		}
+		grepFile = append(grepFile, name)
+	}
+	sort.Slice(grepFile, func(i, j int) bool {
+		return grepFile[i] < grepFile[j]
 	})
-	return ids, nil
+
+	ids := make([]FileID, len(grepFile))
+	for i, name := range grepFile {
+		index := strings.LastIndex(name, defaultDatafileSuffix)
+		fileID := name[0:index]
+		timeField := fileID[0:16]
+		randField := fileID[16+1:]
+		timeValue, _ := strconv.ParseInt(timeField, 16, 64) // already check IsDatafile
+		randValue, _ := strconv.ParseInt(randField, 16, 64) // already check IsDatafile
+
+		ids[i] = CreateFileID(timeValue, randValue)
+	}
+	return ids
 }
 
-func ParseIdsFromDatafiles(path string) ([]int32, error) {
-	fns, err := getDatafiles(path)
+func GrepFileIdsFromDatafilePath(path string) ([]FileID, error) {
+	fileNames, err := globDatafileNames(path)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	return ParseIds(fns)
+	return GrepFileIds(fileNames), nil
+}
+
+func globDatafileNames(path string) ([]string, error) {
+	matchPaths, err := filepath.Glob(filepath.Join(path, datafileGlobPattern))
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	fileNames := make([]string, len(matchPaths))
+	for i, match := range matchPaths {
+		fileNames[i] = filepath.Base(match)
+	}
+	sort.Strings(fileNames)
+	return fileNames, nil
 }
