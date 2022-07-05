@@ -22,6 +22,7 @@ type Reciver interface {
 }
 
 type Source interface {
+	CurrentFileID() datafile.FileID
 	FileIds() []datafile.FileID
 	LastIndex(datafile.FileID) int64
 	Header(fileID datafile.FileID, index int64) (*datafile.Header, datafile.EOFType, error)
@@ -34,7 +35,7 @@ type FileIDAndIndex struct {
 }
 
 type Destination interface {
-	CurrentFileID(datafile.FileID) error
+	SetCurrentFileID(datafile.FileID) error
 	LastFiles() []FileIDAndIndex
 	Insert(fileID datafile.FileID, index int64, checksum uint32, key []byte, r io.Reader, expiry time.Time) error
 	Delete(key []byte) error

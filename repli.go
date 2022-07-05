@@ -20,6 +20,13 @@ type repliSource struct {
 	b *Bitcask
 }
 
+func (s *repliSource) CurrentFileID() datafile.FileID {
+	s.b.mu.RLock()
+	defer s.b.mu.RUnlock()
+
+	return s.b.curr.FileID()
+}
+
 func (s *repliSource) FileIds() []datafile.FileID {
 	s.b.mu.RLock()
 	defer s.b.mu.RUnlock()
@@ -70,7 +77,7 @@ type repliDestination struct {
 	b *Bitcask
 }
 
-func (d *repliDestination) CurrentFileID(fileID datafile.FileID) error {
+func (d *repliDestination) SetCurrentFileID(fileID datafile.FileID) error {
 	d.b.mu.Lock()
 	defer d.b.mu.Unlock()
 

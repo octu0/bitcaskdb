@@ -20,6 +20,7 @@ import (
 )
 
 const (
+	SubjectCurrentFileID  string = "current_fileID"
 	SubjectCurrentFileIds string = "current_fileids"
 	SubjectCurrentIndex   string = "current_index"
 	SubjectFetchSize      string = "fetch_size"
@@ -35,6 +36,15 @@ const (
 var (
 	_ Emitter = (*streamEmitter)(nil)
 	_ Reciver = (*streamReciver)(nil)
+)
+
+type (
+	RequestCurrentFileID struct {
+	}
+	ResponseCurrentFileID struct {
+		FileID datafile.FileID
+		Err    string
+	}
 )
 
 type (
@@ -350,6 +360,11 @@ func (e *streamEmitter) Start(src Source, bindIP string, bindPort int) error {
 		return errors.Wrapf(err, "nats reply connect: %s", natsUrl)
 	}
 
+	subCurrentFileID, err := replyConn.Subscribe(SubjectCurrentFileID, e.replyCurrentFileID(replyConn, src))
+	if err != nil {
+		return errors.Wrapf(err, "failed reply subj %s", SubjectCurrentFileIds)
+	}
+
 	subCurrentFileIds, err := replyConn.Subscribe(SubjectCurrentFileIds, e.replyCurrentFileIds(replyConn, src))
 	if err != nil {
 		return errors.Wrapf(err, "failed reply subj %s", SubjectCurrentFileIds)
@@ -375,6 +390,7 @@ func (e *streamEmitter) Start(src Source, bindIP string, bindPort int) error {
 	e.emitConn = emitConn
 	e.replyConn = replyConn
 	e.subs = []*nats.Subscription{
+		subCurrentFileID,
 		subCurrentFileIds,
 		subCurrentIndex,
 		subFetchSize,
@@ -419,6 +435,40 @@ func (e *streamEmitter) publishReplyCurrentFileIds(conn *nats.Conn, subj string,
 		return
 	}
 	conn.Flush()
+}
+
+func (e *streamEmitter) publishReplyCurrentFileID(conn *nats.Conn, subj string, res ResponseCurrentFileID) {
+	pool := e.ctx.Buffer().BufferPool()
+	buf := pool.Get()
+	defer pool.Put(buf)
+
+	if err := gob.NewEncoder(buf).Encode(res); err != nil {
+		e.logger.Printf("error: encode err: %+v", err)
+		return
+	}
+	if err := conn.Publish(subj, buf.Bytes()); err != nil {
+		e.logger.Printf("error: publish %s err: %+v", subj, err)
+		return
+	}
+	conn.Flush()
+}
+
+func (e *streamEmitter) replyCurrentFileID(conn *nats.Conn, src Source) nats.MsgHandler {
+	return func(msg *nats.Msg) {
+		req := RequestCurrentFileID{}
+		if err := gob.NewDecoder(bytes.NewReader(msg.Data)).Decode(&req); err != nil {
+			e.publishReplyCurrentFileID(conn, msg.Reply, ResponseCurrentFileID{
+				FileID: datafile.FileID{},
+				Err:    err.Error(),
+			})
+			return
+		}
+
+		e.publishReplyCurrentFileID(conn, msg.Reply, ResponseCurrentFileID{
+			FileID: src.CurrentFileID(),
+			Err:    "",
+		})
+	}
 }
 
 func (e *streamEmitter) replyCurrentFileIds(conn *nats.Conn, src Source) nats.MsgHandler {
@@ -874,6 +924,30 @@ func (r *streamReciver) reqCurrentFileIds(conn *nats.Conn) ([]datafile.FileID, e
 	return res.FileIds, nil
 }
 
+func (r *streamReciver) reqCurrentFileID(conn *nats.Conn) (datafile.FileID, error) {
+	bufPool := r.ctx.Buffer().BufferPool()
+	out := bufPool.Get()
+	defer bufPool.Put(out)
+
+	if err := gob.NewEncoder(out).Encode(RequestCurrentFileID{}); err != nil {
+		return datafile.FileID{}, errors.WithStack(err)
+	}
+
+	msg, err := conn.Request(SubjectCurrentFileID, out.Bytes(), r.requestTimeout)
+	if err != nil {
+		return datafile.FileID{}, errors.WithStack(err)
+	}
+
+	res := ResponseCurrentFileID{}
+	if err := gob.NewDecoder(bytes.NewReader(msg.Data)).Decode(&res); err != nil {
+		return datafile.FileID{}, errors.WithStack(err)
+	}
+	if res.Err != "" {
+		return datafile.FileID{}, errors.Errorf(res.Err)
+	}
+	return res.FileID, nil
+}
+
 func (r *streamReciver) reqCurrentIndex(conn *nats.Conn, fileID datafile.FileID) (int64, error) {
 	bufPool := r.ctx.Buffer().BufferPool()
 	out := bufPool.Get()
@@ -1084,6 +1158,13 @@ func (r *streamReciver) mergeRepliData(client *nats.Conn, dst Destination, repli
 		return errors.WithStack(err)
 	}
 
+	fileID, err := r.reqCurrentFileID(client)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	if err := dst.SetCurrentFileID(fileID); err != nil {
+		return errors.WithStack(err)
+	}
 	return nil
 }
 
@@ -1097,7 +1178,7 @@ func (r *streamReciver) takeRepliData(client *nats.Conn, dst Destination, data R
 		}
 		return dst.Insert(data.FileID, data.Index, data.Checksum, data.EntryKey, bytes.NewReader(data.EntryValue), data.EntryExpiry)
 	case RepliCurrentFileID:
-		return dst.CurrentFileID(data.FileID)
+		return dst.SetCurrentFileID(data.FileID)
 	}
 	r.logger.Printf("warn: unknown repli.type = %v %+v", data.Type, data)
 	return nil
