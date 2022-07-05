@@ -10,8 +10,6 @@ type datafileOptFunc func(*datafileOpt)
 
 type datafileOpt struct {
 	ctx               runtime.Context
-	path              string
-	fileID            int32
 	readonly          bool
 	fileMode          os.FileMode
 	tempDir           string
@@ -21,18 +19,6 @@ type datafileOpt struct {
 func RuntimeContext(ctx runtime.Context) datafileOptFunc {
 	return func(opt *datafileOpt) {
 		opt.ctx = ctx
-	}
-}
-
-func Path(path string) datafileOptFunc {
-	return func(opt *datafileOpt) {
-		opt.path = path
-	}
-}
-
-func FileID(id int32) datafileOptFunc {
-	return func(opt *datafileOpt) {
-		opt.fileID = id
 	}
 }
 
@@ -57,5 +43,14 @@ func CopyTempThreshold(threshold int64) datafileOptFunc {
 func readonly(enable bool) datafileOptFunc {
 	return func(opt *datafileOpt) {
 		opt.readonly = enable
+	}
+}
+
+func initDatafileOpt(opt *datafileOpt) {
+	if opt.ctx == nil {
+		opt.ctx = runtime.DefaultContext()
+	}
+	if opt.fileMode == 0 {
+		opt.fileMode = os.FileMode(0600)
 	}
 }

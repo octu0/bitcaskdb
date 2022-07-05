@@ -20,11 +20,18 @@ type repliSource struct {
 	b *Bitcask
 }
 
-func (s *repliSource) FileIds() []int32 {
+func (s *repliSource) CurrentFileID() datafile.FileID {
 	s.b.mu.RLock()
 	defer s.b.mu.RUnlock()
 
-	ids := make([]int32, 0, len(s.b.datafiles)+1)
+	return s.b.curr.FileID()
+}
+
+func (s *repliSource) FileIds() []datafile.FileID {
+	s.b.mu.RLock()
+	defer s.b.mu.RUnlock()
+
+	ids := make([]datafile.FileID, 0, len(s.b.datafiles)+1)
 	for fileID, _ := range s.b.datafiles {
 		ids = append(ids, fileID)
 	}
@@ -32,31 +39,31 @@ func (s *repliSource) FileIds() []int32 {
 	return ids
 }
 
-func (s *repliSource) LastIndex(fileID int32) int64 {
+func (s *repliSource) LastIndex(fileID datafile.FileID) int64 {
 	s.b.mu.RLock()
 	defer s.b.mu.RUnlock()
 
-	if s.b.curr.FileID() == fileID {
+	if s.b.curr.FileID().Equal(fileID) {
 		return s.b.curr.Size()
 	}
 	return s.b.datafiles[fileID].Size()
 }
 
-func (s *repliSource) Header(fileID int32, index int64) (*datafile.Header, bool, error) {
+func (s *repliSource) Header(fileID datafile.FileID, index int64) (*datafile.Header, datafile.EOFType, error) {
 	s.b.mu.RLock()
 	defer s.b.mu.RUnlock()
 
-	if s.b.curr.FileID() == fileID {
+	if s.b.curr.FileID().Equal(fileID) {
 		return s.b.curr.ReadAtHeader(index)
 	}
 	return s.b.datafiles[fileID].ReadAtHeader(index)
 }
 
-func (s *repliSource) Read(fileID int32, index int64, size int64) (*datafile.Entry, error) {
+func (s *repliSource) Read(fileID datafile.FileID, index int64, size int64) (*datafile.Entry, error) {
 	s.b.mu.RLock()
 	defer s.b.mu.RUnlock()
 
-	if s.b.curr.FileID() == fileID {
+	if s.b.curr.FileID().Equal(fileID) {
 		return s.b.curr.ReadAt(index, size)
 	}
 	return s.b.datafiles[fileID].ReadAt(index, size)
@@ -68,6 +75,23 @@ func newRepliSource(b *Bitcask) *repliSource {
 
 type repliDestination struct {
 	b *Bitcask
+}
+
+func (d *repliDestination) SetCurrentFileID(fileID datafile.FileID) error {
+	d.b.mu.Lock()
+	defer d.b.mu.Unlock()
+
+	if d.b.curr.FileID().Equal(fileID) {
+		return nil
+	}
+	prevFileID, err := d.b.closeCurrentFile()
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	if err := d.b.openWritableFile(fileID); err != nil {
+		return errors.Wrapf(err, "failed open writable:%s prev:%s", fileID, prevFileID)
+	}
+	return nil
 }
 
 func (d *repliDestination) LastFiles() []repli.FileIDAndIndex {
@@ -88,7 +112,7 @@ func (d *repliDestination) LastFiles() []repli.FileIDAndIndex {
 	return files
 }
 
-func (d *repliDestination) Insert(fileID int32, index int64, checksum uint32, key []byte, r io.Reader, expiry time.Time) error {
+func (d *repliDestination) Insert(fileID datafile.FileID, index int64, checksum uint32, key []byte, r io.Reader, expiry time.Time) error {
 	d.b.mu.Lock()
 	defer d.b.mu.Unlock()
 
@@ -115,15 +139,13 @@ func (d *repliDestination) Insert(fileID int32, index int64, checksum uint32, ke
 	return d.b.maybeRotate()
 }
 
-func (d *repliDestination) datafileOpen(fileID int32) (datafile.Datafile, bool, error) {
-	if d.b.curr.FileID() == fileID {
+func (d *repliDestination) datafileOpen(fileID datafile.FileID) (datafile.Datafile, bool, error) {
+	if d.b.curr.FileID().Equal(fileID) {
 		return d.b.curr, false, nil
 	}
 
-	df, err := datafile.Open(
+	df, err := datafile.Open(fileID, d.b.path,
 		datafile.RuntimeContext(d.b.opt.RuntimeContext),
-		datafile.Path(d.b.path),
-		datafile.FileID(fileID),
 		datafile.FileMode(d.b.opt.FileFileModeBeforeUmask),
 		datafile.TempDir(d.b.opt.TempDir),
 		datafile.CopyTempThreshold(d.b.opt.CopyTempThreshold),

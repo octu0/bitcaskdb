@@ -20,6 +20,7 @@ import (
 )
 
 const (
+	SubjectCurrentFileID  string = "current_fileID"
 	SubjectCurrentFileIds string = "current_fileids"
 	SubjectCurrentIndex   string = "current_index"
 	SubjectFetchSize      string = "fetch_size"
@@ -38,17 +39,26 @@ var (
 )
 
 type (
+	RequestCurrentFileID struct {
+	}
+	ResponseCurrentFileID struct {
+		FileID datafile.FileID
+		Err    string
+	}
+)
+
+type (
 	RequestCurrentFileIds struct {
 	}
 	ResponseCurrentFileIds struct {
-		FileIds []int32
+		FileIds []datafile.FileID
 		Err     string
 	}
 )
 
 type (
 	RequestCurrentIndex struct {
-		FileID int32
+		FileID datafile.FileID
 	}
 	ResponseCurrentIndex struct {
 		Index int64
@@ -58,7 +68,7 @@ type (
 
 type (
 	RequestFetchSize struct {
-		FileID int32
+		FileID datafile.FileID
 		Index  int64
 	}
 	ResponseFetchSize struct {
@@ -70,7 +80,7 @@ type (
 
 type (
 	RequestFetchData struct {
-		FileID int32
+		FileID datafile.FileID
 		Index  int64
 		Size   int64
 	}
@@ -84,14 +94,22 @@ type (
 	}
 )
 
+type RepliType uint8
+
+const (
+	RepliInsert RepliType = iota
+	RepliDelete
+	RepliCurrentFileID
+)
+
 type (
 	PartialData struct {
 		Data []byte
 		Err  string
 	}
 	RepliData struct {
-		IsDelete    bool
-		FileID      int32
+		Type        RepliType
+		FileID      datafile.FileID
 		Index       int64
 		Size        int64
 		Checksum    uint32
@@ -110,10 +128,19 @@ type partDataEncodeFunc func(
 
 type releaseFunc func()
 
+type emitType uint8
+
+const (
+	emitInsert emitType = iota
+	emitDelete
+	emitCurrentFileID
+)
+
 type emitApply struct {
-	isDelete    bool
+	emit        emitType
 	deleteKey   []byte
 	insertFiler indexer.Filer
+	fileID      datafile.FileID
 }
 
 type streamEmitter struct {
@@ -198,10 +225,13 @@ func (e *streamEmitter) emitLoop() {
 		case <-e.done:
 			return
 		case apply := <-e.emitApplyCh:
-			if apply.isDelete {
-				e.applyDelete(apply.deleteKey)
-			} else {
+			switch apply.emit {
+			case emitInsert:
 				e.applyInsert(apply.insertFiler)
+			case emitDelete:
+				e.applyDelete(apply.deleteKey)
+			case emitCurrentFileID:
+				e.applyCurrentFileID(apply.fileID)
 			}
 		}
 	}
@@ -217,7 +247,7 @@ func (e *streamEmitter) applyInsert(filer indexer.Filer) {
 
 	encodeFn := func(out *bytes.Buffer, keys []string, data []byte) error {
 		return gob.NewEncoder(out).Encode(RepliData{
-			IsDelete:    false,
+			Type:        RepliInsert,
 			FileID:      filer.FileID,
 			Index:       filer.Index,
 			Size:        filer.Size,
@@ -242,8 +272,8 @@ func (e *streamEmitter) applyDelete(key []byte) {
 	defer bufPool.Put(out)
 
 	if err := gob.NewEncoder(out).Encode(RepliData{
-		IsDelete:    true,
-		FileID:      0,
+		Type:        RepliDelete,
+		FileID:      datafile.FileID{},
 		Index:       0,
 		Size:        0,
 		Checksum:    0,
@@ -258,6 +288,33 @@ func (e *streamEmitter) applyDelete(key []byte) {
 
 	if err := e.emitConn.Publish(SubjectRepli, out.Bytes()); err != nil {
 		e.logger.Printf("error: apply delete err: %+v", err)
+		return
+	}
+	e.emitConn.Flush()
+}
+
+func (e *streamEmitter) applyCurrentFileID(fileID datafile.FileID) {
+	bufPool := e.ctx.Buffer().BufferPool()
+	out := bufPool.Get()
+	defer bufPool.Put(out)
+
+	if err := gob.NewEncoder(out).Encode(RepliData{
+		Type:        RepliCurrentFileID,
+		FileID:      fileID,
+		Index:       0,
+		Size:        0,
+		Checksum:    0,
+		EntryKey:    []byte{},
+		EntryValue:  nil,
+		EntryExpiry: time.Time{},
+		PartKeys:    nil,
+	}); err != nil {
+		e.logger.Printf("error: apply current fileID err: %+v", err)
+		return
+	}
+
+	if err := e.emitConn.Publish(SubjectRepli, out.Bytes()); err != nil {
+		e.logger.Printf("error: apply current fileID err: %+v", err)
 		return
 	}
 	e.emitConn.Flush()
@@ -303,6 +360,11 @@ func (e *streamEmitter) Start(src Source, bindIP string, bindPort int) error {
 		return errors.Wrapf(err, "nats reply connect: %s", natsUrl)
 	}
 
+	subCurrentFileID, err := replyConn.Subscribe(SubjectCurrentFileID, e.replyCurrentFileID(replyConn, src))
+	if err != nil {
+		return errors.Wrapf(err, "failed reply subj %s", SubjectCurrentFileIds)
+	}
+
 	subCurrentFileIds, err := replyConn.Subscribe(SubjectCurrentFileIds, e.replyCurrentFileIds(replyConn, src))
 	if err != nil {
 		return errors.Wrapf(err, "failed reply subj %s", SubjectCurrentFileIds)
@@ -328,6 +390,7 @@ func (e *streamEmitter) Start(src Source, bindIP string, bindPort int) error {
 	e.emitConn = emitConn
 	e.replyConn = replyConn
 	e.subs = []*nats.Subscription{
+		subCurrentFileID,
 		subCurrentFileIds,
 		subCurrentIndex,
 		subFetchSize,
@@ -372,6 +435,40 @@ func (e *streamEmitter) publishReplyCurrentFileIds(conn *nats.Conn, subj string,
 		return
 	}
 	conn.Flush()
+}
+
+func (e *streamEmitter) publishReplyCurrentFileID(conn *nats.Conn, subj string, res ResponseCurrentFileID) {
+	pool := e.ctx.Buffer().BufferPool()
+	buf := pool.Get()
+	defer pool.Put(buf)
+
+	if err := gob.NewEncoder(buf).Encode(res); err != nil {
+		e.logger.Printf("error: encode err: %+v", err)
+		return
+	}
+	if err := conn.Publish(subj, buf.Bytes()); err != nil {
+		e.logger.Printf("error: publish %s err: %+v", subj, err)
+		return
+	}
+	conn.Flush()
+}
+
+func (e *streamEmitter) replyCurrentFileID(conn *nats.Conn, src Source) nats.MsgHandler {
+	return func(msg *nats.Msg) {
+		req := RequestCurrentFileID{}
+		if err := gob.NewDecoder(bytes.NewReader(msg.Data)).Decode(&req); err != nil {
+			e.publishReplyCurrentFileID(conn, msg.Reply, ResponseCurrentFileID{
+				FileID: datafile.FileID{},
+				Err:    err.Error(),
+			})
+			return
+		}
+
+		e.publishReplyCurrentFileID(conn, msg.Reply, ResponseCurrentFileID{
+			FileID: src.CurrentFileID(),
+			Err:    "",
+		})
+	}
 }
 
 func (e *streamEmitter) replyCurrentFileIds(conn *nats.Conn, src Source) nats.MsgHandler {
@@ -465,7 +562,7 @@ func (e *streamEmitter) replyFetchSize(conn *nats.Conn, src Source) nats.MsgHand
 
 		e.publishReplyFetchSize(conn, msg.Reply, ResponseFetchSize{
 			Size: header.TotalSize,
-			EOF:  isEOF,
+			EOF:  bool(isEOF),
 			Err:  "",
 		})
 	}
@@ -537,7 +634,7 @@ func (e *streamEmitter) EmitInsert(filer indexer.Filer) error {
 		return errors.Errorf("maybe not Start")
 	}
 
-	e.emitApplyCh <- emitApply{isDelete: false, insertFiler: filer}
+	e.emitApplyCh <- emitApply{emit: emitInsert, insertFiler: filer}
 	return nil
 }
 
@@ -549,7 +646,18 @@ func (e *streamEmitter) EmitDelete(key []byte) error {
 		return errors.Errorf("maybe not Start")
 	}
 
-	e.emitApplyCh <- emitApply{isDelete: true, deleteKey: key}
+	e.emitApplyCh <- emitApply{emit: emitDelete, deleteKey: key}
+	return nil
+}
+
+func (e *streamEmitter) EmitCurrentFileID(fileID datafile.FileID) error {
+	e.mutex.RLock()
+	defer e.mutex.RUnlock()
+
+	if e.src == nil {
+		return errors.Errorf("maybe not Start")
+	}
+	e.emitApplyCh <- emitApply{emit: emitCurrentFileID, fileID: fileID}
 	return nil
 }
 
@@ -792,31 +900,55 @@ func (r *streamReciver) Stop() error {
 	return nil
 }
 
-func (r *streamReciver) reqCurrentFileIds(conn *nats.Conn) ([]int32, error) {
+func (r *streamReciver) reqCurrentFileIds(conn *nats.Conn) ([]datafile.FileID, error) {
 	bufPool := r.ctx.Buffer().BufferPool()
 	out := bufPool.Get()
 	defer bufPool.Put(out)
 
 	if err := gob.NewEncoder(out).Encode(RequestCurrentFileIds{}); err != nil {
-		return []int32{}, errors.WithStack(err)
+		return []datafile.FileID{}, errors.WithStack(err)
 	}
 
 	msg, err := conn.Request(SubjectCurrentFileIds, out.Bytes(), r.requestTimeout)
 	if err != nil {
-		return []int32{}, errors.WithStack(err)
+		return []datafile.FileID{}, errors.WithStack(err)
 	}
 
 	res := ResponseCurrentFileIds{}
 	if err := gob.NewDecoder(bytes.NewReader(msg.Data)).Decode(&res); err != nil {
-		return []int32{}, errors.WithStack(err)
+		return []datafile.FileID{}, errors.WithStack(err)
 	}
 	if res.Err != "" {
-		return []int32{}, errors.Errorf(res.Err)
+		return []datafile.FileID{}, errors.Errorf(res.Err)
 	}
 	return res.FileIds, nil
 }
 
-func (r *streamReciver) reqCurrentIndex(conn *nats.Conn, fileID int32) (int64, error) {
+func (r *streamReciver) reqCurrentFileID(conn *nats.Conn) (datafile.FileID, error) {
+	bufPool := r.ctx.Buffer().BufferPool()
+	out := bufPool.Get()
+	defer bufPool.Put(out)
+
+	if err := gob.NewEncoder(out).Encode(RequestCurrentFileID{}); err != nil {
+		return datafile.FileID{}, errors.WithStack(err)
+	}
+
+	msg, err := conn.Request(SubjectCurrentFileID, out.Bytes(), r.requestTimeout)
+	if err != nil {
+		return datafile.FileID{}, errors.WithStack(err)
+	}
+
+	res := ResponseCurrentFileID{}
+	if err := gob.NewDecoder(bytes.NewReader(msg.Data)).Decode(&res); err != nil {
+		return datafile.FileID{}, errors.WithStack(err)
+	}
+	if res.Err != "" {
+		return datafile.FileID{}, errors.Errorf(res.Err)
+	}
+	return res.FileID, nil
+}
+
+func (r *streamReciver) reqCurrentIndex(conn *nats.Conn, fileID datafile.FileID) (int64, error) {
 	bufPool := r.ctx.Buffer().BufferPool()
 	out := bufPool.Get()
 	defer bufPool.Put(out)
@@ -842,7 +974,7 @@ func (r *streamReciver) reqCurrentIndex(conn *nats.Conn, fileID int32) (int64, e
 	return res.Index, nil
 }
 
-func (r *streamReciver) reqFetchSize(conn *nats.Conn, fileID int32, index int64) (int64, bool, error) {
+func (r *streamReciver) reqFetchSize(conn *nats.Conn, fileID datafile.FileID, index int64) (int64, bool, error) {
 	bufPool := r.ctx.Buffer().BufferPool()
 	out := bufPool.Get()
 	defer bufPool.Put(out)
@@ -911,7 +1043,7 @@ func (r *streamReciver) reqFetchDataPartial(conn *nats.Conn, checksum uint32, ke
 	}, nil
 }
 
-func (r *streamReciver) reqFetchData(conn *nats.Conn, fileID int32, index int64, size int64) (*streamFetchDataEntry, error) {
+func (r *streamReciver) reqFetchData(conn *nats.Conn, fileID datafile.FileID, index int64, size int64) (*streamFetchDataEntry, error) {
 	bufPool := r.ctx.Buffer().BufferPool()
 	out := bufPool.Get()
 	defer bufPool.Put(out)
@@ -950,7 +1082,7 @@ func (r *streamReciver) reqFetchData(conn *nats.Conn, fileID int32, index int64,
 	}, nil
 }
 
-func (r *streamReciver) reqDiffData(conn *nats.Conn, dst Destination, fileID int32, lastIndex int64) error {
+func (r *streamReciver) reqDiffData(conn *nats.Conn, dst Destination, fileID datafile.FileID, lastIndex int64) error {
 	size, isEOF, err := r.reqFetchSize(conn, fileID, lastIndex)
 	if err != nil {
 		return errors.WithStack(err)
@@ -976,7 +1108,7 @@ func (r *streamReciver) reqDiffData(conn *nats.Conn, dst Destination, fileID int
 }
 
 func (r *streamReciver) requestBehindData(client *nats.Conn, dst Destination, repliTemp *temporaryRepliData) error {
-	requestedFileIds := make(map[int32]struct{})
+	requestedFileIds := make(map[datafile.FileID]struct{})
 
 	// Retrieve FileIDs that destination has that are behind
 	for _, f := range dst.LastFiles() {
@@ -1026,19 +1158,30 @@ func (r *streamReciver) mergeRepliData(client *nats.Conn, dst Destination, repli
 		return errors.WithStack(err)
 	}
 
+	fileID, err := r.reqCurrentFileID(client)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	if err := dst.SetCurrentFileID(fileID); err != nil {
+		return errors.WithStack(err)
+	}
 	return nil
 }
 
 func (r *streamReciver) takeRepliData(client *nats.Conn, dst Destination, data RepliData) error {
-	if data.IsDelete {
+	switch data.Type {
+	case RepliDelete:
 		return dst.Delete(data.EntryKey)
+	case RepliInsert:
+		if 0 < len(data.PartKeys) && len(data.EntryValue) == 0 {
+			return r.recvInsertRepliDataPartial(client, dst, data.FileID, data.Index, data.Checksum, data.EntryKey, data.EntryExpiry, data.PartKeys)
+		}
+		return dst.Insert(data.FileID, data.Index, data.Checksum, data.EntryKey, bytes.NewReader(data.EntryValue), data.EntryExpiry)
+	case RepliCurrentFileID:
+		return dst.SetCurrentFileID(data.FileID)
 	}
-
-	if 0 < len(data.PartKeys) && len(data.EntryValue) == 0 {
-		return r.recvInsertRepliDataPartial(client, dst, data.FileID, data.Index, data.Checksum, data.EntryKey, data.EntryExpiry, data.PartKeys)
-	}
-
-	return dst.Insert(data.FileID, data.Index, data.Checksum, data.EntryKey, bytes.NewReader(data.EntryValue), data.EntryExpiry)
+	r.logger.Printf("warn: unknown repli.type = %v %+v", data.Type, data)
+	return nil
 }
 
 func (r *streamReciver) recvRepliData(client *nats.Conn, dst Destination, repliTemp *temporaryRepliData) nats.MsgHandler {
@@ -1070,7 +1213,7 @@ func (r *streamReciver) recvRepliData(client *nats.Conn, dst Destination, repliT
 	}
 }
 
-func (r *streamReciver) recvInsertRepliDataPartial(client *nats.Conn, dst Destination, fileID int32, index int64, checksum uint32, key []byte, expiry time.Time, partKeys []string) error {
+func (r *streamReciver) recvInsertRepliDataPartial(client *nats.Conn, dst Destination, fileID datafile.FileID, index int64, checksum uint32, key []byte, expiry time.Time, partKeys []string) error {
 	entry, err := r.reqFetchDataPartial(client, checksum, key, expiry, partKeys)
 	if err != nil {
 		return errors.Wrapf(err, "failed fetch data partial keys")

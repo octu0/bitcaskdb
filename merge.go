@@ -84,7 +84,7 @@ func (m *merger) Merge(b *Bitcask, lim *rate.Limiter) error {
 	return nil
 }
 
-func (m *merger) reopen(b *Bitcask, temp *mergeTempDB, lastFileID int32) ([]string, error) {
+func (m *merger) reopen(b *Bitcask, temp *mergeTempDB, lastFileID datafile.FileID) ([]string, error) {
 	// no reads and writes till we reopen
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -112,26 +112,26 @@ func (m *merger) reopen(b *Bitcask, temp *mergeTempDB, lastFileID int32) ([]stri
 	return removeMarkedFiles, nil
 }
 
-func (m *merger) forwardCurrentDafafile(b *Bitcask) (int32, []int32, error) {
+func (m *merger) forwardCurrentDafafile(b *Bitcask) (datafile.FileID, []datafile.FileID, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	currentFileID, err := b.closeCurrentFile()
 	if err != nil {
-		return 0, nil, errors.WithStack(err)
+		return datafile.FileID{}, nil, errors.WithStack(err)
 	}
 
-	mergeFileIds := make([]int32, 0, len(b.datafiles))
+	mergeFileIds := make([]datafile.FileID, 0, len(b.datafiles))
 	for id, _ := range b.datafiles {
 		mergeFileIds = append(mergeFileIds, id)
 	}
 
-	if err := b.openWritableFile(currentFileID + 1); err != nil {
-		return 0, nil, errors.WithStack(err)
+	if err := b.openWritableFile(datafile.NextFileID()); err != nil {
+		return datafile.FileID{}, nil, errors.WithStack(err)
 	}
 
 	sort.Slice(mergeFileIds, func(i, j int) bool {
-		return mergeFileIds[i] < mergeFileIds[j]
+		return mergeFileIds[i].Newer(mergeFileIds[j])
 	})
 
 	return currentFileID, mergeFileIds, nil
@@ -153,7 +153,7 @@ func (m *merger) snapshotIndexer(b *Bitcask, lim *rate.Limiter) (*snapshotTrie, 
 			return false
 		}
 
-		r := lim.ReserveN(time.Now(), indexer.FilerByte)
+		r := lim.ReserveN(time.Now(), indexer.FilerByteSize)
 		if r.OK() != true {
 			return true
 		}
@@ -169,7 +169,7 @@ func (m *merger) snapshotIndexer(b *Bitcask, lim *rate.Limiter) (*snapshotTrie, 
 	return st, nil
 }
 
-func (m *merger) renewMergedDB(b *Bitcask, mergeFileIds []int32, st *snapshotTrie, lim *rate.Limiter) (*mergeTempDB, error) {
+func (m *merger) renewMergedDB(b *Bitcask, mergeFileIds []datafile.FileID, st *snapshotTrie, lim *rate.Limiter) (*mergeTempDB, error) {
 	temp, err := openMergeTempDB(b.path, b.opt)
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -185,7 +185,7 @@ func (m *merger) renewMergedDB(b *Bitcask, mergeFileIds []int32, st *snapshotTri
 	return temp, nil
 }
 
-func (m *merger) moveMerged(b *Bitcask, lastFileID int32, mergedDBPath string) ([]string, error) {
+func (m *merger) moveMerged(b *Bitcask, lastFileID datafile.FileID, mergedDBPath string) ([]string, error) {
 	removeMarkedFiles, err := m.markArchive(b, lastFileID)
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -196,7 +196,7 @@ func (m *merger) moveMerged(b *Bitcask, lastFileID int32, mergedDBPath string) (
 	return removeMarkedFiles, nil
 }
 
-func (m *merger) markArchive(b *Bitcask, lastFileID int32) ([]string, error) {
+func (m *merger) markArchive(b *Bitcask, lastFileID datafile.FileID) ([]string, error) {
 	files, err := os.ReadDir(b.path)
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -212,15 +212,12 @@ func (m *merger) markArchive(b *Bitcask, lastFileID int32) ([]string, error) {
 			continue
 		}
 
-		ids, err := datafile.ParseIds([]string{filename})
-		if err != nil {
-			return nil, errors.WithStack(err)
-		}
+		ids := datafile.GrepFileIds([]string{filename})
 
 		if 0 < len(ids) {
 			fileID := ids[0]
-			// keep currentFileID or newer
-			if lastFileID < fileID {
+			// keep newer
+			if lastFileID.Newer(fileID) {
 				continue
 			}
 		}
@@ -286,21 +283,19 @@ func (t *mergeTempDB) DB() *Bitcask {
 // Rewrite all key/value pairs into merged database
 // Doing this automatically strips deleted keys and
 // old key/value pairs
-func (t *mergeTempDB) MergeDatafiles(src *Bitcask, mergeFileIds []int32, st *snapshotTrie, lim *rate.Limiter) error {
+func (t *mergeTempDB) MergeDatafiles(src *Bitcask, mergeFileIds []datafile.FileID, st *snapshotTrie, lim *rate.Limiter) error {
 	t.mdb.mu.Lock()
 	defer t.mdb.mu.Unlock()
 
-	m := make(map[int32]datafile.Datafile, len(mergeFileIds))
+	m := make(map[datafile.FileID]datafile.Datafile, len(mergeFileIds))
 	defer func() {
 		for _, df := range m {
 			df.Close()
 		}
 	}()
 	for _, fileID := range mergeFileIds {
-		df, err := datafile.OpenReadonly(
+		df, err := datafile.OpenReadonly(fileID, src.path,
 			datafile.RuntimeContext(src.opt.RuntimeContext),
-			datafile.Path(src.path),
-			datafile.FileID(fileID),
 			datafile.TempDir(src.opt.TempDir),
 			datafile.CopyTempThreshold(src.opt.CopyTempThreshold),
 		)
@@ -316,7 +311,7 @@ func (t *mergeTempDB) MergeDatafiles(src *Bitcask, mergeFileIds []int32, st *sna
 	return nil
 }
 
-func (t *mergeTempDB) mergeDatafileLocked(st *snapshotTrie, m map[int32]datafile.Datafile, lim *rate.Limiter) error {
+func (t *mergeTempDB) mergeDatafileLocked(st *snapshotTrie, m map[datafile.FileID]datafile.Datafile, lim *rate.Limiter) error {
 	return st.ReadAll(func(data snapshotTrieData) error {
 		filer := data.Value
 

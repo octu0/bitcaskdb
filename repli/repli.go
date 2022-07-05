@@ -13,6 +13,7 @@ type Emitter interface {
 	Stop() error
 	EmitInsert(filer indexer.Filer) error
 	EmitDelete(key []byte) error
+	EmitCurrentFileID(datafile.FileID) error
 }
 
 type Reciver interface {
@@ -21,19 +22,21 @@ type Reciver interface {
 }
 
 type Source interface {
-	FileIds() []int32
-	LastIndex(fileID int32) int64
-	Header(fileID int32, index int64) (*datafile.Header, bool, error)
-	Read(fileID int32, index int64, size int64) (*datafile.Entry, error)
+	CurrentFileID() datafile.FileID
+	FileIds() []datafile.FileID
+	LastIndex(datafile.FileID) int64
+	Header(fileID datafile.FileID, index int64) (*datafile.Header, datafile.EOFType, error)
+	Read(fileID datafile.FileID, index int64, size int64) (*datafile.Entry, error)
 }
 
 type FileIDAndIndex struct {
-	FileID int32
+	FileID datafile.FileID
 	Index  int64
 }
 
 type Destination interface {
+	SetCurrentFileID(datafile.FileID) error
 	LastFiles() []FileIDAndIndex
-	Insert(fileID int32, index int64, checksum uint32, key []byte, r io.Reader, expiry time.Time) error
+	Insert(fileID datafile.FileID, index int64, checksum uint32, key []byte, r io.Reader, expiry time.Time) error
 	Delete(key []byte) error
 }
