@@ -1218,7 +1218,7 @@ func TestOpenErrors(t *testing.T) {
 		assert.Error(err)
 	})
 
-	t.Run("LoadDatafilesError", func(t *testing.T) {
+	t.Run("LoadDatafiles", func(t *testing.T) {
 		testdir, err := ioutil.TempDir("", "bitcask")
 		assert.NoError(err)
 		defer os.RemoveAll(testdir)
@@ -1233,12 +1233,16 @@ func TestOpenErrors(t *testing.T) {
 		assert.NoError(err)
 
 		// Simulate some horrible that happened to the datafiles!
-		err = os.Rename(filepath.Join(testdir, "000000000.data"), filepath.Join(testdir, "000000000xxx.data"))
+		err = os.Rename(filepath.Join(testdir, db.curr.FileID().String()+".data"), filepath.Join(testdir, db.curr.FileID().String()+"xxx.data"))
 		assert.NoError(err)
 
-		_, err = Open(testdir)
-		assert.Error(err)
-		assert.Equal("strconv.ParseInt: parsing \"000000000xxx\": invalid syntax", err.Error())
+		db2, err := Open(testdir)
+		if err != nil {
+			t.Errorf("no error! %+v", err)
+		}
+		if db.curr.FileID().Newer(db2.curr.FileID()) != true {
+			t.Errorf("open new file: old:%s new:%s", db.curr.FileID(), db2.curr.FileID())
+		}
 	})
 }
 

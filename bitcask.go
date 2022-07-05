@@ -1000,7 +1000,7 @@ func Open(path string, funcs ...OptionFunc) (*Bitcask, error) {
 		return nil, errors.WithStack(err)
 	}
 	if ok != true {
-		return nil, ErrDatabaseLocked
+		return nil, errors.WithStack(ErrDatabaseLocked)
 	}
 
 	if err := bitcask.Reopen(); err != nil {
