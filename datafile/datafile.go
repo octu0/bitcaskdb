@@ -252,6 +252,10 @@ func open(id FileID, dir string, funcs ...datafileOptFunc) (*defaultDatafile, er
 	}
 	initDatafileOpt(opt)
 
+	if id.IsZero() {
+		id = NextFileID()
+	}
+
 	path := formatDatafilePath(dir, id)
 
 	w, err := openWrite(path, opt)

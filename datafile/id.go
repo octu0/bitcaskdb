@@ -78,6 +78,10 @@ type FileID struct {
 	Rand int64
 }
 
+func (f FileID) IsZero() bool {
+	return f.Time == 0 && f.Rand == 0
+}
+
 func (f FileID) Equal(target FileID) bool {
 	return target.Time == f.Time && target.Rand == f.Rand
 }
