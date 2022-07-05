@@ -1,6 +1,7 @@
 package repli
 
 import (
+	"github.com/octu0/bitcaskdb/datafile"
 	"github.com/octu0/bitcaskdb/indexer"
 )
 
@@ -24,6 +25,10 @@ func (*noopEmitter) EmitInsert(filer indexer.Filer) error {
 }
 
 func (*noopEmitter) EmitDelete(key []byte) error {
+	return nil
+}
+
+func (*noopEmitter) EmitCurrentFileID(fileID datafile.FileID) error {
 	return nil
 }
 

@@ -25,19 +25,19 @@ import (
 
 type testNoDataSource struct{}
 
-func (t *testNoDataSource) FileIds() []int32 {
+func (t *testNoDataSource) FileIds() []datafile.FileID {
 	return nil
 }
 
-func (t *testNoDataSource) LastIndex(int32) int64 {
+func (t *testNoDataSource) LastIndex(datafile.FileID) int64 {
 	return 0
 }
 
-func (t *testNoDataSource) Header(int32, int64) (*datafile.Header, bool, error) {
+func (t *testNoDataSource) Header(datafile.FileID, int64) (*datafile.Header, datafile.EOFType, error) {
 	return nil, true, errors.Errorf("no header")
 }
 
-func (t *testNoDataSource) Read(int32, int64, int64) (*datafile.Entry, error) {
+func (t *testNoDataSource) Read(datafile.FileID, int64, int64) (*datafile.Entry, error) {
 	return nil, errors.Errorf("no entry")
 }
 
@@ -73,22 +73,22 @@ func TestRapliStreamEmitterStartStop(t *testing.T) {
 }
 
 type testFileIdsSource struct {
-	ids []int32
+	ids []datafile.FileID
 }
 
-func (t *testFileIdsSource) FileIds() []int32 {
+func (t *testFileIdsSource) FileIds() []datafile.FileID {
 	return t.ids
 }
 
-func (t *testFileIdsSource) LastIndex(int32) int64 {
+func (t *testFileIdsSource) LastIndex(datafile.FileID) int64 {
 	return 0
 }
 
-func (t *testFileIdsSource) Header(int32, int64) (*datafile.Header, bool, error) {
+func (t *testFileIdsSource) Header(datafile.FileID, int64) (*datafile.Header, datafile.EOFType, error) {
 	return nil, true, errors.Errorf("no header")
 }
 
-func (t *testFileIdsSource) Read(int32, int64, int64) (*datafile.Entry, error) {
+func (t *testFileIdsSource) Read(datafile.FileID, int64, int64) (*datafile.Entry, error) {
 	return nil, errors.Errorf("no entry")
 }
 
@@ -96,8 +96,14 @@ func testRepliStreamEmitterRequestCurrentFileIds(t *testing.T) {
 	e := NewStreamEmitter(runtime.DefaultContext(), log.Default(), "", 0)
 	defer e.Stop()
 
+	id1 := datafile.NextFileID()
+	id2 := datafile.NextFileID()
+	id3 := datafile.NextFileID()
+	id4 := datafile.NextFileID()
+	id5 := datafile.NextFileID()
+	id6 := datafile.NextFileID()
 	s := &testFileIdsSource{
-		ids: []int32{0, 1, 2, 3, 4, 5},
+		ids: []datafile.FileID{id1, id2, id3, id4, id5, id6},
 	}
 	if err := e.Start(s, "127.0.0.1", -1); err != nil {
 		t.Errorf("no error ephemeral port %+v", err)
@@ -158,29 +164,29 @@ func testRepliStreamEmitterRequestCurrentFileIds(t *testing.T) {
 		if res.Err != "" {
 			tt.Errorf("no response err: actual'%s'", res.Err)
 		}
-		if reflect.DeepEqual(res.FileIds, []int32{0, 1, 2, 3, 4, 5}) != true {
+		if reflect.DeepEqual(res.FileIds, []datafile.FileID{id1, id2, id3, id4, id5, id6}) != true {
 			tt.Errorf("mismatch fileIds actual:%v", res.FileIds)
 		}
 	})
 }
 
 type testLastIndexSource struct {
-	index map[int32]int64
+	index map[datafile.FileID]int64
 }
 
-func (t *testLastIndexSource) FileIds() []int32 {
+func (t *testLastIndexSource) FileIds() []datafile.FileID {
 	return nil
 }
 
-func (t *testLastIndexSource) LastIndex(id int32) int64 {
+func (t *testLastIndexSource) LastIndex(id datafile.FileID) int64 {
 	return t.index[id]
 }
 
-func (t *testLastIndexSource) Header(int32, int64) (*datafile.Header, bool, error) {
+func (t *testLastIndexSource) Header(datafile.FileID, int64) (*datafile.Header, datafile.EOFType, error) {
 	return nil, true, errors.Errorf("no header")
 }
 
-func (t *testLastIndexSource) Read(int32, int64, int64) (*datafile.Entry, error) {
+func (t *testLastIndexSource) Read(datafile.FileID, int64, int64) (*datafile.Entry, error) {
 	return nil, errors.Errorf("no entry")
 }
 
@@ -188,11 +194,14 @@ func testRepliStreamEmitterRequestCurrentIndex(t *testing.T) {
 	e := NewStreamEmitter(runtime.DefaultContext(), log.Default(), "", 0)
 	defer e.Stop()
 
+	id1 := datafile.NextFileID()
+	id2 := datafile.NextFileID()
+	id3 := datafile.NextFileID()
 	s := &testLastIndexSource{
-		index: map[int32]int64{
-			0: 123,
-			1: 50,
-			2: 1,
+		index: map[datafile.FileID]int64{
+			id1: 123,
+			id2: 50,
+			id3: 1,
 		},
 	}
 	if err := e.Start(s, "127.0.0.1", -1); err != nil {
@@ -239,14 +248,14 @@ func testRepliStreamEmitterRequestCurrentIndex(t *testing.T) {
 	})
 	t.Run("data_read", func(tt *testing.T) {
 		testcase := []struct {
-			fileID      int32
+			fileID      datafile.FileID
 			expectIndex int64
 			expectErr   string
 		}{
-			{0, 123, ""},
-			{1, 50, ""},
-			{2, 1, ""},
-			{999, 0, ""}, // not found is 'index = 0'
+			{id1, 123, ""},
+			{id2, 50, ""},
+			{id3, 1, ""},
+			{datafile.FileID{999, 999}, 0, ""}, // not found is 'index = 0'
 		}
 		for _, tc := range testcase {
 			out := bytes.NewBuffer(nil)
@@ -279,7 +288,7 @@ type testHeaderSource struct {
 }
 
 type testHeaderSourceKey struct {
-	fileID int32
+	fileID datafile.FileID
 	index  int64
 }
 
@@ -289,23 +298,23 @@ type testHeaderSourceValue struct {
 	err   error
 }
 
-func (t *testHeaderSource) FileIds() []int32 {
+func (t *testHeaderSource) FileIds() []datafile.FileID {
 	return nil
 }
 
-func (t *testHeaderSource) LastIndex(int32) int64 {
+func (t *testHeaderSource) LastIndex(datafile.FileID) int64 {
 	return 0
 }
 
-func (t *testHeaderSource) Header(fileID int32, index int64) (*datafile.Header, bool, error) {
+func (t *testHeaderSource) Header(fileID datafile.FileID, index int64) (*datafile.Header, datafile.EOFType, error) {
 	v, ok := t.header[testHeaderSourceKey{fileID, index}]
 	if ok != true {
 		return nil, true, errors.Errorf("testNOTFOUND")
 	}
-	return v.dh, v.isEOF, v.err
+	return v.dh, datafile.EOFType(v.isEOF), v.err
 }
 
-func (t *testHeaderSource) Read(int32, int64, int64) (*datafile.Entry, error) {
+func (t *testHeaderSource) Read(datafile.FileID, int64, int64) (*datafile.Entry, error) {
 	return nil, errors.Errorf("no entry")
 }
 
@@ -313,18 +322,20 @@ func testRepliStreamEmitterRequestFetchSize(t *testing.T) {
 	e := NewStreamEmitter(runtime.DefaultContext(), log.Default(), "", 0)
 	defer e.Stop()
 
+	id1 := datafile.NextFileID()
+	id2 := datafile.NextFileID()
 	h := make(map[testHeaderSourceKey]testHeaderSourceValue)
-	h[testHeaderSourceKey{0, 38}] = testHeaderSourceValue{
+	h[testHeaderSourceKey{id1, 38}] = testHeaderSourceValue{
 		dh:    &datafile.Header{10, 10, 10, time.Unix(10, 0), 38},
 		isEOF: false,
 		err:   nil,
 	}
-	h[testHeaderSourceKey{0, 76}] = testHeaderSourceValue{
+	h[testHeaderSourceKey{id1, 76}] = testHeaderSourceValue{
 		dh:    &datafile.Header{20, 20, 20, time.Unix(20, 0), 38},
 		isEOF: true,
 		err:   nil,
 	}
-	h[testHeaderSourceKey{100, 100}] = testHeaderSourceValue{
+	h[testHeaderSourceKey{id2, 100}] = testHeaderSourceValue{
 		dh:    nil,
 		isEOF: true,
 		err:   errors.Errorf("testErr"),
@@ -381,25 +392,25 @@ func testRepliStreamEmitterRequestFetchSize(t *testing.T) {
 			expectErr   string
 		}{
 			{
-				key:         testHeaderSourceKey{0, 38},
+				key:         testHeaderSourceKey{id1, 38},
 				expectSize:  38,
 				expectIsEOF: false,
 				expectErr:   "",
 			},
 			{
-				key:         testHeaderSourceKey{0, 76},
+				key:         testHeaderSourceKey{id1, 76},
 				expectSize:  38,
 				expectIsEOF: true,
 				expectErr:   "",
 			},
 			{
-				key:         testHeaderSourceKey{100, 100},
+				key:         testHeaderSourceKey{id2, 100},
 				expectSize:  -1,
 				expectIsEOF: true,
 				expectErr:   "testErr",
 			},
 			{
-				key:         testHeaderSourceKey{999, 9999}, // not found
+				key:         testHeaderSourceKey{datafile.FileID{999, 999}, 9999}, // not found
 				expectSize:  -1,
 				expectIsEOF: true,
 				expectErr:   "testNOTFOUND",
@@ -439,7 +450,7 @@ type testReadSource struct {
 }
 
 type testReadSourceKey struct {
-	fileID int32
+	fileID datafile.FileID
 	index  int64
 	size   int64
 }
@@ -449,19 +460,19 @@ type testReadSourceValue struct {
 	err error
 }
 
-func (t *testReadSource) FileIds() []int32 {
+func (t *testReadSource) FileIds() []datafile.FileID {
 	return nil
 }
 
-func (t *testReadSource) LastIndex(int32) int64 {
+func (t *testReadSource) LastIndex(datafile.FileID) int64 {
 	return 0
 }
 
-func (t *testReadSource) Header(int32, int64) (*datafile.Header, bool, error) {
+func (t *testReadSource) Header(datafile.FileID, int64) (*datafile.Header, datafile.EOFType, error) {
 	return nil, true, errors.Errorf("testNOTFOUND")
 }
 
-func (t *testReadSource) Read(fileID int32, index int64, size int64) (*datafile.Entry, error) {
+func (t *testReadSource) Read(fileID datafile.FileID, index int64, size int64) (*datafile.Entry, error) {
 	v, ok := t.read[testReadSourceKey{fileID, index, size}]
 	if ok != true {
 		return nil, errors.Errorf("testNOTFOUND")
@@ -480,10 +491,10 @@ func testRepliStreamEmitterRequestFetchData(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
-	df, err := datafile.Open(
+	id := datafile.NextFileID()
+	notfounID := datafile.NextFileID()
+	df, err := datafile.Open(id, dir,
 		datafile.RuntimeContext(runtime.DefaultContext()),
-		datafile.Path(dir),
-		datafile.FileID(0),
 		datafile.FileMode(os.FileMode(0600)),
 		datafile.TempDir(""),
 		datafile.CopyTempThreshold(0),
@@ -505,23 +516,23 @@ func testRepliStreamEmitterRequestFetchData(t *testing.T) {
 	entry4, _ := df.Read()
 
 	r := make(map[testReadSourceKey]testReadSourceValue)
-	r[testReadSourceKey{0, 0, entry1.TotalSize}] = testReadSourceValue{
+	r[testReadSourceKey{id, 0, entry1.TotalSize}] = testReadSourceValue{
 		de:  entry1,
 		err: nil,
 	}
-	r[testReadSourceKey{0, entry1.TotalSize, entry1.TotalSize + entry2.TotalSize}] = testReadSourceValue{
+	r[testReadSourceKey{id, entry1.TotalSize, entry1.TotalSize + entry2.TotalSize}] = testReadSourceValue{
 		de:  entry2,
 		err: nil,
 	}
-	r[testReadSourceKey{0, entry1.TotalSize + entry2.TotalSize, entry1.TotalSize + entry2.TotalSize + entry3.TotalSize}] = testReadSourceValue{
+	r[testReadSourceKey{id, entry1.TotalSize + entry2.TotalSize, entry1.TotalSize + entry2.TotalSize + entry3.TotalSize}] = testReadSourceValue{
 		de:  entry3,
 		err: nil,
 	}
-	r[testReadSourceKey{0, entry1.TotalSize + entry2.TotalSize + entry3.TotalSize, entry1.TotalSize + entry2.TotalSize + entry3.TotalSize + entry4.TotalSize}] = testReadSourceValue{
+	r[testReadSourceKey{id, entry1.TotalSize + entry2.TotalSize + entry3.TotalSize, entry1.TotalSize + entry2.TotalSize + entry3.TotalSize + entry4.TotalSize}] = testReadSourceValue{
 		de:  entry4,
 		err: nil,
 	}
-	r[testReadSourceKey{100, 0, 100}] = testReadSourceValue{
+	r[testReadSourceKey{notfounID, 0, 100}] = testReadSourceValue{
 		de:  nil,
 		err: errors.Errorf("testErr"),
 	}
@@ -578,35 +589,35 @@ func testRepliStreamEmitterRequestFetchData(t *testing.T) {
 			single        bool
 		}{
 			{
-				key:           testReadSourceKey{0, 0, 38},
+				key:           testReadSourceKey{id, 0, 38},
 				single:        true,
 				expectPartKey: nil,
 				expectData:    []byte("smalldata"),
 				expectErr:     "",
 			},
 			{
-				key:           testReadSourceKey{0, 38, 77},
+				key:           testReadSourceKey{id, 38, 77},
 				single:        true,
 				expectPartKey: nil,
 				expectData:    []byte("smalldata2"),
 				expectErr:     "",
 			},
 			{
-				key:           testReadSourceKey{0, 77, 73875},
+				key:           testReadSourceKey{id, 77, 73875},
 				single:        false,
 				expectPartKey: nil, // skip: data_read/partial
 				expectData:    nil, // skip: data_read/partial
 				expectErr:     "",
 			},
 			{
-				key:           testReadSourceKey{0, 73875, 73914},
+				key:           testReadSourceKey{id, 73875, 73914},
 				single:        true,
 				expectPartKey: nil,
 				expectData:    []byte("smalldata4"),
 				expectErr:     "",
 			},
 			{
-				key:           testReadSourceKey{100, 0, 100},
+				key:           testReadSourceKey{notfounID, 0, 100},
 				single:        true,
 				expectPartKey: nil,
 				expectData:    nil,
@@ -649,7 +660,7 @@ func testRepliStreamEmitterRequestFetchData(t *testing.T) {
 	t.Run("data_read/partial", func(tt *testing.T) {
 		out := bytes.NewBuffer(nil)
 		if err := gob.NewEncoder(out).Encode(RequestFetchData{
-			FileID: 0,
+			FileID: id,
 			Index:  77,
 			Size:   73875,
 		}); err != nil {
@@ -731,25 +742,25 @@ type testDatafileSource struct {
 	df datafile.Datafile
 }
 
-func (t *testDatafileSource) FileIds() []int32 {
-	return []int32{t.df.FileID()}
+func (t *testDatafileSource) FileIds() []datafile.FileID {
+	return []datafile.FileID{t.df.FileID()}
 }
 
-func (t *testDatafileSource) LastIndex(fileID int32) int64 {
+func (t *testDatafileSource) LastIndex(fileID datafile.FileID) int64 {
 	if fileID == t.df.FileID() {
 		return t.df.Size()
 	}
 	return 0
 }
 
-func (t *testDatafileSource) Header(fileID int32, index int64) (*datafile.Header, bool, error) {
+func (t *testDatafileSource) Header(fileID datafile.FileID, index int64) (*datafile.Header, datafile.EOFType, error) {
 	if fileID == t.df.FileID() {
 		return t.df.ReadAtHeader(index)
 	}
 	return nil, true, errors.Errorf("no header")
 }
 
-func (t *testDatafileSource) Read(fileID int32, index int64, size int64) (*datafile.Entry, error) {
+func (t *testDatafileSource) Read(fileID datafile.FileID, index int64, size int64) (*datafile.Entry, error) {
 	if fileID == t.df.FileID() {
 		return t.df.ReadAt(index, size)
 	}
@@ -792,7 +803,7 @@ func TestRepliStreamEmitterRepli(t *testing.T) {
 		if len(data) != 1 {
 			tt.Errorf("emit test01 actual=%d", len(data))
 		}
-		if data[0].IsDelete != true {
+		if data[0].Type != RepliDelete {
 			tt.Errorf("emitDelete test01")
 		}
 		if bytes.Equal(data[0].EntryKey, []byte("test01")) != true {
@@ -810,7 +821,7 @@ func TestRepliStreamEmitterRepli(t *testing.T) {
 		if len(data) != 3 {
 			tt.Errorf("emit test01 actual=%d", len(data))
 		}
-		if data[1].IsDelete != true {
+		if data[1].Type != RepliDelete {
 			tt.Errorf("emitDelete test02")
 		}
 		if bytes.Equal(data[1].EntryKey, []byte("test02")) != true {
@@ -819,7 +830,7 @@ func TestRepliStreamEmitterRepli(t *testing.T) {
 		if (data[1].EntryValue == nil && data[1].PartKeys == nil) != true {
 			tt.Errorf("delete payload key only")
 		}
-		if data[2].IsDelete != true {
+		if data[2].Type != RepliDelete {
 			tt.Errorf("emitDelete test03")
 		}
 		if bytes.Equal(data[2].EntryKey, []byte("test03")) != true {
@@ -836,10 +847,9 @@ func TestRepliStreamEmitterRepli(t *testing.T) {
 		}
 		defer os.RemoveAll(dir)
 
-		df, err := datafile.Open(
+		id := datafile.NextFileID()
+		df, err := datafile.Open(id, dir,
 			datafile.RuntimeContext(runtime.DefaultContext()),
-			datafile.Path(dir),
-			datafile.FileID(0),
 			datafile.FileMode(os.FileMode(0600)),
 			datafile.TempDir(""),
 			datafile.CopyTempThreshold(0),
@@ -880,7 +890,7 @@ func TestRepliStreamEmitterRepli(t *testing.T) {
 		})
 
 		e.EmitInsert(indexer.Filer{
-			FileID: 0,
+			FileID: id,
 			Index:  i1,
 			Size:   s1,
 		})
@@ -889,7 +899,7 @@ func TestRepliStreamEmitterRepli(t *testing.T) {
 		if len(data) != 1 {
 			tt.Errorf("emit test1 actual=%d", len(data))
 		}
-		if data[0].IsDelete {
+		if data[0].Type != RepliInsert {
 			tt.Errorf("emitInsert test1")
 		}
 		if bytes.Equal(data[0].EntryKey, []byte("test1")) != true {
@@ -900,7 +910,7 @@ func TestRepliStreamEmitterRepli(t *testing.T) {
 		}
 
 		e.EmitInsert(indexer.Filer{
-			FileID: 0,
+			FileID: id,
 			Index:  i2,
 			Size:   s2,
 		})
@@ -909,7 +919,7 @@ func TestRepliStreamEmitterRepli(t *testing.T) {
 		if len(data) != 2 {
 			tt.Errorf("emit test2 actual=%d", len(data))
 		}
-		if data[1].IsDelete {
+		if data[1].Type != RepliInsert {
 			tt.Errorf("emitInsert test2")
 		}
 		if bytes.Equal(data[1].EntryKey, []byte("test2")) != true {
@@ -926,10 +936,9 @@ func TestRepliStreamEmitterRepli(t *testing.T) {
 		}
 		defer os.RemoveAll(dir)
 
-		df, err := datafile.Open(
+		id2 := datafile.NextFileID()
+		df, err := datafile.Open(id2, dir,
 			datafile.RuntimeContext(runtime.DefaultContext()),
-			datafile.Path(dir),
-			datafile.FileID(0),
 			datafile.FileMode(os.FileMode(0600)),
 			datafile.TempDir(""),
 			datafile.CopyTempThreshold(0),
@@ -972,7 +981,7 @@ func TestRepliStreamEmitterRepli(t *testing.T) {
 		})
 
 		e.EmitInsert(indexer.Filer{
-			FileID: 0,
+			FileID: id2,
 			Index:  i1,
 			Size:   s1,
 		})
@@ -981,7 +990,7 @@ func TestRepliStreamEmitterRepli(t *testing.T) {
 		if len(data) != 1 {
 			tt.Errorf("emit testlarge1 actual=%d", len(data))
 		}
-		if data[0].IsDelete {
+		if data[0].Type != RepliInsert {
 			tt.Errorf("emitInsert testlarge1")
 		}
 		if bytes.Equal(data[0].EntryKey, []byte("testlarge1")) != true {
@@ -1039,7 +1048,7 @@ func TestRepliStreamEmitterRepli(t *testing.T) {
 		}
 
 		e.EmitInsert(indexer.Filer{
-			FileID: 0,
+			FileID: id2,
 			Index:  i2,
 			Size:   s2,
 		})
@@ -1048,7 +1057,7 @@ func TestRepliStreamEmitterRepli(t *testing.T) {
 		if len(data) != 2 {
 			tt.Errorf("emit testsmall actual=%d", len(data))
 		}
-		if data[1].IsDelete {
+		if data[1].Type != RepliInsert {
 			tt.Errorf("emitInsert testsmall1")
 		}
 		if bytes.Equal(data[1].EntryKey, []byte("testsmall1")) != true {
@@ -1109,11 +1118,15 @@ func TestRepliStreamEmitterReleaseLoop(t *testing.T) {
 type testNoDataDestination struct {
 }
 
+func (t *testNoDataDestination) CurrentFileID(datafile.FileID) error {
+	return nil
+}
+
 func (t *testNoDataDestination) LastFiles() []FileIDAndIndex {
 	return nil
 }
 
-func (t *testNoDataDestination) Insert(int32, int64, uint32, []byte, io.Reader, time.Time) error {
+func (t *testNoDataDestination) Insert(datafile.FileID, int64, uint32, []byte, io.Reader, time.Time) error {
 	return nil
 }
 
@@ -1158,30 +1171,36 @@ type testRepliStreamReciverSrcCounter struct {
 	countRead      int
 }
 
-func (t *testRepliStreamReciverSrcCounter) FileIds() []int32 {
+func (t *testRepliStreamReciverSrcCounter) FileIds() []datafile.FileID {
 	t.countFileIds += 1
 	return nil
 }
 
-func (t *testRepliStreamReciverSrcCounter) LastIndex(int32) int64 {
+func (t *testRepliStreamReciverSrcCounter) LastIndex(datafile.FileID) int64 {
 	t.countLastIndex += 1
 	return 0
 }
 
-func (t *testRepliStreamReciverSrcCounter) Header(int32, int64) (*datafile.Header, bool, error) {
+func (t *testRepliStreamReciverSrcCounter) Header(datafile.FileID, int64) (*datafile.Header, datafile.EOFType, error) {
 	t.countHeader += 1
 	return nil, true, errors.Errorf("no header")
 }
 
-func (t *testRepliStreamReciverSrcCounter) Read(int32, int64, int64) (*datafile.Entry, error) {
+func (t *testRepliStreamReciverSrcCounter) Read(datafile.FileID, int64, int64) (*datafile.Entry, error) {
 	t.countRead += 1
 	return nil, errors.Errorf("no entry")
 }
 
 type testRepliStreamReciverDestCounter struct {
-	countLastFiles int
-	countInsert    int
-	countDelete    int
+	countCurrentFileID int
+	countLastFiles     int
+	countInsert        int
+	countDelete        int
+}
+
+func (t *testRepliStreamReciverDestCounter) CurrentFileID(datafile.FileID) error {
+	t.countCurrentFileID += 1
+	return nil
 }
 
 func (t *testRepliStreamReciverDestCounter) LastFiles() []FileIDAndIndex {
@@ -1189,7 +1208,7 @@ func (t *testRepliStreamReciverDestCounter) LastFiles() []FileIDAndIndex {
 	return nil
 }
 
-func (t *testRepliStreamReciverDestCounter) Insert(int32, int64, uint32, []byte, io.Reader, time.Time) error {
+func (t *testRepliStreamReciverDestCounter) Insert(datafile.FileID, int64, uint32, []byte, io.Reader, time.Time) error {
 	t.countInsert += 1
 	return nil
 }
@@ -1250,17 +1269,17 @@ type testRepliStreamReciverDatafileSource struct {
 	countRead      int
 }
 
-func (t *testRepliStreamReciverDatafileSource) FileIds() []int32 {
+func (t *testRepliStreamReciverDatafileSource) FileIds() []datafile.FileID {
 	t.countFileIds += 1
 
-	ids := make([]int32, len(t.dfs))
+	ids := make([]datafile.FileID, len(t.dfs))
 	for i, df := range t.dfs {
 		ids[i] = df.FileID()
 	}
 	return ids
 }
 
-func (t *testRepliStreamReciverDatafileSource) LastIndex(fileID int32) int64 {
+func (t *testRepliStreamReciverDatafileSource) LastIndex(fileID datafile.FileID) int64 {
 	t.countLastIndex += 1
 	for _, df := range t.dfs {
 		if df.FileID() == fileID {
@@ -1270,7 +1289,7 @@ func (t *testRepliStreamReciverDatafileSource) LastIndex(fileID int32) int64 {
 	return 0
 }
 
-func (t *testRepliStreamReciverDatafileSource) Header(fileID int32, index int64) (*datafile.Header, bool, error) {
+func (t *testRepliStreamReciverDatafileSource) Header(fileID datafile.FileID, index int64) (*datafile.Header, datafile.EOFType, error) {
 	t.countHeader += 1
 	for _, df := range t.dfs {
 		if df.FileID() == fileID {
@@ -1280,7 +1299,7 @@ func (t *testRepliStreamReciverDatafileSource) Header(fileID int32, index int64)
 	return nil, true, errors.Errorf("no header")
 }
 
-func (t *testRepliStreamReciverDatafileSource) Read(fileID int32, index int64, size int64) (*datafile.Entry, error) {
+func (t *testRepliStreamReciverDatafileSource) Read(fileID datafile.FileID, index int64, size int64) (*datafile.Entry, error) {
 	t.countRead += 1
 	for _, df := range t.dfs {
 		if df.FileID() == fileID {
@@ -1291,18 +1310,27 @@ func (t *testRepliStreamReciverDatafileSource) Read(fileID int32, index int64, s
 }
 
 type testRepliStreamReciverDestCounterAndEntries struct {
-	countLastFiles int
-	countInsert    int
-	countDelete    int
-	seq            []*testRepliStreamReciverDestCounterAndEntriesSeq
-	m              sync.Mutex
+	countCurrentFileID int
+	countLastFiles     int
+	countInsert        int
+	countDelete        int
+	seq                []*testRepliStreamReciverDestCounterAndEntriesSeq
+	m                  sync.Mutex
 }
 
 type testRepliStreamReciverDestCounterAndEntriesSeq struct {
 	isDelete bool
 	key      []byte
-	fileID   int32
+	fileID   datafile.FileID
 	payload  *codec.Payload
+}
+
+func (t *testRepliStreamReciverDestCounterAndEntries) CurrentFileID(datafile.FileID) error {
+	t.m.Lock()
+	defer t.m.Unlock()
+
+	t.countCurrentFileID += 1
+	return nil
 }
 
 func (t *testRepliStreamReciverDestCounterAndEntries) LastFiles() []FileIDAndIndex {
@@ -1313,7 +1341,7 @@ func (t *testRepliStreamReciverDestCounterAndEntries) LastFiles() []FileIDAndInd
 	return nil
 }
 
-func (t *testRepliStreamReciverDestCounterAndEntries) Insert(fileID int32, index int64, checksum uint32, key []byte, value io.Reader, expiry time.Time) error {
+func (t *testRepliStreamReciverDestCounterAndEntries) Insert(fileID datafile.FileID, index int64, checksum uint32, key []byte, value io.Reader, expiry time.Time) error {
 	t.m.Lock()
 	defer t.m.Unlock()
 
@@ -1373,10 +1401,9 @@ func testRepliStreamReciverRepliDestinationBehindSourceSmallData(t *testing.T) {
 	}
 	defer os.RemoveAll(df3Dir)
 
-	df1, err := datafile.Open(
+	id1 := datafile.NextFileID()
+	df1, err := datafile.Open(id1, df1Dir,
 		datafile.RuntimeContext(runtime.DefaultContext()),
-		datafile.Path(df1Dir),
-		datafile.FileID(0),
 		datafile.FileMode(os.FileMode(0600)),
 		datafile.TempDir(""),
 		datafile.CopyTempThreshold(0),
@@ -1386,10 +1413,9 @@ func testRepliStreamReciverRepliDestinationBehindSourceSmallData(t *testing.T) {
 	}
 	defer df1.Close()
 
-	df2, err := datafile.Open(
+	id2 := datafile.NextFileID()
+	df2, err := datafile.Open(id2, df2Dir,
 		datafile.RuntimeContext(runtime.DefaultContext()),
-		datafile.Path(df2Dir),
-		datafile.FileID(1),
 		datafile.FileMode(os.FileMode(0600)),
 		datafile.TempDir(""),
 		datafile.CopyTempThreshold(0),
@@ -1399,10 +1425,9 @@ func testRepliStreamReciverRepliDestinationBehindSourceSmallData(t *testing.T) {
 	}
 	defer df2.Close()
 
-	df3, err := datafile.Open(
+	id3 := datafile.NextFileID()
+	df3, err := datafile.Open(id3, df3Dir,
 		datafile.RuntimeContext(runtime.DefaultContext()),
-		datafile.Path(df3Dir),
-		datafile.FileID(2),
 		datafile.FileMode(os.FileMode(0600)),
 		datafile.TempDir(""),
 		datafile.CopyTempThreshold(0),
@@ -1498,7 +1523,7 @@ func testRepliStreamReciverRepliDestinationBehindSourceSmallData(t *testing.T) {
 		[]byte("v08"),
 		[]byte("v09"),
 	}
-	expectFileIds := []int32{
+	expectFileIds := []datafile.FileID{
 		df1.FileID(),
 		df1.FileID(),
 		df1.FileID(),
@@ -1557,10 +1582,9 @@ func testRepliStreamReciverRepliDestinationBehindSourceLargeData(t *testing.T) {
 	}
 	defer os.RemoveAll(df3Dir)
 
-	df1, err := datafile.Open(
+	id1 := datafile.NextFileID()
+	df1, err := datafile.Open(id1, df1Dir,
 		datafile.RuntimeContext(runtime.DefaultContext()),
-		datafile.Path(df1Dir),
-		datafile.FileID(0),
 		datafile.FileMode(os.FileMode(0600)),
 		datafile.TempDir(""),
 		datafile.CopyTempThreshold(0),
@@ -1570,10 +1594,9 @@ func testRepliStreamReciverRepliDestinationBehindSourceLargeData(t *testing.T) {
 	}
 	defer df1.Close()
 
-	df2, err := datafile.Open(
+	id2 := datafile.NextFileID()
+	df2, err := datafile.Open(id2, df2Dir,
 		datafile.RuntimeContext(runtime.DefaultContext()),
-		datafile.Path(df2Dir),
-		datafile.FileID(1),
 		datafile.FileMode(os.FileMode(0600)),
 		datafile.TempDir(""),
 		datafile.CopyTempThreshold(0),
@@ -1583,10 +1606,9 @@ func testRepliStreamReciverRepliDestinationBehindSourceLargeData(t *testing.T) {
 	}
 	defer df2.Close()
 
-	df3, err := datafile.Open(
+	id3 := datafile.NextFileID()
+	df3, err := datafile.Open(id3, df3Dir,
 		datafile.RuntimeContext(runtime.DefaultContext()),
-		datafile.Path(df3Dir),
-		datafile.FileID(2),
 		datafile.FileMode(os.FileMode(0600)),
 		datafile.TempDir(""),
 		datafile.CopyTempThreshold(0),
@@ -1671,7 +1693,7 @@ func testRepliStreamReciverRepliDestinationBehindSourceLargeData(t *testing.T) {
 		largeData5,
 		largeData6,
 	}
-	expectFileIds := []int32{
+	expectFileIds := []datafile.FileID{
 		df1.FileID(),
 		df1.FileID(),
 		df1.FileID(),
@@ -1722,10 +1744,9 @@ func testRepliStreamReciverRepliDestinationBehindSourceProcessing(t *testing.T) 
 	}
 	defer os.RemoveAll(df3Dir)
 
-	df1, err := datafile.Open(
+	id1 := datafile.NextFileID()
+	df1, err := datafile.Open(id1, df1Dir,
 		datafile.RuntimeContext(runtime.DefaultContext()),
-		datafile.Path(df1Dir),
-		datafile.FileID(0),
 		datafile.FileMode(os.FileMode(0600)),
 		datafile.TempDir(""),
 		datafile.CopyTempThreshold(0),
@@ -1735,10 +1756,9 @@ func testRepliStreamReciverRepliDestinationBehindSourceProcessing(t *testing.T) 
 	}
 	defer df1.Close()
 
-	df2, err := datafile.Open(
+	id2 := datafile.NextFileID()
+	df2, err := datafile.Open(id2, df2Dir,
 		datafile.RuntimeContext(runtime.DefaultContext()),
-		datafile.Path(df2Dir),
-		datafile.FileID(1),
 		datafile.FileMode(os.FileMode(0600)),
 		datafile.TempDir(""),
 		datafile.CopyTempThreshold(0),
@@ -1748,10 +1768,9 @@ func testRepliStreamReciverRepliDestinationBehindSourceProcessing(t *testing.T) 
 	}
 	defer df2.Close()
 
-	df3, err := datafile.Open(
+	id3 := datafile.NextFileID()
+	df3, err := datafile.Open(id3, df3Dir,
 		datafile.RuntimeContext(runtime.DefaultContext()),
-		datafile.Path(df3Dir),
-		datafile.FileID(2),
 		datafile.FileMode(os.FileMode(0600)),
 		datafile.TempDir(""),
 		datafile.CopyTempThreshold(0),
@@ -1853,7 +1872,7 @@ func testRepliStreamReciverRepliDestinationBehindSourceProcessing(t *testing.T) 
 		insertKey    []byte
 		insertValue  []byte
 		insertExpiry time.Time
-		insertFileID int32
+		insertFileID datafile.FileID
 	}{
 		{
 			isDelete:     false,
@@ -2008,7 +2027,7 @@ func TestRepliTemporaryRepliData(t *testing.T) {
 		defer f.Remove()
 
 		if err := f.Write(RepliData{
-			IsDelete: true,
+			Type:     RepliDelete,
 			EntryKey: []byte("test1"),
 		}); err != nil {
 			tt.Errorf("no error: %+v", err)
@@ -2017,7 +2036,7 @@ func TestRepliTemporaryRepliData(t *testing.T) {
 		f.CloseWrite()
 
 		e := f.Write(RepliData{
-			IsDelete: true,
+			Type:     RepliDelete,
 			EntryKey: []byte("test2"),
 		})
 
@@ -2034,7 +2053,7 @@ func TestRepliTemporaryRepliData(t *testing.T) {
 		if len(data) != 1 {
 			tt.Errorf("remains test1")
 		}
-		if data[0].IsDelete != true {
+		if data[0].Type != RepliDelete {
 			tt.Errorf("test1 is delete")
 		}
 		if bytes.Equal(data[0].EntryKey, []byte("test1")) != true {
@@ -2048,15 +2067,18 @@ func TestRepliTemporaryRepliData(t *testing.T) {
 		}
 		defer f.Remove()
 
+		id1 := datafile.NextFileID()
 		if err := f.Write(RepliData{
-			IsDelete: true,
+			Type:     RepliDelete,
 			EntryKey: []byte("test1"),
+			FileID:   id1,
 		}); err != nil {
 			tt.Errorf("no error: %+v", err)
 		}
+		id2 := datafile.NextFileID()
 		if err := f.Write(RepliData{
-			IsDelete:    false,
-			FileID:      0,
+			Type:        RepliInsert,
+			FileID:      id2,
 			Index:       0,
 			Size:        123,
 			Checksum:    1234567,
@@ -2067,9 +2089,10 @@ func TestRepliTemporaryRepliData(t *testing.T) {
 		}); err != nil {
 			tt.Errorf("no error: %+v", err)
 		}
+		id3 := datafile.NextFileID()
 		if err := f.Write(RepliData{
-			IsDelete:    false,
-			FileID:      1,
+			Type:        RepliInsert,
+			FileID:      id3,
 			Index:       1000,
 			Size:        12345678,
 			Checksum:    101010,
@@ -2092,20 +2115,20 @@ func TestRepliTemporaryRepliData(t *testing.T) {
 		if len(data) != 3 {
 			tt.Errorf("write 3 data: %d", len(data))
 		}
-		if data[0].IsDelete != true {
+		if data[0].Type != RepliDelete {
 			tt.Errorf("[0] data is delete")
 		}
 		if bytes.Equal(data[0].EntryKey, []byte("test1")) != true {
 			tt.Errorf("[0] key test1 %s", data[0].EntryKey)
 		}
 
-		if data[1].IsDelete {
+		if data[1].Type != RepliInsert {
 			tt.Errorf("[1] data is not delete")
 		}
 		if bytes.Equal(data[1].EntryKey, []byte("test2")) != true {
 			tt.Errorf("[1] key actual:%s", data[1].EntryKey)
 		}
-		if data[1].FileID != 0 {
+		if data[1].FileID.Equal(id2) != true {
 			tt.Errorf("[1] fileID %d", data[1].FileID)
 		}
 		if data[1].Index != 0 {
@@ -2124,13 +2147,13 @@ func TestRepliTemporaryRepliData(t *testing.T) {
 			tt.Errorf("[1] data is helloworld: %s", data[1].EntryValue)
 		}
 
-		if data[2].IsDelete {
+		if data[2].Type != RepliInsert {
 			tt.Errorf("[2] data is not delete")
 		}
 		if bytes.Equal(data[2].EntryKey, []byte("test3")) != true {
 			tt.Errorf("[2] key actual:%s", data[2].EntryKey)
 		}
-		if data[2].FileID != 1 {
+		if data[2].FileID.Equal(id3) != true {
 			tt.Errorf("[2] fileID %d", data[2].FileID)
 		}
 		if data[2].Index != 1000 {
@@ -2159,7 +2182,7 @@ func TestRepliTemporaryRepliData(t *testing.T) {
 		}
 
 		e := f.Write(RepliData{
-			IsDelete: true,
+			Type:     RepliDelete,
 			EntryKey: []byte("removed"),
 		})
 		if errors.Is(e, os.ErrClosed) != true {

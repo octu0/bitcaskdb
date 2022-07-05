@@ -12,11 +12,11 @@ import (
 	"github.com/octu0/bitcaskdb/codec"
 )
 
-type EOFtype bool
+type EOFType bool
 
 const (
-	IsEOF    EOFtype = true
-	IsNotEOF EOFtype = false
+	IsEOF    EOFType = true
+	IsNotEOF EOFType = false
 )
 
 var (
@@ -32,7 +32,7 @@ type Datafile interface {
 	Size() int64
 	Read() (*Entry, error)
 	ReadAt(index, size int64) (*Entry, error)
-	ReadAtHeader(index int64) (*Header, EOFtype, error)
+	ReadAtHeader(index int64) (*Header, EOFType, error)
 	Write(key []byte, value io.Reader, expiry time.Time) (int64, int64, error)
 }
 
@@ -130,7 +130,7 @@ func (df *defaultDatafile) sectionReader(index, size int64) *io.SectionReader {
 	return io.NewSectionReader(df.r, index, size)
 }
 
-func (df *defaultDatafile) ReadAtHeader(index int64) (*Header, EOFtype, error) {
+func (df *defaultDatafile) ReadAtHeader(index int64) (*Header, EOFType, error) {
 	r := df.sectionReader(index, codec.HeaderSize)
 	d := codec.NewDecoder(df.opt.ctx, r)
 	defer d.Close()
