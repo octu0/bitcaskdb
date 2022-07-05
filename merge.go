@@ -216,8 +216,8 @@ func (m *merger) markArchive(b *Bitcask, lastFileID datafile.FileID) ([]string, 
 
 		if 0 < len(ids) {
 			fileID := ids[0]
-			// keep currentFileID or newer
-			if lastFileID.Equal(fileID) || lastFileID.Newer(fileID) {
+			// keep newer
+			if lastFileID.Newer(fileID) {
 				continue
 			}
 		}
