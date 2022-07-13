@@ -75,7 +75,7 @@ func (m *merger) Merge(b *Bitcask, lim *rate.Limiter) error {
 	defer temp.Destroy(lim)
 
 	// Reduce b blocking time by performing b.mu.Lock/Unlock within merger.reopen()
-	removeMarkedFiles, err := m.reopen(b, temp, lastFileID)
+	removeMarkedFiles, err := m.reopen(b, temp, lastFileID, lim)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -84,11 +84,28 @@ func (m *merger) Merge(b *Bitcask, lim *rate.Limiter) error {
 	return nil
 }
 
-func (m *merger) reopen(b *Bitcask, temp *mergeTempDB, lastFileID datafile.FileID) ([]string, error) {
+func (m *merger) tellSaveIndexCostLocked(b *Bitcask, lim *rate.Limiter) {
+	saveCostFiler := b.trie.Size() * indexer.FilerByteSize
+	saveCostTTL := b.ttlIndex.Size() * 8
+
+	lim.ReserveN(time.Now(), saveCostFiler)
+	lim.ReserveN(time.Now(), saveCostTTL)
+}
+
+func (m *merger) tellLoadIndexCostLocked(b *Bitcask, lim *rate.Limiter) {
+	loadCostFiler := b.trie.Size() * indexer.FilerByteSize
+	loadCostTTL := b.ttlIndex.Size() * 8
+
+	lim.ReserveN(time.Now(), loadCostFiler)
+	lim.ReserveN(time.Now(), loadCostTTL)
+}
+
+func (m *merger) reopen(b *Bitcask, temp *mergeTempDB, lastFileID datafile.FileID, lim *rate.Limiter) ([]string, error) {
 	// no reads and writes till we reopen
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
+	m.tellSaveIndexCostLocked(b, lim)
 	if err := b.closeLocked(); err != nil {
 		// try recovery
 		if err2 := b.reopenLocked(); err2 != nil {
@@ -104,6 +121,7 @@ func (m *merger) reopen(b *Bitcask, temp *mergeTempDB, lastFileID datafile.FileI
 
 	b.metadata.ReclaimableSpace = 0
 
+	m.tellLoadIndexCostLocked(b, lim)
 	// And finally reopen the database
 	if err := b.reopenLocked(); err != nil {
 		removeFileSlowly(removeMarkedFiles, nil)
