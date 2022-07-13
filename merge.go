@@ -166,18 +166,16 @@ func (m *merger) snapshotIndexer(b *Bitcask, lim *rate.Limiter) (*snapshotTrie, 
 
 	var lastErr error
 	b.trie.ForEach(func(node art.Node) bool {
+		r := lim.ReserveN(time.Now(), indexer.FilerByteSize)
+		if r.OK() {
+			if d := r.Delay(); 0 < d {
+				time.Sleep(d)
+			}
+		}
+
 		if err := st.Write(node.Key(), node.Value().(indexer.Filer)); err != nil {
 			lastErr = errors.WithStack(err)
 			return false
-		}
-
-		r := lim.ReserveN(time.Now(), indexer.FilerByteSize)
-		if r.OK() != true {
-			return true
-		}
-
-		if d := r.Delay(); 0 < d {
-			time.Sleep(d)
 		}
 		return true
 	})
@@ -338,6 +336,13 @@ func (t *mergeTempDB) mergeDatafileLocked(st *snapshotTrie, m map[datafile.FileI
 			return nil
 		}
 
+		rr := lim.ReserveN(time.Now(), int(filer.Size))
+		if rr.OK() {
+			if d := rr.Delay(); 0 < d {
+				time.Sleep(d)
+			}
+		}
+
 		e, err := df.ReadAt(filer.Index, filer.Size)
 		if err != nil {
 			return errors.WithStack(err)
@@ -348,17 +353,16 @@ func (t *mergeTempDB) mergeDatafileLocked(st *snapshotTrie, m map[datafile.FileI
 		if isExpiredFromTime(e.Expiry) {
 			return nil
 		}
+
+		rw := lim.ReserveN(time.Now(), int(e.TotalSize))
+		if rw.OK() {
+			if d := rw.Delay(); 0 < d {
+				time.Sleep(d)
+			}
+		}
+
 		if _, _, err := t.mdb.put(e.Key, e.Value, e.Expiry); err != nil {
 			return errors.WithStack(err)
-		}
-
-		r := lim.ReserveN(time.Now(), int(e.TotalSize))
-		if r.OK() != true {
-			return nil
-		}
-
-		if d := r.Delay(); 0 < d {
-			time.Sleep(d)
 		}
 		return nil
 	})
@@ -524,17 +528,22 @@ func removeFileSlowly(files []string, lim *rate.Limiter) error {
 }
 
 func truncate(path string, size int64, lim *rate.Limiter) {
-	truncateCount := (size - 1) / defaultTruncateThreshold
+	threshold := int64(defaultTruncateThreshold)
+	if lim.Limit() < rate.Inf && lim.Limit() < math.MaxInt {
+		threshold = int64(lim.Limit())
+	}
+
+	truncateCount := (size - 1) / threshold
 	for i := int64(0); i < truncateCount; i += 1 {
 		nextSize := defaultTruncateThreshold * (truncateCount - i)
-		os.Truncate(path, nextSize)
 
 		r := lim.ReserveN(time.Now(), int(nextSize))
-		if r.OK() != true {
-			continue
+		if r.OK() {
+			if d := r.Delay(); 0 < d {
+				time.Sleep(d)
+			}
 		}
-		if d := r.Delay(); 0 < d {
-			time.Sleep(d)
-		}
+
+		os.Truncate(path, nextSize)
 	}
 }
