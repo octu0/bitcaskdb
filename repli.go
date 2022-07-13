@@ -46,7 +46,11 @@ func (s *repliSource) LastIndex(fileID datafile.FileID) int64 {
 	if s.b.curr.FileID().Equal(fileID) {
 		return s.b.curr.Size()
 	}
-	return s.b.datafiles[fileID].Size()
+	df, ok := s.b.datafiles[fileID]
+	if ok != true {
+		return -1
+	}
+	return df.Size()
 }
 
 func (s *repliSource) Header(fileID datafile.FileID, index int64) (*datafile.Header, datafile.EOFType, error) {

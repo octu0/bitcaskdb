@@ -550,7 +550,7 @@ func (e *streamEmitter) replyFetchSize(conn *nats.Conn, src Source) nats.MsgHand
 			})
 			return
 		}
-		header, isEOF, err := src.Header(req.FileID, req.Index)
+		header, eofType, err := src.Header(req.FileID, req.Index)
 		if err != nil {
 			e.publishReplyFetchSize(conn, msg.Reply, ResponseFetchSize{
 				Size: -1,
@@ -560,9 +560,19 @@ func (e *streamEmitter) replyFetchSize(conn *nats.Conn, src Source) nats.MsgHand
 			return
 		}
 
+		// file found but empty
+		if header == nil && eofType == datafile.IsEOF {
+			e.publishReplyFetchSize(conn, msg.Reply, ResponseFetchSize{
+				Size: 0,
+				EOF:  bool(eofType),
+				Err:  "",
+			})
+			return
+		}
+
 		e.publishReplyFetchSize(conn, msg.Reply, ResponseFetchSize{
 			Size: header.TotalSize,
-			EOF:  bool(isEOF),
+			EOF:  bool(eofType),
 			Err:  "",
 		})
 	}
@@ -1088,6 +1098,11 @@ func (r *streamReciver) reqDiffData(conn *nats.Conn, dst Destination, fileID dat
 		return errors.WithStack(err)
 	}
 
+	// file found but empty
+	if size == 0 && isEOF {
+		return nil
+	}
+
 	entry, err := r.reqFetchData(conn, fileID, lastIndex, size)
 	if err != nil {
 		return errors.WithStack(err)
@@ -1116,7 +1131,12 @@ func (r *streamReciver) requestBehindData(client *nats.Conn, dst Destination, re
 		if err != nil {
 			return errors.Wrapf(err, "failed request current file index: fileID=%d", f.FileID)
 		}
+
 		requestedFileIds[f.FileID] = struct{}{} // mark
+
+		if lastIndex < 0 {
+			continue // not found
+		}
 
 		if f.Index < lastIndex {
 			// server has new index

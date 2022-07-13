@@ -2,5 +2,5 @@ package bitcaskdb
 
 const (
 	AppName string = "bitcaskdb"
-	Version string = "1.4.0"
+	Version string = "1.4.1"
 )
