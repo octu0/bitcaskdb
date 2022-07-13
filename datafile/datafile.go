@@ -137,6 +137,9 @@ func (df *defaultDatafile) ReadAtHeader(index int64) (*Header, EOFType, error) {
 
 	h, err := d.DecodeHeader()
 	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return nil, IsEOF, nil
+		}
 		return nil, IsEOF, errors.WithStack(err)
 	}
 
