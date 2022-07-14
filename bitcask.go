@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
-	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -13,9 +12,9 @@ import (
 
 	"github.com/abcum/lcp"
 	"github.com/gofrs/flock"
+	"github.com/octu0/priorate"
 	"github.com/pkg/errors"
-	art "github.com/plar/go-adaptive-radix-tree"
-	"golang.org/x/time/rate"
+	"github.com/plar/go-adaptive-radix-tree"
 
 	"github.com/octu0/bitcaskdb/datafile"
 	"github.com/octu0/bitcaskdb/indexer"
@@ -718,15 +717,15 @@ func (b *Bitcask) reopenLocked() error {
 // and deleted keys removes. Duplicate key/value pairs are also removed.
 // Call this function periodically to reclaim disk space.
 func (b *Bitcask) Merge() error {
-	return b.merger.Merge(b, rate.NewLimiter(rate.Inf, math.MaxInt))
+	return b.merger.Merge(b, priorate.InfLimiter())
 }
 
-func (b *Bitcask) MergeWithWaitLimit(lim *rate.Limiter) error {
+func (b *Bitcask) MergeWithWaitLimit(lim *priorate.Limiter) error {
 	return b.merger.Merge(b, lim)
 }
 
 func (b *Bitcask) MergeWithWaitLimitByBytesPerSecond(bytesPerSecond int) error {
-	return b.merger.Merge(b, rate.NewLimiter(rate.Limit(float64(bytesPerSecond)), bytesPerSecond))
+	return b.merger.Merge(b, priorate.NewLimiter(bytesPerSecond))
 }
 
 // saveIndex saves index and ttl_index currently in RAM to disk
@@ -821,7 +820,7 @@ func loadIndexes(b *Bitcask, datafiles map[datafile.FileID]datafile.Datafile, la
 		return t, ttlIndex, nil
 	}
 	if found {
-		if err := loadIndexFromDatafile(t, ttlIndex, datafiles[lastID], nil); err != nil {
+		if err := loadIndexFromDatafile(t, ttlIndex, datafiles[lastID]); err != nil {
 			return nil, ttlIndex, errors.WithStack(err)
 		}
 		return t, ttlIndex, nil
@@ -837,18 +836,14 @@ func loadIndexes(b *Bitcask, datafiles map[datafile.FileID]datafile.Datafile, la
 
 	for _, fileID := range fileIds {
 		df := datafiles[fileID]
-		if err := loadIndexFromDatafile(t, ttlIndex, df, nil); err != nil {
+		if err := loadIndexFromDatafile(t, ttlIndex, df); err != nil {
 			return nil, ttlIndex, errors.WithStack(err)
 		}
 	}
 	return t, ttlIndex, nil
 }
 
-func loadIndexFromDatafile(t art.Tree, ttlIndex art.Tree, df datafile.Datafile, lim *rate.Limiter) error {
-	if lim == nil {
-		lim = rate.NewLimiter(rate.Inf, math.MaxInt)
-	}
-
+func loadIndexFromDatafile(t art.Tree, ttlIndex art.Tree, df datafile.Datafile) error {
 	index := int64(0)
 	for {
 		e, err := df.Read()
@@ -874,14 +869,6 @@ func loadIndexFromDatafile(t art.Tree, ttlIndex art.Tree, df datafile.Datafile, 
 			// Tombstone value  (deleted key)
 			t.Delete(e.Key)
 			index += e.TotalSize
-		}
-
-		r := lim.ReserveN(time.Now(), int(e.TotalSize))
-		if r.OK() != true {
-			continue
-		}
-		if d := r.Delay(); 0 < d {
-			time.Sleep(d)
 		}
 	}
 	return nil

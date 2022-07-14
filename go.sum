@@ -249,6 +249,8 @@ github.com/nats-io/nuid v1.0.1/go.mod h1:19wcPz3Ph3q0Jbyiqsd0kePYG7A95tJPxeL+1OS
 github.com/octu0/bp v1.2.0 h1:WKvXhEpwFOyi6Nszbrlfng9hEViSx6AptFeY37zDsKY=
 github.com/octu0/bp v1.2.0/go.mod h1:e9Mr74DWvtMAKYr5HD121M+FB5WBcI8yBP+b5Lu4qv8=
 github.com/octu0/chanque v1.0.15 h1:5KeAqdT6GcHgtS0mjnXIuye58vuexl+DbjE1VW0rm64=
+github.com/octu0/priorate v1.0.0 h1:7fX4q1kzgulZ5W2UiTurfIqtZ/bnVgdlPzyi6bnBW7w=
+github.com/octu0/priorate v1.0.0/go.mod h1:zrh79ghtyVMsD1C1QAJeOiM/lID6eaWHjAjk7mNkaP8=
 github.com/oklog/ulid v1.3.1/go.mod h1:CirwcVhetQ6Lv90oh/F+FBtV6XMibvdAFo93nm5qn4U=
 github.com/pascaldekloe/goe v0.0.0-20180627143212-57f6aae5913c/go.mod h1:lzWF7FIEvWOWxwDKqyGYQf6ZUaNfKdP144TG7ZOy1lc=
 github.com/pelletier/go-toml v1.2.0/go.mod h1:5z9KED0ma1S8pY6P1sdut58dfprrGBbd/94hg7ilaic=

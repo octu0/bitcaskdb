@@ -12,9 +12,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/octu0/priorate"
 	"github.com/pkg/errors"
-	art "github.com/plar/go-adaptive-radix-tree"
-	"golang.org/x/time/rate"
+	"github.com/plar/go-adaptive-radix-tree"
 
 	"github.com/octu0/bitcaskdb/datafile"
 	"github.com/octu0/bitcaskdb/indexer"
@@ -27,7 +27,8 @@ const (
 )
 
 const (
-	defaultTruncateThreshold int64 = 100 * 1024 * 1024
+	defaultTruncateThreshold int64         = 100 * 1024 * 1024
+	defaultSlowTruncateWait  time.Duration = 100 * time.Millisecond
 )
 
 type merger struct {
@@ -42,7 +43,7 @@ func (m *merger) isMerging() bool {
 	return m.merging
 }
 
-func (m *merger) Merge(b *Bitcask, lim *rate.Limiter) error {
+func (m *merger) Merge(b *Bitcask, lim *priorate.Limiter) error {
 	if m.isMerging() {
 		return errors.WithStack(ErrMergeInProgress)
 	}
@@ -84,23 +85,23 @@ func (m *merger) Merge(b *Bitcask, lim *rate.Limiter) error {
 	return nil
 }
 
-func (m *merger) tellSaveIndexCostLocked(b *Bitcask, lim *rate.Limiter) {
+func (m *merger) tellSaveIndexCostLocked(b *Bitcask, lim *priorate.Limiter) {
 	saveCostFiler := b.trie.Size() * indexer.FilerByteSize
 	saveCostTTL := b.ttlIndex.Size() * 8
 
-	lim.ReserveN(time.Now(), saveCostFiler)
-	lim.ReserveN(time.Now(), saveCostTTL)
+	lim.ReserveN(priorate.High, time.Now(), saveCostFiler)
+	lim.ReserveN(priorate.High, time.Now(), saveCostTTL)
 }
 
-func (m *merger) tellLoadIndexCostLocked(b *Bitcask, lim *rate.Limiter) {
+func (m *merger) tellLoadIndexCostLocked(b *Bitcask, lim *priorate.Limiter) {
 	loadCostFiler := b.trie.Size() * indexer.FilerByteSize
 	loadCostTTL := b.ttlIndex.Size() * 8
 
-	lim.ReserveN(time.Now(), loadCostFiler)
-	lim.ReserveN(time.Now(), loadCostTTL)
+	lim.ReserveN(priorate.Low, time.Now(), loadCostFiler)
+	lim.ReserveN(priorate.Low, time.Now(), loadCostTTL)
 }
 
-func (m *merger) reopen(b *Bitcask, temp *mergeTempDB, lastFileID datafile.FileID, lim *rate.Limiter) ([]string, error) {
+func (m *merger) reopen(b *Bitcask, temp *mergeTempDB, lastFileID datafile.FileID, lim *priorate.Limiter) ([]string, error) {
 	// no reads and writes till we reopen
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -155,7 +156,7 @@ func (m *merger) forwardCurrentDafafile(b *Bitcask) (datafile.FileID, []datafile
 	return currentFileID, mergeFileIds, nil
 }
 
-func (m *merger) snapshotIndexer(b *Bitcask, lim *rate.Limiter) (*snapshotTrie, error) {
+func (m *merger) snapshotIndexer(b *Bitcask, lim *priorate.Limiter) (*snapshotTrie, error) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
@@ -166,7 +167,7 @@ func (m *merger) snapshotIndexer(b *Bitcask, lim *rate.Limiter) (*snapshotTrie, 
 
 	var lastErr error
 	b.trie.ForEach(func(node art.Node) bool {
-		r := lim.ReserveN(time.Now(), indexer.FilerByteSize)
+		r := lim.ReserveN(priorate.Low, time.Now(), indexer.FilerByteSize)
 		if r.OK() {
 			if d := r.Delay(); 0 < d {
 				time.Sleep(d)
@@ -185,7 +186,7 @@ func (m *merger) snapshotIndexer(b *Bitcask, lim *rate.Limiter) (*snapshotTrie, 
 	return st, nil
 }
 
-func (m *merger) renewMergedDB(b *Bitcask, mergeFileIds []datafile.FileID, st *snapshotTrie, lim *rate.Limiter) (*mergeTempDB, error) {
+func (m *merger) renewMergedDB(b *Bitcask, mergeFileIds []datafile.FileID, st *snapshotTrie, lim *priorate.Limiter) (*mergeTempDB, error) {
 	temp, err := openMergeTempDB(b.path, b.opt)
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -299,7 +300,7 @@ func (t *mergeTempDB) DB() *Bitcask {
 // Rewrite all key/value pairs into merged database
 // Doing this automatically strips deleted keys and
 // old key/value pairs
-func (t *mergeTempDB) MergeDatafiles(src *Bitcask, mergeFileIds []datafile.FileID, st *snapshotTrie, lim *rate.Limiter) error {
+func (t *mergeTempDB) MergeDatafiles(src *Bitcask, mergeFileIds []datafile.FileID, st *snapshotTrie, lim *priorate.Limiter) error {
 	t.mdb.mu.Lock()
 	defer t.mdb.mu.Unlock()
 
@@ -327,7 +328,7 @@ func (t *mergeTempDB) MergeDatafiles(src *Bitcask, mergeFileIds []datafile.FileI
 	return nil
 }
 
-func (t *mergeTempDB) mergeDatafileLocked(st *snapshotTrie, m map[datafile.FileID]datafile.Datafile, lim *rate.Limiter) error {
+func (t *mergeTempDB) mergeDatafileLocked(st *snapshotTrie, m map[datafile.FileID]datafile.Datafile, lim *priorate.Limiter) error {
 	return st.ReadAll(func(data snapshotTrieData) error {
 		filer := data.Value
 
@@ -336,7 +337,7 @@ func (t *mergeTempDB) mergeDatafileLocked(st *snapshotTrie, m map[datafile.FileI
 			return nil
 		}
 
-		rr := lim.ReserveN(time.Now(), int(filer.Size))
+		rr := lim.ReserveN(priorate.Low, time.Now(), int(filer.Size))
 		if rr.OK() {
 			if d := rr.Delay(); 0 < d {
 				time.Sleep(d)
@@ -354,7 +355,7 @@ func (t *mergeTempDB) mergeDatafileLocked(st *snapshotTrie, m map[datafile.FileI
 			return nil
 		}
 
-		rw := lim.ReserveN(time.Now(), int(e.TotalSize))
+		rw := lim.ReserveN(priorate.Low, time.Now(), int(e.TotalSize))
 		if rw.OK() {
 			if d := rw.Delay(); 0 < d {
 				time.Sleep(d)
@@ -383,7 +384,7 @@ func (t *mergeTempDB) SyncAndClose() error {
 	return nil
 }
 
-func (t *mergeTempDB) Destroy(lim *rate.Limiter) {
+func (t *mergeTempDB) Destroy(lim *priorate.Limiter) {
 	if t.destroyed {
 		return
 	}
@@ -472,7 +473,7 @@ func (st *snapshotTrie) ReadAll(fn func(snapshotTrieData) error) error {
 	return nil
 }
 
-func (st *snapshotTrie) Destroy(lim *rate.Limiter) {
+func (st *snapshotTrie) Destroy(lim *priorate.Limiter) {
 	if st.destroyed {
 		return
 	}
@@ -502,9 +503,9 @@ func openSnapshotTrie(tempDir string) (*snapshotTrie, error) {
 	return st, nil
 }
 
-func removeFileSlowly(files []string, lim *rate.Limiter) error {
+func removeFileSlowly(files []string, lim *priorate.Limiter) error {
 	if lim == nil {
-		lim = rate.NewLimiter(rate.Inf, math.MaxInt)
+		lim = priorate.InfLimiter()
 	}
 
 	for _, file := range files {
@@ -517,7 +518,7 @@ func removeFileSlowly(files []string, lim *rate.Limiter) error {
 		}
 		filesize := stat.Size()
 
-		if defaultTruncateThreshold < filesize {
+		if lim.Limit() < math.MaxInt && int64(lim.Limit()) < filesize {
 			truncate(file, filesize, lim)
 		}
 		if err := os.Remove(file); err != nil {
@@ -527,20 +528,20 @@ func removeFileSlowly(files []string, lim *rate.Limiter) error {
 	return nil
 }
 
-func truncate(path string, size int64, lim *rate.Limiter) {
+func truncate(path string, size int64, lim *priorate.Limiter) {
 	threshold := int64(defaultTruncateThreshold)
-	if lim.Limit() < rate.Inf && lim.Limit() < math.MaxInt {
+	if lim.Limit() < math.MaxInt {
 		threshold = int64(lim.Limit())
 	}
 
 	truncateCount := (size - 1) / threshold
 	for i := int64(0); i < truncateCount; i += 1 {
-		nextSize := defaultTruncateThreshold * (truncateCount - i)
+		nextSize := threshold * (truncateCount - i)
 
-		r := lim.ReserveN(time.Now(), int(nextSize))
+		r := lim.ReserveN(priorate.Low, time.Now(), int(nextSize))
 		if r.OK() {
 			if d := r.Delay(); 0 < d {
-				time.Sleep(d)
+				time.Sleep(d + defaultSlowTruncateWait)
 			}
 		}
 
