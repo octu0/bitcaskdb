@@ -53,10 +53,10 @@ func main() {
 	// Put() can be specify io.Reader
 	db.Put([]byte("foo"), bytes.NewReader([]byte("very large data...")))
 
-	// PutWithTTL/PutBytesWithTTL can be set to data with expiration time
+	// PutWithTTL()/PutBytesWithTTL() can be set to data with expiration time
 	db.PutWithTTL([]byte("bar"), bytes.NewReader(data), 10*time.Second)
 
-	// flushes all buffers to disk
+	// Sync() flushes all buffers to disk
 	db.Sync()
 
 	r, err := db.Get([]byte("foo"))
@@ -71,7 +71,7 @@ func main() {
 	// Delete() can delete data with key
 	db.Delete([]byte("foo"))
 
-	// deletes all expired keys
+	// RunGC() deletes all expired keys
 	db.RunGC()
 
 	// Merge() rebuilds databases and reclaims disk space
