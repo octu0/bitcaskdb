@@ -74,7 +74,7 @@ func ExampleBasics() {
 	db.Merge()
 
 	// Output:
-	// hello
+	// world
 	// very
 	// larg
 }
@@ -1890,17 +1890,20 @@ func TestRange(t *testing.T) {
 }
 
 func TestLocking(t *testing.T) {
-	assert := assert.New(t)
-
 	testdir, err := os.MkdirTemp("", "bitcask")
-	assert.NoError(err)
+  if err != nil {
+    t.Fatalf("no error: %+v", err)
+  }
 
 	db, err := Open(testdir)
-	assert.NoError(err)
+  if err != nil {
+    t.Fatalf("no error: %+v", err)
+  }
 	defer db.Close()
 
-	_, err = Open(testdir)
-	assert.Error(err)
+	if _, err = Open(testdir); err == nil {
+    t.Errorf("must error")
+  }
 }
 
 func TestGetExpiredInsideFold(t *testing.T) {
