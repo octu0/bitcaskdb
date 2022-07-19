@@ -2324,6 +2324,3 @@ func TestRepliTemporaryRepliData(t *testing.T) {
 		}
 	})
 }
-
-func TestRepliStreamReconnect(t *testing.T) {
-}

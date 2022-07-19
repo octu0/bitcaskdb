@@ -152,6 +152,7 @@ type streamEmitter struct {
 	releaseTTL  time.Duration
 	emitApplyCh chan emitApply
 	done        chan struct{}
+	closed      bool
 	src         Source
 	server      *server.Server
 	emitConn    *nats.Conn
@@ -320,9 +321,22 @@ func (e *streamEmitter) applyCurrentFileID(fileID datafile.FileID) {
 	e.emitConn.Flush()
 }
 
+func (e *streamEmitter) reconnectEmitter(conn *nats.Conn) {
+	e.logger.Printf("warn: reconnected emitter: %s", conn.ConnectedUrl())
+}
+
+func (e *streamEmitter) reconnectReply(conn *nats.Conn) {
+	e.logger.Printf("warn: reconnected replier: %s", conn.ConnectedUrl())
+}
+
 func (e *streamEmitter) Start(src Source, bindIP string, bindPort int) error {
 	e.mutex.Lock()
 	defer e.mutex.Unlock()
+
+	if e.closed {
+		// maybe restart
+		e.done = make(chan struct{})
+	}
 
 	go e.runReleaseLoop()
 	go e.emitLoop()
@@ -350,12 +364,12 @@ func (e *streamEmitter) Start(src Source, bindIP string, bindPort int) error {
 	}
 
 	natsUrl := fmt.Sprintf("nats://%s", svr.Addr().String())
-	emitConn, err := conn(natsUrl, "emitter")
+	emitConn, err := conn(natsUrl, "emitter", e.reconnectEmitter)
 	if err != nil {
 		return errors.Wrapf(err, "nats emitter connect: %s", natsUrl)
 	}
 
-	replyConn, err := conn(natsUrl, "reply")
+	replyConn, err := conn(natsUrl, "reply", e.reconnectReply)
 	if err != nil {
 		return errors.Wrapf(err, "nats reply connect: %s", natsUrl)
 	}
@@ -396,10 +410,18 @@ func (e *streamEmitter) Start(src Source, bindIP string, bindPort int) error {
 		subFetchSize,
 		subFetchData,
 	}
+	e.closed = false
 	return nil
 }
 
 func (e *streamEmitter) Stop() error {
+	e.mutex.Lock()
+	defer e.mutex.Unlock()
+
+	if e.closed {
+		return nil
+	}
+
 	if e.subs != nil {
 		for _, sub := range e.subs {
 			sub.Unsubscribe()
@@ -418,6 +440,7 @@ func (e *streamEmitter) Stop() error {
 	if e.server != nil {
 		e.server.Shutdown()
 	}
+	e.closed = true
 	return nil
 }
 
@@ -638,10 +661,15 @@ func (e *streamEmitter) replyFetchData(conn *nats.Conn, src Source) nats.MsgHand
 func (e *streamEmitter) EmitInsert(filer indexer.Filer) error {
 	e.mutex.RLock()
 	src := e.src
+	closed := e.closed
 	e.mutex.RUnlock()
 
 	if src == nil {
 		return errors.Errorf("maybe not Start")
+	}
+	if closed {
+		// drop when closed, no emit to transmit differences when resuming server
+		return nil
 	}
 
 	e.emitApplyCh <- emitApply{emit: emitInsert, insertFiler: filer}
@@ -650,10 +678,16 @@ func (e *streamEmitter) EmitInsert(filer indexer.Filer) error {
 
 func (e *streamEmitter) EmitDelete(key []byte) error {
 	e.mutex.RLock()
+	src := e.src
+	closed := e.closed
 	defer e.mutex.RUnlock()
 
-	if e.src == nil {
+	if src == nil {
 		return errors.Errorf("maybe not Start")
+	}
+	if closed {
+		// drop when closed, no emit to transmit differences when resuming server
+		return nil
 	}
 
 	e.emitApplyCh <- emitApply{emit: emitDelete, deleteKey: key}
@@ -827,6 +861,7 @@ func NewStreamEmitter(ctx runtime.Context, logger *log.Logger, tempDir string, m
 		releaseTTL:  defaultReleaseTTL,
 		emitApplyCh: make(chan emitApply, 1024),
 		done:        make(chan struct{}),
+		closed:      false,
 		src:         nil,
 		server:      nil,
 		emitConn:    nil,
@@ -856,34 +891,58 @@ type streamFetchDataEntry struct {
 	release  releaseFunc
 }
 
+func (r *streamReciver) reconnect(conn *nats.Conn) {
+	r.logger.Printf("info: reconnected: %s", conn.ConnectedUrl())
+
+	r.mutex.Lock()
+	for _, sub := range r.subs {
+		sub.Unsubscribe()
+	}
+	r.subs = nil
+	r.doneBehind = false
+	r.mutex.Unlock()
+
+	if err := r.recvStart(r.dst, conn); err != nil {
+		r.logger.Printf("error: reconnect recvStart() failure: %+v", err)
+	}
+}
+
 func (r *streamReciver) Start(dst Destination, serverIP string, serverPort int) error {
 	natsUrl := fmt.Sprintf("nats://%s:%d", serverIP, serverPort)
-	client, err := conn(natsUrl, "client")
+	client, err := conn(natsUrl, "client", r.reconnect)
 	if err != nil {
 		return errors.Wrapf(err, "nats client connect: %s", natsUrl)
 	}
 
+	if err := r.recvStart(dst, client); err != nil {
+		return errors.WithStack(err)
+	}
+	return nil
+}
+
+func (r *streamReciver) recvStart(dst Destination, conn *nats.Conn) error {
 	repliTemp, err := openTemporaryRepliData(r.ctx, r.tempDir)
 	if err != nil {
 		return errors.Wrap(err, "temporary repli data open")
 	}
 	defer repliTemp.Remove()
 
-	subRepli, err := client.Subscribe(SubjectRepli, r.recvRepliData(client, dst, repliTemp))
+	subRepli, err := conn.Subscribe(SubjectRepli, r.recvRepliData(conn, dst, repliTemp))
 	if err != nil {
 		return errors.Wrapf(err, "failed to subscribe %s", SubjectRepli)
 	}
-	client.Flush()
+	conn.Flush()
 
 	r.mergeWait.Add(1)
-	if err := r.requestBehindData(client, dst, repliTemp); err != nil {
+	if err := r.requestBehindData(conn, dst, repliTemp); err != nil {
 		return errors.Wrap(err, "failed to get behind reqests")
 	}
 
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
+
 	r.dst = dst
-	r.client = client
+	r.client = conn
 	r.subs = []*nats.Subscription{
 		subRepli,
 	}
@@ -906,6 +965,7 @@ func (r *streamReciver) Stop() error {
 		r.client.Drain()
 		r.client.Close()
 	}
+	r.doneBehind = false
 
 	return nil
 }
@@ -1345,15 +1405,16 @@ func openTemporaryRepliData(ctx runtime.Context, tempDir string) (*temporaryRepl
 	}, nil
 }
 
-func conn(url string, name string) (*nats.Conn, error) {
+func conn(url string, name string, reconnect nats.ConnHandler) (*nats.Conn, error) {
 	return nats.Connect(
 		url,
 		nats.NoEcho(),
 		nats.DontRandomize(),
 		nats.Name(name),
-		nats.ReconnectJitter(100*time.Millisecond, 1000*time.Millisecond),
+		nats.ReconnectJitter(100*time.Millisecond, 300*time.Millisecond),
 		nats.ReconnectWait(100*time.Millisecond),
 		nats.MaxReconnects(-1),
 		nats.PingInterval(10*time.Second),
+		nats.ReconnectHandler(reconnect),
 	)
 }
