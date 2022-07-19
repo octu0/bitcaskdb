@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sort"
@@ -21,6 +20,65 @@ var (
 	ErrMockError = errors.New("error: mock error")
 )
 
+func ExampleBasics() {
+	db, err := Open("./data/mydb")
+	if err != nil {
+		panic(err)
+	}
+	defer db.Close()
+
+	// PutBytes() can be set using byte slice
+	db.PutBytes([]byte("hello"), []byte("world"))
+
+	// Get() returns io.ReadCloser
+	r, err := db.Get([]byte("hello"))
+	if err != nil {
+		panic(err)
+	}
+	defer r.Close()
+
+	data, err := io.ReadAll(r)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("%s\n", data)
+
+	// Put() can be specify io.Reader
+	db.Put([]byte("foo"), bytes.NewReader([]byte("very large data...")))
+
+	// PutWithTTL/PutBytesWithTTL can be set to data with expiration time
+	db.PutWithTTL([]byte("bar"), bytes.NewReader(data), 10*time.Second)
+
+	// flushes all buffers to disk
+	db.Sync()
+
+	foo, err := db.Get([]byte("foo"))
+	if err != nil {
+		panic(err)
+	}
+	defer foo.Close()
+
+	head := make([]byte, 5)
+	foo.Read(head)
+	fmt.Printf("%s\n", head[0:4])
+	foo.Read(head)
+	fmt.Printf("%s\n", head[0:4])
+
+	// Delete() can delete data with key
+	db.Delete([]byte("foo"))
+
+	// deletes all expired keys
+	db.RunGC()
+
+	// Merge() rebuilds databases and reclaims disk space
+	db.Merge()
+
+	// Output:
+	// world
+	// very
+	// larg
+}
+
 func TestAll(t *testing.T) {
 	var (
 		db      *Bitcask
@@ -30,7 +88,7 @@ func TestAll(t *testing.T) {
 
 	assert := assert.New(t)
 
-	testdir, err = ioutil.TempDir("", "bitcask")
+	testdir, err = os.MkdirTemp("", "bitcask")
 	assert.NoError(err)
 
 	db, err = Open(testdir)
@@ -214,7 +272,7 @@ func TestAll(t *testing.T) {
 
 func TestDeleteAll(t *testing.T) {
 	assert := assert.New(t)
-	testdir, _ := ioutil.TempDir("", "bitcask")
+	testdir, _ := os.MkdirTemp("", "bitcask")
 	db, _ := Open(testdir)
 	_ = db.PutBytes([]byte("foo"), []byte("foo"))
 	_ = db.PutBytes([]byte("bar"), []byte("bar"))
@@ -234,7 +292,7 @@ func TestDeleteAll(t *testing.T) {
 func TestReopen1(t *testing.T) {
 	assert := assert.New(t)
 	for i := 0; i < 10; i++ {
-		testdir, _ := ioutil.TempDir("", "bitcask")
+		testdir, _ := os.MkdirTemp("", "bitcask")
 		db, _ := Open(testdir, WithMaxDatafileSize(1))
 		_ = db.PutBytes([]byte("foo"), []byte("bar"))
 		_ = db.PutBytes([]byte("foo"), []byte("bar1"))
@@ -258,7 +316,7 @@ func TestReopen1(t *testing.T) {
 func TestReopen(t *testing.T) {
 	assert := assert.New(t)
 
-	testdir, err := ioutil.TempDir("", "bitcask")
+	testdir, err := os.MkdirTemp("", "bitcask")
 	assert.NoError(err)
 
 	t.Run("Reopen", func(t *testing.T) {
@@ -336,7 +394,7 @@ func TestReopen(t *testing.T) {
 func TestDeletedKeys(t *testing.T) {
 	assert := assert.New(t)
 
-	testdir, err := ioutil.TempDir("", "bitcask")
+	testdir, err := os.MkdirTemp("", "bitcask")
 	assert.NoError(err)
 
 	t.Run("Setup", func(t *testing.T) {
@@ -410,7 +468,7 @@ func TestDeletedKeys(t *testing.T) {
 
 func TestMetadata(t *testing.T) {
 	assert := assert.New(t)
-	testdir, err := ioutil.TempDir("", "bitcask")
+	testdir, err := os.MkdirTemp("", "bitcask")
 	assert.NoError(err)
 	defer os.RemoveAll(testdir)
 
@@ -468,7 +526,7 @@ func TestMetadata(t *testing.T) {
 
 func TestLoadIndexes(t *testing.T) {
 	assert := assert.New(t)
-	testdir, err1 := ioutil.TempDir("", "bitcask")
+	testdir, err1 := os.MkdirTemp("", "bitcask")
 	assert.NoError(err1)
 	defer os.RemoveAll(testdir)
 
@@ -505,7 +563,7 @@ func TestLoadIndexes(t *testing.T) {
 func TestReIndex(t *testing.T) {
 	assert := assert.New(t)
 
-	testdir, err := ioutil.TempDir("", "bitcask")
+	testdir, err := os.MkdirTemp("", "bitcask")
 	assert.NoError(err)
 
 	t.Run("Setup", func(t *testing.T) {
@@ -612,7 +670,7 @@ func TestReIndex(t *testing.T) {
 func TestReIndexDeletedKeys(t *testing.T) {
 	assert := assert.New(t)
 
-	testdir, err := ioutil.TempDir("", "bitcask")
+	testdir, err := os.MkdirTemp("", "bitcask")
 	assert.NoError(err)
 
 	t.Run("Setup", func(t *testing.T) {
@@ -692,7 +750,7 @@ func TestReIndexDeletedKeys(t *testing.T) {
 func TestSync(t *testing.T) {
 	assert := assert.New(t)
 
-	testdir, err := ioutil.TempDir("", "bitcask")
+	testdir, err := os.MkdirTemp("", "bitcask")
 	assert.NoError(err)
 
 	var db *Bitcask
@@ -723,7 +781,7 @@ func TestStats(t *testing.T) {
 
 	assert := assert.New(t)
 
-	testdir, err := ioutil.TempDir("", "bitcask")
+	testdir, err := os.MkdirTemp("", "bitcask")
 	assert.NoError(err)
 
 	t.Run("Setup", func(t *testing.T) {
@@ -773,7 +831,7 @@ func TestStatsError(t *testing.T) {
 
 	assert := assert.New(t)
 
-	testdir, err := ioutil.TempDir("", "bitcask")
+	testdir, err := os.MkdirTemp("", "bitcask")
 	assert.NoError(err)
 
 	t.Run("Setup", func(t *testing.T) {
@@ -825,7 +883,7 @@ func TestDirFileModeBeforeUmask(t *testing.T) {
 
 	t.Run("Setup", func(t *testing.T) {
 		t.Run("Default DirFileModeBeforeUmask is 0700", func(t *testing.T) {
-			testdir, err := ioutil.TempDir("", "bitcask")
+			testdir, err := os.MkdirTemp("", "bitcask")
 			embeddedDir := filepath.Join(testdir, "cache")
 			assert.NoError(err)
 			defer os.RemoveAll(testdir)
@@ -865,7 +923,7 @@ func TestDirFileModeBeforeUmask(t *testing.T) {
 		})
 
 		t.Run("Dir FileModeBeforeUmask is set via options for all subdirectories", func(t *testing.T) {
-			testdir, err := ioutil.TempDir("", "bitcask")
+			testdir, err := os.MkdirTemp("", "bitcask")
 			embeddedDir := filepath.Join(testdir, "cache")
 			assert.NoError(err)
 			defer os.RemoveAll(testdir)
@@ -907,7 +965,7 @@ func TestFileFileModeBeforeUmask(t *testing.T) {
 
 	t.Run("Setup", func(t *testing.T) {
 		t.Run("Default File FileModeBeforeUmask is 0600", func(t *testing.T) {
-			testdir, err := ioutil.TempDir("", "bitcask")
+			testdir, err := os.MkdirTemp("", "bitcask")
 			assert.NoError(err)
 			defer os.RemoveAll(testdir)
 
@@ -941,7 +999,7 @@ func TestFileFileModeBeforeUmask(t *testing.T) {
 		})
 
 		t.Run("File FileModeBeforeUmask is set via options for all files", func(t *testing.T) {
-			testdir, err := ioutil.TempDir("", "bitcask")
+			testdir, err := os.MkdirTemp("", "bitcask")
 			assert.NoError(err)
 			defer os.RemoveAll(testdir)
 
@@ -984,7 +1042,7 @@ func TestMaxDatafileSize(t *testing.T) {
 
 	assert := assert.New(t)
 
-	testdir, err := ioutil.TempDir("", "bitcask")
+	testdir, err := os.MkdirTemp("", "bitcask")
 	assert.NoError(err)
 	defer os.RemoveAll(testdir)
 
@@ -1041,7 +1099,7 @@ func TestGetErrors(t *testing.T) {
 
 	/*todo
 	t.Run("ReadError", func(t *testing.T) {
-		testdir, err := ioutil.TempDir("", "bitcask")
+		testdir, err := os.MkdirTemp("", "bitcask")
 		assert.NoError(err)
 		defer os.RemoveAll(testdir)
 
@@ -1067,7 +1125,7 @@ func TestGetErrors(t *testing.T) {
 
 	/*todo
 	t.Run("ChecksumError", func(t *testing.T) {
-		testdir, err := ioutil.TempDir("", "bitcask")
+		testdir, err := os.MkdirTemp("", "bitcask")
 		assert.NoError(err)
 		defer os.RemoveAll(testdir)
 
@@ -1101,7 +1159,7 @@ func TestPutBorderCases(t *testing.T) {
 	assert := assert.New(t)
 
 	t.Run("EmptyValue", func(t *testing.T) {
-		testdir, err := ioutil.TempDir("", "bitcask")
+		testdir, err := os.MkdirTemp("", "bitcask")
 		assert.NoError(err)
 
 		db, err := Open(testdir)
@@ -1124,7 +1182,7 @@ func TestPutErrors(t *testing.T) {
 
 	/* todo
 	t.Run("WriteError", func(t *testing.T) {
-		testdir, err := ioutil.TempDir("", "bitcask")
+		testdir, err := os.MkdirTemp("", "bitcask")
 		assert.NoError(err)
 
 		db, err := Open(testdir)
@@ -1151,7 +1209,7 @@ func TestPutErrors(t *testing.T) {
 
 	/* todo
 	t.Run("SyncError", func(t *testing.T) {
-		testdir, err := ioutil.TempDir("", "bitcask")
+		testdir, err := os.MkdirTemp("", "bitcask")
 		assert.NoError(err)
 		db, err := Open(testdir, WithSync(true))
 		assert.NoError(err)
@@ -1177,7 +1235,7 @@ func TestPutErrors(t *testing.T) {
 	*/
 
 	t.Run("EmptyKey", func(t *testing.T) {
-		testdir, err := ioutil.TempDir("", "bitcask")
+		testdir, err := os.MkdirTemp("", "bitcask")
 		assert.NoError(err)
 
 		db, err := Open(testdir)
@@ -1193,18 +1251,18 @@ func TestOpenErrors(t *testing.T) {
 	assert := assert.New(t)
 
 	t.Run("BadPath", func(t *testing.T) {
-		testdir, err := ioutil.TempDir("", "bitcask")
+		testdir, err := os.MkdirTemp("", "bitcask")
 		assert.NoError(err)
 		defer os.RemoveAll(testdir)
 
-		assert.NoError(ioutil.WriteFile(filepath.Join(testdir, "foo"), []byte("foo"), 0600))
+		assert.NoError(os.WriteFile(filepath.Join(testdir, "foo"), []byte("foo"), 0600))
 
 		_, err = Open(filepath.Join(testdir, "foo", "tmp.db"))
 		assert.Error(err)
 	})
 
 	t.Run("BadOption", func(t *testing.T) {
-		testdir, err := ioutil.TempDir("", "bitcask")
+		testdir, err := os.MkdirTemp("", "bitcask")
 		assert.NoError(err)
 		defer os.RemoveAll(testdir)
 
@@ -1219,7 +1277,7 @@ func TestOpenErrors(t *testing.T) {
 	})
 
 	t.Run("LoadDatafiles", func(t *testing.T) {
-		testdir, err := ioutil.TempDir("", "bitcask")
+		testdir, err := os.MkdirTemp("", "bitcask")
 		assert.NoError(err)
 		defer os.RemoveAll(testdir)
 
@@ -1249,7 +1307,7 @@ func TestOpenErrors(t *testing.T) {
 func TestCloseErrors(t *testing.T) {
 	assert := assert.New(t)
 
-	testdir, err := ioutil.TempDir("", "bitcask")
+	testdir, err := os.MkdirTemp("", "bitcask")
 	assert.NoError(err)
 	defer os.RemoveAll(testdir)
 
@@ -1304,7 +1362,7 @@ func TestDeleteErrors(t *testing.T) {
 
 	/* todo
 	t.Run("WriteError", func(t *testing.T) {
-		testdir, err := ioutil.TempDir("", "bitcask")
+		testdir, err := os.MkdirTemp("", "bitcask")
 		assert.NoError(err)
 		defer os.RemoveAll(testdir)
 
@@ -1341,7 +1399,7 @@ func TestConcurrent(t *testing.T) {
 
 	assert := assert.New(t)
 
-	testdir, err := ioutil.TempDir("", "bitcask")
+	testdir, err := os.MkdirTemp("", "bitcask")
 	assert.NoError(err)
 
 	t.Run("Setup", func(t *testing.T) {
@@ -1502,7 +1560,7 @@ func TestConcurrent(t *testing.T) {
 func TestSift(t *testing.T) {
 	assert := assert.New(t)
 
-	testdir, err := ioutil.TempDir("", "bitcask")
+	testdir, err := os.MkdirTemp("", "bitcask")
 	assert.NoError(err)
 
 	var db *Bitcask
@@ -1549,7 +1607,7 @@ func TestSift(t *testing.T) {
 func TestSiftScan(t *testing.T) {
 	assert := assert.New(t)
 
-	testdir, err := ioutil.TempDir("", "bitcask")
+	testdir, err := os.MkdirTemp("", "bitcask")
 	assert.NoError(err)
 
 	var db *Bitcask
@@ -1593,7 +1651,7 @@ func TestSiftScan(t *testing.T) {
 func TestScan(t *testing.T) {
 	assert := assert.New(t)
 
-	testdir, err := ioutil.TempDir("", "bitcask")
+	testdir, err := os.MkdirTemp("", "bitcask")
 	assert.NoError(err)
 
 	var db *Bitcask
@@ -1666,7 +1724,7 @@ func TestScan(t *testing.T) {
 func TestSiftRange(t *testing.T) {
 	assert := assert.New(t)
 
-	testdir, err := ioutil.TempDir("", "bitcask")
+	testdir, err := os.MkdirTemp("", "bitcask")
 	assert.NoError(err)
 
 	var db *Bitcask
@@ -1760,7 +1818,7 @@ func TestSiftRange(t *testing.T) {
 func TestRange(t *testing.T) {
 	assert := assert.New(t)
 
-	testdir, err := ioutil.TempDir("", "bitcask")
+	testdir, err := os.MkdirTemp("", "bitcask")
 	assert.NoError(err)
 
 	var db *Bitcask
@@ -1832,23 +1890,26 @@ func TestRange(t *testing.T) {
 }
 
 func TestLocking(t *testing.T) {
-	assert := assert.New(t)
-
-	testdir, err := ioutil.TempDir("", "bitcask")
-	assert.NoError(err)
+	testdir, err := os.MkdirTemp("", "bitcask")
+  if err != nil {
+    t.Fatalf("no error: %+v", err)
+  }
 
 	db, err := Open(testdir)
-	assert.NoError(err)
+  if err != nil {
+    t.Fatalf("no error: %+v", err)
+  }
 	defer db.Close()
 
-	_, err = Open(testdir)
-	assert.Error(err)
+	if _, err = Open(testdir); err == nil {
+    t.Errorf("must error")
+  }
 }
 
 func TestGetExpiredInsideFold(t *testing.T) {
 	assert := assert.New(t)
 
-	testdir, err := ioutil.TempDir("", "bitcask")
+	testdir, err := os.MkdirTemp("", "bitcask")
 	assert.NoError(err)
 
 	db, err := Open(testdir)
@@ -1887,7 +1948,7 @@ func TestGetExpiredInsideFold(t *testing.T) {
 func TestRunGCDeletesAllExpired(t *testing.T) {
 	assert := assert.New(t)
 
-	testdir, err := ioutil.TempDir("", "bitcask")
+	testdir, err := os.MkdirTemp("", "bitcask")
 	assert.NoError(err)
 
 	db, err := Open(testdir)

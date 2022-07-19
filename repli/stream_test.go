@@ -25,6 +25,10 @@ import (
 
 type testNoDataSource struct{}
 
+func (t *testNoDataSource) CurrentFileID() datafile.FileID {
+	return datafile.FileID{}
+}
+
 func (t *testNoDataSource) FileIds() []datafile.FileID {
 	return nil
 }
@@ -72,8 +76,109 @@ func TestRapliStreamEmitterStartStop(t *testing.T) {
 	})
 }
 
+type testCurrentFileIDSource struct {
+	id datafile.FileID
+}
+
+func (t *testCurrentFileIDSource) CurrentFileID() datafile.FileID {
+	return t.id
+}
+
+func (t *testCurrentFileIDSource) FileIds() []datafile.FileID {
+	return nil
+}
+
+func (t *testCurrentFileIDSource) LastIndex(datafile.FileID) int64 {
+	return 0
+}
+
+func (t *testCurrentFileIDSource) Header(datafile.FileID, int64) (*datafile.Header, datafile.EOFType, error) {
+	return nil, true, errors.Errorf("no header")
+}
+
+func (t *testCurrentFileIDSource) Read(datafile.FileID, int64, int64) (*datafile.Entry, error) {
+	return nil, errors.Errorf("no entry")
+}
+
+func testRepliStreamEmitterRequestCurrentFileID(t *testing.T) {
+	e := NewStreamEmitter(runtime.DefaultContext(), log.Default(), "", 0)
+	defer e.Stop()
+
+	id := datafile.NextFileID()
+	s := &testCurrentFileIDSource{
+		id: id,
+	}
+	if err := e.Start(s, "127.0.0.1", -1); err != nil {
+		t.Errorf("no error ephemeral port %+v", err)
+	}
+
+	natsUrl := fmt.Sprintf("nats://%s", e.server.Addr().String())
+	nc, err := conn(natsUrl, t.Name())
+	if err != nil {
+		t.Fatalf("no error %+v", err)
+	}
+	defer nc.Close()
+
+	t.Run("empty_request_data", func(tt *testing.T) {
+		msg, err := nc.Request(SubjectCurrentFileID, []byte{}, 1*time.Second)
+		if err != nil {
+			tt.Fatalf("no error %+v", err)
+		}
+		res := ResponseCurrentFileID{}
+		if err := gob.NewDecoder(bytes.NewReader(msg.Data)).Decode(&res); err != nil {
+			tt.Fatalf("no error %+v", err)
+		}
+		if res.Err == "" {
+			tt.Errorf("not empty error")
+		}
+		tt.Logf("decoder empty byte read: %s", res.Err)
+	})
+	t.Run("mismatch_request_data", func(tt *testing.T) {
+		out := bytes.NewBuffer(nil)
+		gob.NewEncoder(out).Encode(time.Time{})
+
+		msg, err := nc.Request(SubjectCurrentFileID, out.Bytes(), 1*time.Second)
+		if err != nil {
+			tt.Fatalf("no error %+v", err)
+		}
+		res := ResponseCurrentFileID{}
+		if err := gob.NewDecoder(bytes.NewReader(msg.Data)).Decode(&res); err != nil {
+			tt.Fatalf("no error %+v", err)
+		}
+		if res.Err == "" {
+			tt.Errorf("not empty error")
+		}
+		tt.Logf("decoder mismatch type read: %s", res.Err)
+	})
+	t.Run("data_read", func(tt *testing.T) {
+		out := bytes.NewBuffer(nil)
+		if err := gob.NewEncoder(out).Encode(RequestCurrentFileID{}); err != nil {
+			tt.Fatalf("no error %+v", err)
+		}
+
+		msg, err := nc.Request(SubjectCurrentFileID, out.Bytes(), 1*time.Second)
+		if err != nil {
+			tt.Fatalf("no error %+v", err)
+		}
+		res := ResponseCurrentFileID{}
+		if err := gob.NewDecoder(bytes.NewReader(msg.Data)).Decode(&res); err != nil {
+			tt.Fatalf("no error %+v", err)
+		}
+		if res.Err != "" {
+			tt.Errorf("no response err: actual'%s'", res.Err)
+		}
+		if id.Equal(res.FileID) != true {
+			tt.Errorf("mismatch fileID actual:%v", res.FileID)
+		}
+	})
+}
+
 type testFileIdsSource struct {
 	ids []datafile.FileID
+}
+
+func (t *testFileIdsSource) CurrentFileID() datafile.FileID {
+	return datafile.FileID{}
 }
 
 func (t *testFileIdsSource) FileIds() []datafile.FileID {
@@ -172,6 +277,10 @@ func testRepliStreamEmitterRequestCurrentFileIds(t *testing.T) {
 
 type testLastIndexSource struct {
 	index map[datafile.FileID]int64
+}
+
+func (t *testLastIndexSource) CurrentFileID() datafile.FileID {
+	return datafile.FileID{}
 }
 
 func (t *testLastIndexSource) FileIds() []datafile.FileID {
@@ -296,6 +405,10 @@ type testHeaderSourceValue struct {
 	dh    *datafile.Header
 	isEOF bool
 	err   error
+}
+
+func (t *testHeaderSource) CurrentFileID() datafile.FileID {
+	return datafile.FileID{}
 }
 
 func (t *testHeaderSource) FileIds() []datafile.FileID {
@@ -458,6 +571,10 @@ type testReadSourceKey struct {
 type testReadSourceValue struct {
 	de  *datafile.Entry
 	err error
+}
+
+func (t *testReadSource) CurrentFileID() datafile.FileID {
+	return datafile.FileID{}
 }
 
 func (t *testReadSource) FileIds() []datafile.FileID {
@@ -732,6 +849,7 @@ func testRepliStreamEmitterRequestFetchData(t *testing.T) {
 }
 
 func TestRepliStreamEmitterRequest(t *testing.T) {
+	t.Run("current_fileID", testRepliStreamEmitterRequestCurrentFileID)
 	t.Run("current_file_ids", testRepliStreamEmitterRequestCurrentFileIds)
 	t.Run("current_index", testRepliStreamEmitterRequestCurrentIndex)
 	t.Run("fetch_size", testRepliStreamEmitterRequestFetchSize)
@@ -740,6 +858,10 @@ func TestRepliStreamEmitterRequest(t *testing.T) {
 
 type testDatafileSource struct {
 	df datafile.Datafile
+}
+
+func (t *testDatafileSource) CurrentFileID() datafile.FileID {
+	return t.df.FileID()
 }
 
 func (t *testDatafileSource) FileIds() []datafile.FileID {
@@ -1118,7 +1240,7 @@ func TestRepliStreamEmitterReleaseLoop(t *testing.T) {
 type testNoDataDestination struct {
 }
 
-func (t *testNoDataDestination) CurrentFileID(datafile.FileID) error {
+func (t *testNoDataDestination) SetCurrentFileID(datafile.FileID) error {
 	return nil
 }
 
@@ -1165,10 +1287,16 @@ func TestRepliStreamReciverStartStop(t *testing.T) {
 }
 
 type testRepliStreamReciverSrcCounter struct {
-	countFileIds   int
-	countLastIndex int
-	countHeader    int
-	countRead      int
+	countCurrentFileID int
+	countFileIds       int
+	countLastIndex     int
+	countHeader        int
+	countRead          int
+}
+
+func (t *testRepliStreamReciverSrcCounter) CurrentFileID() datafile.FileID {
+	t.countCurrentFileID += 1
+	return datafile.FileID{}
 }
 
 func (t *testRepliStreamReciverSrcCounter) FileIds() []datafile.FileID {
@@ -1192,14 +1320,14 @@ func (t *testRepliStreamReciverSrcCounter) Read(datafile.FileID, int64, int64) (
 }
 
 type testRepliStreamReciverDestCounter struct {
-	countCurrentFileID int
-	countLastFiles     int
-	countInsert        int
-	countDelete        int
+	countSetCurrentFileID int
+	countLastFiles        int
+	countInsert           int
+	countDelete           int
 }
 
-func (t *testRepliStreamReciverDestCounter) CurrentFileID(datafile.FileID) error {
-	t.countCurrentFileID += 1
+func (t *testRepliStreamReciverDestCounter) SetCurrentFileID(datafile.FileID) error {
+	t.countSetCurrentFileID += 1
 	return nil
 }
 
@@ -1262,11 +1390,17 @@ func testRepliStreamReciverRepliEmptySourceEmptyDestination(t *testing.T) {
 }
 
 type testRepliStreamReciverDatafileSource struct {
-	dfs            []datafile.Datafile
-	countFileIds   int
-	countLastIndex int
-	countHeader    int
-	countRead      int
+	dfs                []datafile.Datafile
+	countCurrentFileID int
+	countFileIds       int
+	countLastIndex     int
+	countHeader        int
+	countRead          int
+}
+
+func (t *testRepliStreamReciverDatafileSource) CurrentFileID() datafile.FileID {
+	t.countCurrentFileID += 1
+	return datafile.FileID{}
 }
 
 func (t *testRepliStreamReciverDatafileSource) FileIds() []datafile.FileID {
@@ -1310,12 +1444,12 @@ func (t *testRepliStreamReciverDatafileSource) Read(fileID datafile.FileID, inde
 }
 
 type testRepliStreamReciverDestCounterAndEntries struct {
-	countCurrentFileID int
-	countLastFiles     int
-	countInsert        int
-	countDelete        int
-	seq                []*testRepliStreamReciverDestCounterAndEntriesSeq
-	m                  sync.Mutex
+	countSetCurrentFileID int
+	countLastFiles        int
+	countInsert           int
+	countDelete           int
+	seq                   []*testRepliStreamReciverDestCounterAndEntriesSeq
+	m                     sync.Mutex
 }
 
 type testRepliStreamReciverDestCounterAndEntriesSeq struct {
@@ -1325,11 +1459,11 @@ type testRepliStreamReciverDestCounterAndEntriesSeq struct {
 	payload  *codec.Payload
 }
 
-func (t *testRepliStreamReciverDestCounterAndEntries) CurrentFileID(datafile.FileID) error {
+func (t *testRepliStreamReciverDestCounterAndEntries) SetCurrentFileID(datafile.FileID) error {
 	t.m.Lock()
 	defer t.m.Unlock()
 
-	t.countCurrentFileID += 1
+	t.countSetCurrentFileID += 1
 	return nil
 }
 

@@ -6,11 +6,78 @@
 [![Releases](https://img.shields.io/github/v/release/octu0/bitcaskdb)](https://github.com/octu0/bitcaskdb/releases)
 
 Original code is [bitcask](https://git.mills.io/prologic/bitcask) and `bitcaskdb` modifies I/O operations and implement replication.  
-Small Value are still operated in memory, large Value are directly I/O operation on disk.  
+Small Value are still operated in memory, Large Value are directly I/O operation on disk.  
 This makes it possible to perform Merge operations and large data store with minimal RAM utilization.
 
 A high performance Key/Value store written in [Go](https://golang.org) with a predictable read/write performance and high throughput. 
 Uses a [Bitcask](https://en.wikipedia.org/wiki/Bitcask) on-disk layout (LSM+WAL) similar to [Riak](https://riak.com/).
+
+## Installation
+
+```shell
+go get github.com/octu0/bitcaskdb
+```
+
+## Example
+
+`bitcaskdb` methods are implemented to use [io.Reader](https://pkg.go.dev/io#Reader) / [io.ReadCloser](https://pkg.go.dev/io#ReadCloser), etc.
+
+```go
+import (
+	"bytes"
+	"io"
+	"fmt"
+
+	"github.com/octu0/bitcaskdb"
+)
+
+func main() {
+	db, err := bitcaskdb.Open("./data/mydb")
+	if err != nil {
+		panic(err)
+	}
+	defer db.Close()
+
+	// PutBytes() can be set using byte slice
+	db.PutBytes([]byte("hello"), []byte("world"))
+
+	// Get() returns io.ReadCloser
+	r, err := db.Get([]byte("hello"))
+	if err != nil {
+		panic(err)
+	}
+	defer r.Close()
+
+	data, _ := io.ReadAll(r)
+
+	// Put() can be specify io.Reader
+	db.Put([]byte("foo"), bytes.NewReader([]byte("very large data...")))
+
+	// PutWithTTL()/PutBytesWithTTL() can be set to data with expiration time
+	db.PutWithTTL([]byte("bar"), bytes.NewReader(data), 10*time.Second)
+
+	// Sync() flushes all buffers to disk
+	db.Sync()
+
+	r, err := db.Get([]byte("foo"))
+	if err != nil {
+		panic(err)
+	}
+	defer r.Close()
+
+	head := make([]byte, 4)
+	r.Read(head)
+
+	// Delete() can delete data with key
+	db.Delete([]byte("foo"))
+
+	// RunGC() deletes all expired keys
+	db.RunGC()
+
+	// Merge() rebuilds databases and reclaims disk space
+	db.Merge()
+}
+```
 
 ## Benchmark
 
