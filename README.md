@@ -48,11 +48,7 @@ func main() {
 	}
 	defer r.Close()
 
-	data, err := io.ReadAll(r)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Printf("%s\n", data) // => world
+	data, _ := io.ReadAll(r)
 
 	// Put() can be specify io.Reader
 	db.Put([]byte("foo"), bytes.NewReader([]byte("very large data...")))
@@ -63,15 +59,14 @@ func main() {
 	// flushes all buffers to disk
 	db.Sync()
 
-	foo, err := db.Get([]byte("foo"))
+	r, err := db.Get([]byte("foo"))
 	if err != nil {
 		panic(err)
 	}
-	defer foo.Close()
+	defer r.Close()
 
-	head4 := make([]byte, 4)
-	foo.Read(head)
-	fmt.Printf("%s\n", head4) // => very
+	head := make([]byte, 4)
+	r.Read(head)
 
 	// Delete() can delete data with key
 	db.Delete([]byte("foo"))
