@@ -76,6 +76,103 @@ func TestRapliStreamEmitterStartStop(t *testing.T) {
 	})
 }
 
+type testCurrentFileIDSource struct {
+	id datafile.FileID
+}
+
+func (t *testCurrentFileIDSource) CurrentFileID() datafile.FileID {
+	return t.id
+}
+
+func (t *testCurrentFileIDSource) FileIds() []datafile.FileID {
+	return nil
+}
+
+func (t *testCurrentFileIDSource) LastIndex(datafile.FileID) int64 {
+	return 0
+}
+
+func (t *testCurrentFileIDSource) Header(datafile.FileID, int64) (*datafile.Header, datafile.EOFType, error) {
+	return nil, true, errors.Errorf("no header")
+}
+
+func (t *testCurrentFileIDSource) Read(datafile.FileID, int64, int64) (*datafile.Entry, error) {
+	return nil, errors.Errorf("no entry")
+}
+
+func testRepliStreamEmitterRequestCurrentFileID(t *testing.T) {
+	e := NewStreamEmitter(runtime.DefaultContext(), log.Default(), "", 0)
+	defer e.Stop()
+
+	id := datafile.NextFileID()
+	s := &testCurrentFileIDSource{
+		id: id,
+	}
+	if err := e.Start(s, "127.0.0.1", -1); err != nil {
+		t.Errorf("no error ephemeral port %+v", err)
+	}
+
+	natsUrl := fmt.Sprintf("nats://%s", e.server.Addr().String())
+	nc, err := conn(natsUrl, t.Name())
+	if err != nil {
+		t.Fatalf("no error %+v", err)
+	}
+	defer nc.Close()
+
+	t.Run("empty_request_data", func(tt *testing.T) {
+		msg, err := nc.Request(SubjectCurrentFileID, []byte{}, 1*time.Second)
+		if err != nil {
+			tt.Fatalf("no error %+v", err)
+		}
+		res := ResponseCurrentFileID{}
+		if err := gob.NewDecoder(bytes.NewReader(msg.Data)).Decode(&res); err != nil {
+			tt.Fatalf("no error %+v", err)
+		}
+		if res.Err == "" {
+			tt.Errorf("not empty error")
+		}
+		tt.Logf("decoder empty byte read: %s", res.Err)
+	})
+	t.Run("mismatch_request_data", func(tt *testing.T) {
+		out := bytes.NewBuffer(nil)
+		gob.NewEncoder(out).Encode(time.Time{})
+
+		msg, err := nc.Request(SubjectCurrentFileID, out.Bytes(), 1*time.Second)
+		if err != nil {
+			tt.Fatalf("no error %+v", err)
+		}
+		res := ResponseCurrentFileID{}
+		if err := gob.NewDecoder(bytes.NewReader(msg.Data)).Decode(&res); err != nil {
+			tt.Fatalf("no error %+v", err)
+		}
+		if res.Err == "" {
+			tt.Errorf("not empty error")
+		}
+		tt.Logf("decoder mismatch type read: %s", res.Err)
+	})
+	t.Run("data_read", func(tt *testing.T) {
+		out := bytes.NewBuffer(nil)
+		if err := gob.NewEncoder(out).Encode(RequestCurrentFileID{}); err != nil {
+			tt.Fatalf("no error %+v", err)
+		}
+
+		msg, err := nc.Request(SubjectCurrentFileID, out.Bytes(), 1*time.Second)
+		if err != nil {
+			tt.Fatalf("no error %+v", err)
+		}
+		res := ResponseCurrentFileID{}
+		if err := gob.NewDecoder(bytes.NewReader(msg.Data)).Decode(&res); err != nil {
+			tt.Fatalf("no error %+v", err)
+		}
+		if res.Err != "" {
+			tt.Errorf("no response err: actual'%s'", res.Err)
+		}
+		if id.Equal(res.FileID) != true {
+			tt.Errorf("mismatch fileID actual:%v", res.FileID)
+		}
+	})
+}
+
 type testFileIdsSource struct {
 	ids []datafile.FileID
 }
@@ -752,6 +849,7 @@ func testRepliStreamEmitterRequestFetchData(t *testing.T) {
 }
 
 func TestRepliStreamEmitterRequest(t *testing.T) {
+	t.Run("current_fileID", testRepliStreamEmitterRequestCurrentFileID)
 	t.Run("current_file_ids", testRepliStreamEmitterRequestCurrentFileIds)
 	t.Run("current_index", testRepliStreamEmitterRequestCurrentIndex)
 	t.Run("fetch_size", testRepliStreamEmitterRequestFetchSize)
@@ -2225,4 +2323,7 @@ func TestRepliTemporaryRepliData(t *testing.T) {
 			tt.Errorf("removed!")
 		}
 	})
+}
+
+func TestRepliStreamReconnect(t *testing.T) {
 }
