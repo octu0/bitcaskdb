@@ -102,7 +102,7 @@ func (m *merger) tellLoadIndexCostLocked(b *Bitcask, lim *priorate.Limiter) {
 }
 
 func (m *merger) reopen(b *Bitcask, temp *mergeTempDB, lastFileID datafile.FileID, lim *priorate.Limiter) ([]string, error) {
-	// no reads and writes till we reopen
+	// no reads and writes till reopen
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
