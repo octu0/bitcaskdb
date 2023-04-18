@@ -680,7 +680,7 @@ func (e *streamEmitter) EmitDelete(key []byte) error {
 	e.mutex.RLock()
 	src := e.src
 	closed := e.closed
-	defer e.mutex.RUnlock()
+	e.mutex.RUnlock()
 
 	if src == nil {
 		return errors.Errorf("maybe not Start")
