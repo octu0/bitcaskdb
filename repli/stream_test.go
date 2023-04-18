@@ -113,7 +113,7 @@ func testRepliStreamEmitterRequestCurrentFileID(t *testing.T) {
 	}
 
 	natsUrl := fmt.Sprintf("nats://%s", e.server.Addr().String())
-	nc, err := conn(natsUrl, t.Name())
+	nc, err := conn(natsUrl, t.Name(), testReconnectErrorHandler(t))
 	if err != nil {
 		t.Fatalf("no error %+v", err)
 	}
@@ -215,7 +215,7 @@ func testRepliStreamEmitterRequestCurrentFileIds(t *testing.T) {
 	}
 
 	natsUrl := fmt.Sprintf("nats://%s", e.server.Addr().String())
-	nc, err := conn(natsUrl, t.Name())
+	nc, err := conn(natsUrl, t.Name(), testReconnectErrorHandler(t))
 	if err != nil {
 		t.Fatalf("no error %+v", err)
 	}
@@ -318,7 +318,7 @@ func testRepliStreamEmitterRequestCurrentIndex(t *testing.T) {
 	}
 
 	natsUrl := fmt.Sprintf("nats://%s", e.server.Addr().String())
-	nc, err := conn(natsUrl, t.Name())
+	nc, err := conn(natsUrl, t.Name(), testReconnectErrorHandler(t))
 	if err != nil {
 		t.Fatalf("no error %+v", err)
 	}
@@ -460,7 +460,7 @@ func testRepliStreamEmitterRequestFetchSize(t *testing.T) {
 	}
 
 	natsUrl := fmt.Sprintf("nats://%s", e.server.Addr().String())
-	nc, err := conn(natsUrl, t.Name())
+	nc, err := conn(natsUrl, t.Name(), testReconnectErrorHandler(t))
 	if err != nil {
 		t.Fatalf("no error %+v", err)
 	}
@@ -660,7 +660,7 @@ func testRepliStreamEmitterRequestFetchData(t *testing.T) {
 	}
 
 	natsUrl := fmt.Sprintf("nats://%s", e.server.Addr().String())
-	nc, err := conn(natsUrl, t.Name())
+	nc, err := conn(natsUrl, t.Name(), testReconnectErrorHandler(t))
 	if err != nil {
 		t.Fatalf("no error %+v", err)
 	}
@@ -899,7 +899,7 @@ func TestRepliStreamEmitterRepli(t *testing.T) {
 		}
 
 		natsUrl := fmt.Sprintf("nats://%s", e.server.Addr().String())
-		nc, err := conn(natsUrl, tt.Name())
+		nc, err := conn(natsUrl, tt.Name(), testReconnectErrorHandler(tt))
 		if err != nil {
 			tt.Fatalf("no error %+v", err)
 		}
@@ -991,7 +991,7 @@ func TestRepliStreamEmitterRepli(t *testing.T) {
 		i2, s2, _ := df.Write([]byte("test2"), bytes.NewReader([]byte("smalldata2")), time.Time{})
 
 		natsUrl := fmt.Sprintf("nats://%s", e.server.Addr().String())
-		nc, err := conn(natsUrl, tt.Name())
+		nc, err := conn(natsUrl, tt.Name(), testReconnectErrorHandler(tt))
 		if err != nil {
 			tt.Fatalf("no error %+v", err)
 		}
@@ -1082,7 +1082,7 @@ func TestRepliStreamEmitterRepli(t *testing.T) {
 		defer e.Stop()
 
 		natsUrl := fmt.Sprintf("nats://%s", e.server.Addr().String())
-		nc, err := conn(natsUrl, tt.Name())
+		nc, err := conn(natsUrl, tt.Name(), testReconnectErrorHandler(tt))
 		if err != nil {
 			tt.Fatalf("no error %+v", err)
 		}
@@ -2323,4 +2323,10 @@ func TestRepliTemporaryRepliData(t *testing.T) {
 			tt.Errorf("removed!")
 		}
 	})
+}
+
+func testReconnectErrorHandler(t *testing.T) nats.ConnHandler {
+	return func(conn *nats.Conn) {
+		t.Errorf("connection(%s:%s) happen reconnect", conn.Opts.Name, conn.ConnectedUrl())
+	}
 }
