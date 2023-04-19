@@ -32,6 +32,10 @@ func (*noopEmitter) EmitCurrentFileID(fileID datafile.FileID) error {
 	return nil
 }
 
+func (*noopEmitter) EmitMerge(merged []indexer.MergeFiler) error {
+	return nil
+}
+
 func NewNoopEmitter() *noopEmitter {
 	return new(noopEmitter)
 }

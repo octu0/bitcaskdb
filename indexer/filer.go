@@ -16,6 +16,11 @@ const (
 	FilerByteSize int = datafile.FileIDByteSize + 8 + 8
 )
 
+type MergeFiler struct {
+	FileID datafile.FileID
+	Filer  Filer
+}
+
 // Filer represents the location of the value on disk. This is used by the
 // internal Adaptive Radix Tree to hold an in-memory structure mapping keys to
 // locations on disk of where the value(s) can be read from.

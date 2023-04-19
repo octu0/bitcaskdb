@@ -69,7 +69,7 @@ func (m *merger) Merge(b *Bitcask, lim *priorate.Limiter) error {
 	}
 	defer snapshot.Destroy(lim)
 
-	temp, err := m.renewMergedDB(b, mergeFileIds, snapshot, lim)
+	temp, mergedFiler, err := m.renewMergedDB(b, mergeFileIds, snapshot, lim)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -80,6 +80,8 @@ func (m *merger) Merge(b *Bitcask, lim *priorate.Limiter) error {
 	if err != nil {
 		return errors.WithStack(err)
 	}
+
+	b.repliEmit.EmitMerge(mergedFiler)
 
 	removeFileSlowly(removeMarkedFiles, lim)
 	return nil
@@ -186,20 +188,21 @@ func (m *merger) snapshotIndexer(b *Bitcask, lim *priorate.Limiter) (*snapshotTr
 	return st, nil
 }
 
-func (m *merger) renewMergedDB(b *Bitcask, mergeFileIds []datafile.FileID, st *snapshotTrie, lim *priorate.Limiter) (*mergeTempDB, error) {
+func (m *merger) renewMergedDB(b *Bitcask, mergeFileIds []datafile.FileID, st *snapshotTrie, lim *priorate.Limiter) (*mergeTempDB, []indexer.MergeFiler, error) {
 	temp, err := openMergeTempDB(b.path, b.opt)
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return nil, nil, errors.WithStack(err)
 	}
 
-	if err := temp.MergeDatafiles(b, mergeFileIds, st, lim); err != nil {
-		return nil, errors.WithStack(err)
+	mergedFiler, err := temp.MergeDatafiles(b, mergeFileIds, st, lim)
+	if err != nil {
+		return nil, nil, errors.WithStack(err)
 	}
 
 	if err := temp.SyncAndClose(); err != nil {
-		return nil, errors.WithStack(err)
+		return nil, nil, errors.WithStack(err)
 	}
-	return temp, nil
+	return temp, mergedFiler, nil
 }
 
 func (m *merger) moveMerged(b *Bitcask, lastFileID datafile.FileID, mergedDBPath string) ([]string, error) {
@@ -300,7 +303,7 @@ func (t *mergeTempDB) DB() *Bitcask {
 // Rewrite all key/value pairs into merged database
 // Doing this automatically strips deleted keys and
 // old key/value pairs
-func (t *mergeTempDB) MergeDatafiles(src *Bitcask, mergeFileIds []datafile.FileID, st *snapshotTrie, lim *priorate.Limiter) error {
+func (t *mergeTempDB) MergeDatafiles(src *Bitcask, mergeFileIds []datafile.FileID, st *snapshotTrie, lim *priorate.Limiter) ([]indexer.MergeFiler, error) {
 	t.mdb.mu.Lock()
 	defer t.mdb.mu.Unlock()
 
@@ -317,19 +320,21 @@ func (t *mergeTempDB) MergeDatafiles(src *Bitcask, mergeFileIds []datafile.FileI
 			datafile.CopyTempThreshold(src.opt.CopyTempThreshold),
 		)
 		if err != nil {
-			return errors.WithStack(err)
+			return nil, errors.WithStack(err)
 		}
 		m[fileID] = df
 	}
 
-	if err := t.mergeDatafileLocked(st, m, lim); err != nil {
-		return errors.WithStack(err)
+	mergedFiler, err := t.mergeDatafileLocked(st, m, lim)
+	if err != nil {
+		return nil, errors.WithStack(err)
 	}
-	return nil
+	return mergedFiler, nil
 }
 
-func (t *mergeTempDB) mergeDatafileLocked(st *snapshotTrie, m map[datafile.FileID]datafile.Datafile, lim *priorate.Limiter) error {
-	return st.ReadAll(func(data snapshotTrieData) error {
+func (t *mergeTempDB) mergeDatafileLocked(st *snapshotTrie, m map[datafile.FileID]datafile.Datafile, lim *priorate.Limiter) ([]indexer.MergeFiler, error) {
+	mergedFiler := make([]indexer.MergeFiler, 0, len(m))
+	if err := st.ReadAll(func(data snapshotTrieData) error {
 		filer := data.Value
 
 		df, ok := m[filer.FileID]
@@ -365,8 +370,16 @@ func (t *mergeTempDB) mergeDatafileLocked(st *snapshotTrie, m map[datafile.FileI
 		if _, _, err := t.mdb.put(e.Key, e.Value, e.Expiry); err != nil {
 			return errors.WithStack(err)
 		}
+		mergedFiler = append(mergedFiler, indexer.MergeFiler{
+			FileID: t.mdb.curr.FileID(),
+			Filer:  filer,
+		})
+
 		return nil
-	})
+	}); err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return mergedFiler, nil
 }
 
 func (t *mergeTempDB) SyncAndClose() error {
