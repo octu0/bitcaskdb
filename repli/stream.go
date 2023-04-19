@@ -100,6 +100,7 @@ const (
 	RepliInsert RepliType = iota
 	RepliDelete
 	RepliCurrentFileID
+	RepliMerge
 )
 
 type (
@@ -134,6 +135,7 @@ const (
 	emitInsert emitType = iota
 	emitDelete
 	emitCurrentFileID
+	emitMerge
 )
 
 type emitApply struct {
@@ -141,6 +143,7 @@ type emitApply struct {
 	deleteKey   []byte
 	insertFiler indexer.Filer
 	fileID      datafile.FileID
+	mergedFiler []indexer.MergeFiler
 }
 
 type streamEmitter struct {
@@ -233,6 +236,8 @@ func (e *streamEmitter) emitLoop() {
 				e.applyDelete(apply.deleteKey)
 			case emitCurrentFileID:
 				e.applyCurrentFileID(apply.fileID)
+			case emitMerge:
+				e.applyMerge(apply.mergedFiler)
 			}
 		}
 	}
@@ -319,6 +324,46 @@ func (e *streamEmitter) applyCurrentFileID(fileID datafile.FileID) {
 		return
 	}
 	e.emitConn.Flush()
+}
+
+func (e *streamEmitter) applyMerge(mergedFiler []indexer.MergeFiler) {
+	bufPool := e.ctx.Buffer().BufferPool()
+	out := bufPool.Get()
+	defer bufPool.Put(out)
+
+	if err := gob.NewEncoder(out).Encode(mergedFiler); err != nil {
+		e.logger.Printf("error: apply merge err: %+v", err)
+		return
+	}
+
+	key := []byte(fmt.Sprintf("merge%d", time.Now().UnixNano()))
+	entry := &datafile.Entry{
+		Key:       key,
+		Value:     bytes.NewReader(out.Bytes()),
+		TotalSize: int64(out.Len()),
+		ValueSize: int64(out.Len()),
+		Checksum:  0,
+		Expiry:    time.Time{},
+	}
+	encodeFn := func(out *bytes.Buffer, keys []string, data []byte) error {
+		return gob.NewEncoder(out).Encode(RepliData{
+			Type:        RepliMerge,
+			FileID:      datafile.FileID{},
+			Index:       0,
+			Size:        0,
+			Checksum:    0,
+			EntryKey:    key,
+			EntryValue:  data,
+			EntryExpiry: time.Time{},
+			PartKeys:    keys,
+		})
+	}
+	releaseFn, err := e.publishData(e.emitConn, SubjectRepli, entry, encodeFn)
+	if err != nil {
+		e.logger.Printf("error: apply merge err: %+v", err)
+		return
+	}
+	e.addRelease(releaseFn)
 }
 
 func (e *streamEmitter) reconnectEmitter(conn *nats.Conn) {
@@ -696,12 +741,37 @@ func (e *streamEmitter) EmitDelete(key []byte) error {
 
 func (e *streamEmitter) EmitCurrentFileID(fileID datafile.FileID) error {
 	e.mutex.RLock()
-	defer e.mutex.RUnlock()
+	src := e.src
+	closed := e.closed
+	e.mutex.RUnlock()
 
-	if e.src == nil {
+	if src == nil {
 		return errors.Errorf("maybe not Start")
 	}
+	if closed {
+		// drop when closed
+		return nil
+	}
+
 	e.emitApplyCh <- emitApply{emit: emitCurrentFileID, fileID: fileID}
+	return nil
+}
+
+func (e *streamEmitter) EmitMerge(merged []indexer.MergeFiler) error {
+	e.mutex.RLock()
+	src := e.src
+	closed := e.closed
+	e.mutex.RUnlock()
+
+	if src == nil {
+		return errors.Errorf("maybe not Start")
+	}
+	if closed {
+		// drop when closed, no emit to transmit differences when resuming server
+		return nil
+	}
+
+	e.emitApplyCh <- emitApply{emit: emitMerge, mergedFiler: merged}
 	return nil
 }
 
@@ -808,7 +878,7 @@ func (e *streamEmitter) publishDataPartial(conn *nats.Conn, subj string, entry *
 	return releaseFn, nil
 }
 
-func (e *streamEmitter) publishDataSingle(conn *nats.Conn, subj string, entry *datafile.Entry, encodeFn partDataEncodeFunc) (releaseFunc, error) {
+func (e *streamEmitter) publishDataSingle(conn *nats.Conn, subj string, entry io.Reader, encodeFn partDataEncodeFunc) (releaseFunc, error) {
 	bufPool := e.ctx.Buffer().BufferPool()
 	buf := bufPool.Get()
 	defer bufPool.Put(buf)
@@ -1259,6 +1329,11 @@ func (r *streamReciver) takeRepliData(client *nats.Conn, dst Destination, data R
 		return dst.Insert(data.FileID, data.Index, data.Checksum, data.EntryKey, bytes.NewReader(data.EntryValue), data.EntryExpiry)
 	case RepliCurrentFileID:
 		return dst.SetCurrentFileID(data.FileID)
+	case RepliMerge:
+		if 0 < len(data.PartKeys) && len(data.EntryValue) == 0 {
+			return r.recvMergeRepliDataPartial(client, dst, data.PartKeys)
+		}
+		return r.recvMergeRepliDataSingle(client, dst, data.EntryValue)
 	}
 	r.logger.Printf("warn: unknown repli.type = %v %+v", data.Type, data)
 	return nil
@@ -1303,6 +1378,32 @@ func (r *streamReciver) recvInsertRepliDataPartial(client *nats.Conn, dst Destin
 	}
 
 	return dst.Insert(fileID, index, checksum, entry.key, entry.value, entry.expiry)
+}
+
+func (r *streamReciver) recvMergeRepliDataPartial(client *nats.Conn, dst Destination, partKeys []string) error {
+	entry, err := r.reqFetchDataPartial(client, 0, []byte{}, time.Time{}, partKeys)
+	if err != nil {
+		return errors.Wrapf(err, "failed fetch data partial keys")
+	}
+	if entry.release != nil {
+		defer entry.release()
+	}
+
+	mergedFiler := make([]indexer.MergeFiler, 0)
+	if err := gob.NewDecoder(entry.value).Decode(&mergedFiler); err != nil {
+		return errors.Wrapf(err, "failed partial decode merged filer")
+	}
+
+	return dst.Merge(mergedFiler)
+}
+
+func (r *streamReciver) recvMergeRepliDataSingle(client *nats.Conn, dst Destination, data []byte) error {
+	mergedFiler := make([]indexer.MergeFiler, 0)
+	if err := gob.NewDecoder(bytes.NewReader(data)).Decode(&mergedFiler); err != nil {
+		return errors.Wrapf(err, "failed single decode merged filer")
+	}
+
+	return dst.Merge(mergedFiler)
 }
 
 func NewStreamReciver(ctx runtime.Context, logger *log.Logger, tempDir string, rto time.Duration) *streamReciver {

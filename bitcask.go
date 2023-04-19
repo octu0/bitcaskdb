@@ -418,7 +418,9 @@ func (b *Bitcask) Scan(prefix []byte, f func(key []byte) error) error {
 // SiftScan iterates over all keys in the database beginning with the given
 // prefix, calling the function `f` for each key. If the KV pair is expired or
 // the function returns true, that key is deleted from the database.
-//  If the function returns an error on any key, no further keys are processed,
+//
+//	If the function returns an error on any key, no further keys are processed,
+//
 // no keys are deleted, and the first error is returned.
 func (b *Bitcask) SiftScan(prefix []byte, f func(key []byte) (bool, error)) (err error) {
 	keysToDelete := art.New()

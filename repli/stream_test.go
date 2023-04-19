@@ -1256,6 +1256,10 @@ func (t *testNoDataDestination) Delete([]byte) error {
 	return nil
 }
 
+func (t *testNoDataDestination) Merge([]indexer.MergeFiler) error {
+	return nil
+}
+
 func TestRepliStreamReciverStartStop(t *testing.T) {
 	t.Run("start/stop", func(tt *testing.T) {
 		e := NewStreamEmitter(runtime.DefaultContext(), log.Default(), "", 0)
@@ -1324,6 +1328,7 @@ type testRepliStreamReciverDestCounter struct {
 	countLastFiles        int
 	countInsert           int
 	countDelete           int
+	countMerge            int
 }
 
 func (t *testRepliStreamReciverDestCounter) SetCurrentFileID(datafile.FileID) error {
@@ -1343,6 +1348,11 @@ func (t *testRepliStreamReciverDestCounter) Insert(datafile.FileID, int64, uint3
 
 func (t *testRepliStreamReciverDestCounter) Delete([]byte) error {
 	t.countDelete += 1
+	return nil
+}
+
+func (t *testRepliStreamReciverDestCounter) Merge([]indexer.MergeFiler) error {
+	t.countMerge += 1
 	return nil
 }
 
@@ -1448,6 +1458,7 @@ type testRepliStreamReciverDestCounterAndEntries struct {
 	countLastFiles        int
 	countInsert           int
 	countDelete           int
+	countMerge            int
 	seq                   []*testRepliStreamReciverDestCounterAndEntriesSeq
 	m                     sync.Mutex
 }
@@ -1513,6 +1524,14 @@ func (t *testRepliStreamReciverDestCounterAndEntries) Delete(k []byte) error {
 		isDelete: true,
 		key:      k,
 	})
+	return nil
+}
+
+func (t *testRepliStreamReciverDestCounterAndEntries) Merge([]indexer.MergeFiler) error {
+	t.m.Lock()
+	defer t.m.Unlock()
+
+	t.countMerge += 1
 	return nil
 }
 
@@ -2323,6 +2342,10 @@ func TestRepliTemporaryRepliData(t *testing.T) {
 			tt.Errorf("removed!")
 		}
 	})
+}
+
+func TestRepliStreamMerge(t *testing.T) {
+	t.Logf("todo")
 }
 
 func testReconnectErrorHandler(t *testing.T) nats.ConnHandler {

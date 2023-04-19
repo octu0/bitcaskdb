@@ -1891,19 +1891,19 @@ func TestRange(t *testing.T) {
 
 func TestLocking(t *testing.T) {
 	testdir, err := os.MkdirTemp("", "bitcask")
-  if err != nil {
-    t.Fatalf("no error: %+v", err)
-  }
+	if err != nil {
+		t.Fatalf("no error: %+v", err)
+	}
 
 	db, err := Open(testdir)
-  if err != nil {
-    t.Fatalf("no error: %+v", err)
-  }
+	if err != nil {
+		t.Fatalf("no error: %+v", err)
+	}
 	defer db.Close()
 
 	if _, err = Open(testdir); err == nil {
-    t.Errorf("must error")
-  }
+		t.Errorf("must error")
+	}
 }
 
 func TestGetExpiredInsideFold(t *testing.T) {

@@ -14,6 +14,7 @@ type Emitter interface {
 	EmitInsert(filer indexer.Filer) error
 	EmitDelete(key []byte) error
 	EmitCurrentFileID(datafile.FileID) error
+	EmitMerge([]indexer.MergeFiler) error
 }
 
 type Reciver interface {
@@ -39,4 +40,5 @@ type Destination interface {
 	LastFiles() []FileIDAndIndex
 	Insert(fileID datafile.FileID, index int64, checksum uint32, key []byte, r io.Reader, expiry time.Time) error
 	Delete(key []byte) error
+	Merge([]indexer.MergeFiler) error
 }
