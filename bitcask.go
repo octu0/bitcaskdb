@@ -816,7 +816,7 @@ func Open(path string, funcs ...OptionFunc) (*Bitcask, error) {
 		metadata:   meta,
 		repliEmit:  repliEmitter,
 		repliRecv:  repliReciver,
-		merger:     newMerger(),
+		merger:     newMerger(opt, path),
 	}
 
 	if err := repliEmitter.Start(bitcask.repliSource(), opt.RepliBindIP, opt.RepliBindPort); err != nil {
