@@ -7,7 +7,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	goruntime "runtime"
+	"runtime"
 	"sort"
 	"sync"
 	"time"
@@ -402,7 +402,7 @@ func (t *mergeTempDB) Destroy(lim *priorate.Limiter) {
 		return
 	}
 
-	goruntime.SetFinalizer(t, nil) // clear
+	runtime.SetFinalizer(t, nil) // clear
 	t.SyncAndClose()
 
 	files, err := filepath.Glob(filepath.Join(t.tempDir, "*"))
@@ -436,7 +436,7 @@ func openMergeTempDB(basedir string, opt *option) (*mergeTempDB, error) {
 		closed:    false,
 		destroyed: false,
 	}
-	goruntime.SetFinalizer(st, finalizeMergeTempDB)
+	runtime.SetFinalizer(st, finalizeMergeTempDB)
 	return st, nil
 }
 
@@ -491,7 +491,7 @@ func (st *snapshotTrie) Destroy(lim *priorate.Limiter) {
 		return
 	}
 
-	goruntime.SetFinalizer(st, nil)
+	runtime.SetFinalizer(st, nil)
 	st.Close()
 	removeFileSlowly([]string{st.file.Name()}, lim)
 	st.destroyed = true
@@ -512,7 +512,7 @@ func openSnapshotTrie(tempDir string) (*snapshotTrie, error) {
 		closed:    false,
 		destroyed: false,
 	}
-	goruntime.SetFinalizer(st, finalizeSnapshotTrie)
+	runtime.SetFinalizer(st, finalizeSnapshotTrie)
 	return st, nil
 }
 
