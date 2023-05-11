@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"golang.org/x/exp/mmap"
 
 	"github.com/octu0/bitcaskdb/codec"
 )
@@ -42,7 +41,6 @@ type defaultDatafile struct {
 	opt    *datafileOpt
 	id     FileID
 	r      *os.File
-	ra     *mmap.ReaderAt
 	w      *os.File
 	offset int64
 	dec    *codec.Decoder
@@ -59,9 +57,6 @@ func (df *defaultDatafile) Name() string {
 
 func (df *defaultDatafile) Close() error {
 	defer func() {
-		if df.ra != nil {
-			df.ra.Close()
-		}
 		df.r.Close()
 
 		df.dec.Close()
@@ -124,10 +119,19 @@ func (df *defaultDatafile) sectionReader(index, size int64) *io.SectionReader {
 	df.RLock()
 	defer df.RUnlock()
 
-	if df.ra != nil {
-		return io.NewSectionReader(df.ra, index, size)
-	}
 	return io.NewSectionReader(df.r, index, size)
+}
+
+// openSectionReader returns *io.SectionReader with new file open
+func (df *defaultDatafile) openSectionReader(index, size int64) (*io.SectionReader, *os.File, error) {
+	df.RLock()
+	defer df.RUnlock()
+
+	r, err := os.Open(df.r.Name())
+	if err != nil {
+		return nil, nil, errors.WithStack(err)
+	}
+	return io.NewSectionReader(r, index, size), r, nil
 }
 
 func (df *defaultDatafile) ReadAtHeader(index int64) (*Header, EOFType, error) {
@@ -159,12 +163,17 @@ func (df *defaultDatafile) ReadAtHeader(index int64) (*Header, EOFType, error) {
 
 // ReadAt the entry located at index offset with expected serialized size
 func (df *defaultDatafile) ReadAt(index, size int64) (*Entry, error) {
-	r := df.sectionReader(index, size)
+	r, f, err := df.openSectionReader(index, size)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
 	d := codec.NewDecoder(df.opt.ctx, r)
 	defer d.Close()
 
 	p, err := d.Decode()
 	if err != nil {
+		f.Close()
 		return nil, errors.WithStack(err)
 	}
 
@@ -177,6 +186,7 @@ func (df *defaultDatafile) ReadAt(index, size int64) (*Entry, error) {
 		Expiry:    p.Expiry,
 		release: func() {
 			p.Close()
+			f.Close()
 		},
 	}
 	e.setFinalizer()
@@ -236,17 +246,6 @@ func openRead(path string, opt *datafileOpt) (*os.File, os.FileInfo, error) {
 	return r, stat, nil
 }
 
-func openReaderAt(path string, opt *datafileOpt) (*mmap.ReaderAt, error) {
-	if opt.readonly != true {
-		return nil, nil
-	}
-	ra, err := mmap.Open(path)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-	return ra, nil
-}
-
 // NewDatafile opens an existing datafile
 func open(id FileID, dir string, funcs ...datafileOptFunc) (*defaultDatafile, error) {
 	opt := new(datafileOpt)
@@ -269,16 +268,11 @@ func open(id FileID, dir string, funcs ...datafileOptFunc) (*defaultDatafile, er
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	ra, err := openReaderAt(path, opt)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
 
 	return &defaultDatafile{
 		opt:    opt,
 		id:     id,
 		r:      r,
-		ra:     ra,
 		w:      w,
 		offset: stat.Size(),
 		dec:    codec.NewDecoder(opt.ctx, r),

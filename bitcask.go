@@ -194,8 +194,7 @@ func (b *Bitcask) Has(key []byte) bool {
 }
 
 func (b *Bitcask) hasLocked(key []byte) bool {
-	_, found := b.trie.Search(key)
-	if found != true {
+	if _, found := b.trie.Search(key); found != true {
 		return false
 	}
 	if b.isExpired(key) {
@@ -315,48 +314,6 @@ func (b *Bitcask) deleteLocked(key []byte) error {
 	return nil
 }
 
-// Sift iterates over all keys in the database calling the function `f` for
-// each key. If the KV pair is expired or the function returns true, that key is
-// deleted from the database.
-// If the function returns an error on any key, no further keys are processed, no
-// keys are deleted, and the first error is returned.
-func (b *Bitcask) Sift(f func(key []byte) (bool, error)) error {
-	keysToDelete := art.New()
-
-	var lastErr error
-	b.mu.RLock()
-	b.trie.ForEach(func(node art.Node) bool {
-		nodeKey := node.Key()
-		if b.isExpired(nodeKey) {
-			keysToDelete.Insert(nodeKey, true)
-			return true
-		}
-		var shouldDelete bool
-		shouldDelete, err := f(nodeKey)
-		if err != nil {
-			lastErr = errors.WithStack(err)
-			return false
-		}
-		if shouldDelete {
-			keysToDelete.Insert(nodeKey, true)
-		}
-		return true
-	})
-	b.mu.RUnlock()
-	if lastErr != nil {
-		return errors.WithStack(lastErr)
-	}
-
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	keysToDelete.ForEach(func(node art.Node) (cont bool) {
-		b.deleteLocked(node.Key())
-		return true
-	})
-	return nil
-}
-
 // DeleteAll deletes all the keys. If an I/O error occurs the error is returned.
 func (b *Bitcask) DeleteAll() error {
 	b.mu.Lock()
@@ -415,49 +372,6 @@ func (b *Bitcask) Scan(prefix []byte, f func(key []byte) error) error {
 	return nil
 }
 
-// SiftScan iterates over all keys in the database beginning with the given
-// prefix, calling the function `f` for each key. If the KV pair is expired or
-// the function returns true, that key is deleted from the database.
-// If the function returns an error on any key, no further keys are processed,
-// no keys are deleted, and the first error is returned.
-func (b *Bitcask) SiftScan(prefix []byte, f func(key []byte) (bool, error)) (err error) {
-	keysToDelete := art.New()
-
-	b.mu.RLock()
-	b.trie.ForEachPrefix(prefix, func(node art.Node) bool {
-		nodeKey := node.Key()
-		// Skip the root node
-		if len(nodeKey) == 0 {
-			return true
-		}
-		if b.isExpired(nodeKey) {
-			keysToDelete.Insert(nodeKey, true)
-			return true
-		}
-		var shouldDelete bool
-		if shouldDelete, err = f(nodeKey); err != nil {
-			return false
-		} else if shouldDelete {
-			keysToDelete.Insert(nodeKey, true)
-		}
-		return true
-	})
-	b.mu.RUnlock()
-
-	if err != nil {
-		return
-	}
-
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	keysToDelete.ForEach(func(node art.Node) (cont bool) {
-		b.deleteLocked(node.Key())
-		return true
-	})
-	return
-}
-
 // Range performs a range scan of keys matching a range of keys between the
 // start key and end key and calling the function `f` with the keys found.
 // If the function returns an error no further keys are processed and the
@@ -488,62 +402,6 @@ func (b *Bitcask) Range(start, end []byte, f func(key []byte) error) (err error)
 		}
 		return true
 	})
-	return
-}
-
-// SiftRange performs a range scan of keys matching a range of keys between the
-// start key and end key and calling the function `f` with the keys found.
-// If the KV pair is expired or the function returns true, that key is deleted
-// from the database.
-// If the function returns an error on any key, no further keys are processed, no
-// keys are deleted, and the first error is returned.
-func (b *Bitcask) SiftRange(start, end []byte, f func(key []byte) (bool, error)) (err error) {
-	if bytes.Compare(start, end) == 1 {
-		return ErrInvalidRange
-	}
-
-	commonPrefix := lcp.LCP(start, end)
-	if commonPrefix == nil {
-		return ErrInvalidRange
-	}
-
-	keysToDelete := art.New()
-
-	b.mu.RLock()
-	b.trie.ForEachPrefix(commonPrefix, func(node art.Node) bool {
-		nodeKey := node.Key()
-		if bytes.Compare(nodeKey, start) >= 0 && bytes.Compare(nodeKey, end) <= 0 {
-			if b.isExpired(nodeKey) {
-				keysToDelete.Insert(nodeKey, true)
-				return true
-			}
-			var shouldDelete bool
-			if shouldDelete, err = f(nodeKey); err != nil {
-				return false
-			} else if shouldDelete {
-				keysToDelete.Insert(nodeKey, true)
-			}
-			return true
-		}
-		if bytes.Compare(nodeKey, start) >= 0 && bytes.Compare(nodeKey, end) > 0 {
-			return false
-		}
-		return true
-	})
-	b.mu.RUnlock()
-
-	if err != nil {
-		return
-	}
-
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	keysToDelete.ForEach(func(node art.Node) (cont bool) {
-		b.deleteLocked(node.Key())
-		return true
-	})
-
 	return
 }
 
@@ -595,23 +453,6 @@ func (b *Bitcask) RunGC() error {
 	})
 
 	return nil
-}
-
-// Fold iterates over all keys in the database calling the function `f` for
-// each key. If the function returns an error, no further keys are processed
-// and the error is returned.
-func (b *Bitcask) Fold(f func(key []byte) error) (err error) {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-
-	b.trie.ForEach(func(node art.Node) bool {
-		if err = f(node.Key()); err != nil {
-			return false
-		}
-		return true
-	})
-
-	return
 }
 
 func (b *Bitcask) maybeRotate() error {
@@ -975,7 +816,7 @@ func Open(path string, funcs ...OptionFunc) (*Bitcask, error) {
 		metadata:   meta,
 		repliEmit:  repliEmitter,
 		repliRecv:  repliReciver,
-		merger:     newMerger(),
+		merger:     newMerger(opt, path),
 	}
 
 	if err := repliEmitter.Start(bitcask.repliSource(), opt.RepliBindIP, opt.RepliBindPort); err != nil {

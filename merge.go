@@ -7,7 +7,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	goruntime "runtime"
+	"runtime"
 	"sort"
 	"sync"
 	"time"
@@ -33,6 +33,8 @@ const (
 
 type merger struct {
 	mutex   *sync.RWMutex
+	opt     *option
+	basedir string
 	merging bool
 }
 
@@ -57,24 +59,29 @@ func (m *merger) Merge(b *Bitcask, lim *priorate.Limiter) error {
 		m.merging = false
 		m.mutex.Unlock()
 	}()
+	start := time.Now()
 
-	lastFileID, mergeFileIds, err := m.forwardCurrentDafafile(b)
+	m.opt.Logger.Printf("info: merge / rotate datafiles (%s)", time.Since(start))
+	lastFileID, mergeFileIds, err := m.rotateCurrentDafafile(b)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
+	m.opt.Logger.Printf("info: merge / snapshot indexer (%s)", time.Since(start))
 	snapshot, err := m.snapshotIndexer(b, lim)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 	defer snapshot.Destroy(lim)
 
+	m.opt.Logger.Printf("info: merge / prepare merge db (%s)", time.Since(start))
 	temp, mergedFiler, err := m.renewMergedDB(b, mergeFileIds, snapshot, lim)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 	defer temp.Destroy(lim)
 
+	m.opt.Logger.Printf("info: merge / concatenate merge db and current db (%s)", time.Since(start))
 	// Reduce b blocking time by performing b.mu.Lock/Unlock within merger.reopen()
 	removeMarkedFiles, err := m.reopen(b, temp, lastFileID, lim)
 	if err != nil {
@@ -83,7 +90,10 @@ func (m *merger) Merge(b *Bitcask, lim *priorate.Limiter) error {
 
 	b.repliEmit.EmitMerge(mergedFiler)
 
+	m.opt.Logger.Printf("info: merge / cleanup files marked for remove (%s)", time.Since(start))
 	removeFileSlowly(removeMarkedFiles, lim)
+
+	m.opt.Logger.Printf("info: merge complete (%s)", time.Since(start))
 	return nil
 }
 
@@ -133,7 +143,7 @@ func (m *merger) reopen(b *Bitcask, temp *mergeTempDB, lastFileID datafile.FileI
 	return removeMarkedFiles, nil
 }
 
-func (m *merger) forwardCurrentDafafile(b *Bitcask) (datafile.FileID, []datafile.FileID, error) {
+func (m *merger) rotateCurrentDafafile(b *Bitcask) (datafile.FileID, []datafile.FileID, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -162,15 +172,14 @@ func (m *merger) snapshotIndexer(b *Bitcask, lim *priorate.Limiter) (*snapshotTr
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
-	st, err := openSnapshotTrie(b.opt.TempDir)
+	st, err := openSnapshotTrie(m.opt.TempDir)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed open snapshot trie")
 	}
 
 	var lastErr error
 	b.trie.ForEach(func(node art.Node) bool {
-		r := lim.ReserveN(priorate.Low, time.Now(), indexer.FilerByteSize)
-		if r.OK() {
+		if r := lim.ReserveN(priorate.Low, time.Now(), indexer.FilerByteSize); r.OK() {
 			if d := r.Delay(); 0 < d {
 				time.Sleep(d)
 			}
@@ -189,7 +198,7 @@ func (m *merger) snapshotIndexer(b *Bitcask, lim *priorate.Limiter) (*snapshotTr
 }
 
 func (m *merger) renewMergedDB(b *Bitcask, mergeFileIds []datafile.FileID, st *snapshotTrie, lim *priorate.Limiter) (*mergeTempDB, []indexer.MergeFiler, error) {
-	temp, err := openMergeTempDB(b.path, b.opt)
+	temp, err := openMergeTempDB(m.opt, m.basedir)
 	if err != nil {
 		return nil, nil, errors.WithStack(err)
 	}
@@ -278,9 +287,11 @@ func (m *merger) moveDBFiles(b *Bitcask, fromDBPath string) error {
 	return nil
 }
 
-func newMerger() *merger {
+func newMerger(opt *option, basedir string) *merger {
 	return &merger{
 		mutex:   new(sync.RWMutex),
+		opt:     opt,
+		basedir: basedir,
 		merging: false,
 	}
 }
@@ -342,8 +353,7 @@ func (t *mergeTempDB) mergeDatafileLocked(st *snapshotTrie, m map[datafile.FileI
 			return nil
 		}
 
-		rr := lim.ReserveN(priorate.Low, time.Now(), int(filer.Size))
-		if rr.OK() {
+		if rr := lim.ReserveN(priorate.Low, time.Now(), int(filer.Size)); rr.OK() {
 			if d := rr.Delay(); 0 < d {
 				time.Sleep(d)
 			}
@@ -360,8 +370,7 @@ func (t *mergeTempDB) mergeDatafileLocked(st *snapshotTrie, m map[datafile.FileI
 			return nil
 		}
 
-		rw := lim.ReserveN(priorate.Low, time.Now(), int(e.TotalSize))
-		if rw.OK() {
+		if rw := lim.ReserveN(priorate.Low, time.Now(), int(e.TotalSize)); rw.OK() {
 			if d := rw.Delay(); 0 < d {
 				time.Sleep(d)
 			}
@@ -402,7 +411,7 @@ func (t *mergeTempDB) Destroy(lim *priorate.Limiter) {
 		return
 	}
 
-	goruntime.SetFinalizer(t, nil) // clear
+	runtime.SetFinalizer(t, nil) // clear
 	t.SyncAndClose()
 
 	files, err := filepath.Glob(filepath.Join(t.tempDir, "*"))
@@ -420,7 +429,7 @@ func finalizeMergeTempDB(t *mergeTempDB) {
 	t.Destroy(nil)
 }
 
-func openMergeTempDB(basedir string, opt *option) (*mergeTempDB, error) {
+func openMergeTempDB(opt *option, basedir string) (*mergeTempDB, error) {
 	tempDir, err := os.MkdirTemp(basedir, mergeDirPattern)
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -436,7 +445,7 @@ func openMergeTempDB(basedir string, opt *option) (*mergeTempDB, error) {
 		closed:    false,
 		destroyed: false,
 	}
-	goruntime.SetFinalizer(st, finalizeMergeTempDB)
+	runtime.SetFinalizer(st, finalizeMergeTempDB)
 	return st, nil
 }
 
@@ -491,7 +500,7 @@ func (st *snapshotTrie) Destroy(lim *priorate.Limiter) {
 		return
 	}
 
-	goruntime.SetFinalizer(st, nil)
+	runtime.SetFinalizer(st, nil)
 	st.Close()
 	removeFileSlowly([]string{st.file.Name()}, lim)
 	st.destroyed = true
@@ -512,7 +521,7 @@ func openSnapshotTrie(tempDir string) (*snapshotTrie, error) {
 		closed:    false,
 		destroyed: false,
 	}
-	goruntime.SetFinalizer(st, finalizeSnapshotTrie)
+	runtime.SetFinalizer(st, finalizeSnapshotTrie)
 	return st, nil
 }
 
@@ -551,8 +560,7 @@ func truncate(path string, size int64, lim *priorate.Limiter) {
 	for i := int64(0); i < truncateCount; i += 1 {
 		nextSize := threshold * (truncateCount - i)
 
-		r := lim.ReserveN(priorate.Low, time.Now(), int(nextSize))
-		if r.OK() {
+		if r := lim.ReserveN(priorate.Low, time.Now(), int(nextSize)); r.OK() {
 			if d := r.Delay(); 0 < d {
 				time.Sleep(d + defaultSlowTruncateWait)
 			}

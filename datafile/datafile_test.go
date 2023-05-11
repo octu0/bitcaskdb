@@ -23,8 +23,8 @@ func TestOpen(t *testing.T) {
 		if df.w == nil {
 			tt.Errorf("writable")
 		}
-		if df.ra != nil {
-			tt.Errorf("not readonly")
+		if df.r == nil {
+			tt.Errorf("readable")
 		}
 	})
 	t.Run("readonly", func(tt *testing.T) {

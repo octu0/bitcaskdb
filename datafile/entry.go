@@ -3,7 +3,6 @@ package datafile
 import (
 	"hash/crc32"
 	"io"
-	goruntime "runtime"
 	"time"
 
 	"github.com/octu0/bitcaskdb/runtime"
@@ -34,7 +33,7 @@ type Entry struct {
 }
 
 func (e *Entry) setFinalizer() {
-	goruntime.SetFinalizer(e, finalizeEntry)
+	runtime.SetFinalizer(e, finalizeEntry)
 }
 
 func (e *Entry) Read(p []byte) (int, error) {
@@ -44,7 +43,7 @@ func (e *Entry) Read(p []byte) (int, error) {
 func (e *Entry) Close() error {
 	if e.closed != true {
 		e.closed = true
-		goruntime.SetFinalizer(e, nil) // clear finalizer
+		runtime.SetFinalizer(e, nil) // clear finalizer
 		if e.release != nil {
 			e.release()
 		}
@@ -76,6 +75,6 @@ func (e *Entry) Validate(ctx runtime.Context) error {
 }
 
 func finalizeEntry(e *Entry) {
-	goruntime.SetFinalizer(e, nil) // clear finalizer
+	runtime.SetFinalizer(e, nil) // clear finalizer
 	e.Close()
 }

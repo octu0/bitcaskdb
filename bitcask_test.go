@@ -2,7 +2,6 @@ package bitcaskdb
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -13,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -157,31 +157,6 @@ func TestAll(t *testing.T) {
 		assert.Equal([][]byte{[]byte("foo")}, keys)
 	})
 
-	t.Run("Fold", func(t *testing.T) {
-		var (
-			keys   [][]byte
-			values [][]byte
-		)
-
-		err := db.Fold(func(key []byte) error {
-			value, err := db.Get(key)
-			if err != nil {
-				return err
-			}
-			defer value.Close()
-			data, err := io.ReadAll(value)
-			if err != nil {
-				return err
-			}
-			keys = append(keys, key)
-			values = append(values, data)
-			return nil
-		})
-		assert.NoError(err)
-		assert.Equal([][]byte{[]byte("foo")}, keys)
-		assert.Equal([][]byte{[]byte("bar")}, values)
-	})
-
 	t.Run("Delete", func(t *testing.T) {
 		err := db.Delete([]byte("foo"))
 		assert.NoError(err)
@@ -192,70 +167,6 @@ func TestAll(t *testing.T) {
 
 	t.Run("Sync", func(t *testing.T) {
 		err = db.Sync()
-		assert.NoError(err)
-	})
-
-	t.Run("Sift", func(t *testing.T) {
-		err = db.PutBytes([]byte("toBeSifted"), []byte("siftMe"))
-		assert.NoError(err)
-		err = db.PutBytes([]byte("notToBeSifted"), []byte("dontSiftMe"))
-		assert.NoError(err)
-		err := db.Sift(func(key []byte) (bool, error) {
-			value, err := db.Get(key)
-			if err != nil {
-				return false, err
-			}
-			defer value.Close()
-			data, err := io.ReadAll(value)
-			if err != nil {
-				return false, err
-			}
-			if string(data) == "siftMe" {
-				return true, nil
-			}
-			return false, nil
-		})
-		assert.NoError(err)
-		_, err = db.Get([]byte("toBeSifted"))
-		assert.Equal(ErrKeyNotFound, err)
-		_, err = db.Get([]byte("notToBeSifted"))
-		assert.NoError(err)
-	})
-
-	t.Run("SiftScan", func(t *testing.T) {
-		err := db.DeleteAll()
-		assert.NoError(err)
-		err = db.PutBytes([]byte("toBeSifted"), []byte("siftMe"))
-		assert.NoError(err)
-		err = db.PutBytes([]byte("toBeSkipped"), []byte("siftMe"))
-		assert.NoError(err)
-		err = db.PutBytes([]byte("toBeSiftedAsWell"), []byte("siftMe"))
-		assert.NoError(err)
-		err = db.PutBytes([]byte("toBeSiftedButNotReally"), []byte("dontSiftMe"))
-		assert.NoError(err)
-		err = db.SiftScan([]byte("toBeSifted"), func(key []byte) (bool, error) {
-			value, err := db.Get(key)
-			if err != nil {
-				return false, err
-			}
-			defer value.Close()
-			data, err := io.ReadAll(value)
-			if err != nil {
-				return false, err
-			}
-			if string(data) == "siftMe" {
-				return true, nil
-			}
-			return false, nil
-		})
-		assert.NoError(err)
-		_, err = db.Get([]byte("toBeSifted"))
-		assert.Equal(ErrKeyNotFound, err)
-		_, err = db.Get([]byte("toBeSiftedAsWell"))
-		assert.Equal(ErrKeyNotFound, err)
-		_, err = db.Get([]byte("toBeSkipped"))
-		assert.NoError(err)
-		_, err = db.Get([]byte("toBeSiftedButNotReally"))
 		assert.NoError(err)
 	})
 
@@ -1094,67 +1005,6 @@ func TestMaxDatafileSize(t *testing.T) {
 	})
 }
 
-func TestGetErrors(t *testing.T) {
-	//assert := assert.New(t)
-
-	/*todo
-	t.Run("ReadError", func(t *testing.T) {
-		testdir, err := os.MkdirTemp("", "bitcask")
-		assert.NoError(err)
-		defer os.RemoveAll(testdir)
-
-		db, err := Open(testdir, WithMaxDatafileSize(32))
-		assert.NoError(err)
-
-		err = db.PutBytes([]byte("foo"), []byte("bar"))
-		assert.NoError(err)
-
-		mockDatafile := new(mockDatafile)
-		mockDatafile.On("FileID").Return(0)
-		mockDatafile.On("ReadAt", int64(0), int64(30)).Return(
-			Entry{},
-			ErrMockError,
-		)
-		db.curr = mockDatafile
-
-		_, err = db.Get([]byte("foo"))
-		assert.Error(err)
-		assert.Equal(ErrMockError, err)
-	})
-	*/
-
-	/*todo
-	t.Run("ChecksumError", func(t *testing.T) {
-		testdir, err := os.MkdirTemp("", "bitcask")
-		assert.NoError(err)
-		defer os.RemoveAll(testdir)
-
-		db, err := Open(testdir, WithMaxDatafileSize(40))
-		assert.NoError(err)
-
-		err = db.PutBytes([]byte("foo"), []byte("bar"))
-		assert.NoError(err)
-
-		mockDatafile := new(mockDatafile)
-		mockDatafile.On("FileID").Return(0)
-		mockDatafile.On("ReadAt", int64(0), int64(30)).Return(
-			Entry{
-				Checksum: 0x0,
-				Key:      []byte("foo"),
-				Offset:   0,
-				Value:    []byte("bar"),
-			},
-			nil,
-		)
-		db.curr = mockDatafile
-
-		_, err = db.Get([]byte("foo"))
-		assert.Error(err)
-		assert.Equal(ErrChecksumFailed, err)
-	})
-	*/
-}
-
 func TestPutBorderCases(t *testing.T) {
 	assert := assert.New(t)
 
@@ -1180,60 +1030,6 @@ func TestPutBorderCases(t *testing.T) {
 func TestPutErrors(t *testing.T) {
 	assert := assert.New(t)
 
-	/* todo
-	t.Run("WriteError", func(t *testing.T) {
-		testdir, err := os.MkdirTemp("", "bitcask")
-		assert.NoError(err)
-
-		db, err := Open(testdir)
-		assert.NoError(err)
-
-		mockDatafile := new(mockDatafile)
-		mockDatafile.On("Size").Return(int64(0))
-		mockDatafile.On(
-			"Write",
-			Entry{
-				Checksum: 0x76ff8caa,
-				Key:      []byte("foo"),
-				Offset:   0,
-				Value:    []byte("bar"),
-			},
-		).Return(int64(0), int64(0), ErrMockError)
-		db.curr = mockDatafile
-
-		err = db.PutBytes([]byte("foo"), []byte("bar"))
-		assert.Error(err)
-		assert.Equal(ErrMockError, err)
-	})
-	*/
-
-	/* todo
-	t.Run("SyncError", func(t *testing.T) {
-		testdir, err := os.MkdirTemp("", "bitcask")
-		assert.NoError(err)
-		db, err := Open(testdir, WithSync(true))
-		assert.NoError(err)
-
-		mockDatafile := new(mockDatafile)
-		mockDatafile.On("Size").Return(int64(0))
-		mockDatafile.On(
-			"Write",
-			Entry{
-				Checksum: 0x78240498,
-				Key:      []byte("bar"),
-				Offset:   0,
-				Value:    []byte("baz"),
-			},
-		).Return(int64(0), int64(0), nil)
-		mockDatafile.On("Sync").Return(ErrMockError)
-		db.curr = mockDatafile
-
-		err = db.PutBytes([]byte("bar"), []byte("baz"))
-		assert.Error(err)
-		assert.Equal(ErrMockError, err)
-	})
-	*/
-
 	t.Run("EmptyKey", func(t *testing.T) {
 		testdir, err := os.MkdirTemp("", "bitcask")
 		assert.NoError(err)
@@ -1244,7 +1040,6 @@ func TestPutErrors(t *testing.T) {
 		assert.Equal(ErrEmptyKey, err)
 
 	})
-
 }
 
 func TestOpenErrors(t *testing.T) {
@@ -1302,93 +1097,6 @@ func TestOpenErrors(t *testing.T) {
 			t.Errorf("open new file: old:%s new:%s", db.curr.FileID(), db2.curr.FileID())
 		}
 	})
-}
-
-func TestCloseErrors(t *testing.T) {
-	assert := assert.New(t)
-
-	testdir, err := os.MkdirTemp("", "bitcask")
-	assert.NoError(err)
-	defer os.RemoveAll(testdir)
-
-	/* todo
-	t.Run("CloseIndexError", func(t *testing.T) {
-		db, err := Open(testdir, WithMaxDatafileSize(32))
-		assert.NoError(err)
-
-		mockIndexer := new(mockIndexer)
-		mockIndexer.On("Save", db.trie, filepath.Join(db.path, "temp_index")).Return(ErrMockError)
-		db.indexer = mockIndexer
-
-		err = db.Close()
-		assert.Error(err)
-		assert.Equal(ErrMockError, err)
-	})
-	*/
-
-	/* todo
-	t.Run("CloseDatafilesError", func(t *testing.T) {
-		db, err := Open(testdir, WithMaxDatafileSize(32))
-		assert.NoError(err)
-
-		mockDatafile := new(mockDatafile)
-		mockDatafile.On("Close").Return(ErrMockError)
-		db.datafiles[0] = mockDatafile
-
-		err = db.Close()
-		assert.Error(err)
-		assert.Equal(ErrMockError, err)
-	})
-	*/
-
-	/* todo
-	t.Run("CloseActiveDatafileError", func(t *testing.T) {
-		db, err := Open(testdir, WithMaxDatafileSize(32))
-		assert.NoError(err)
-
-		mockDatafile := new(mockDatafile)
-		mockDatafile.On("Close").Return(ErrMockError)
-		db.curr = mockDatafile
-
-		err = db.Close()
-		assert.Error(err)
-		assert.Equal(ErrMockError, err)
-	})
-	*/
-}
-
-func TestDeleteErrors(t *testing.T) {
-	//assert := assert.New(t)
-
-	/* todo
-	t.Run("WriteError", func(t *testing.T) {
-		testdir, err := os.MkdirTemp("", "bitcask")
-		assert.NoError(err)
-		defer os.RemoveAll(testdir)
-
-		db, err := Open(testdir, WithMaxDatafileSize(32))
-		assert.NoError(err)
-
-		err = db.PutBytes([]byte("foo"), []byte("bar"))
-		assert.NoError(err)
-
-		mockDatafile := new(mockDatafile)
-		mockDatafile.On("Size").Return(int64(0))
-		mockDatafile.On(
-			"Write",
-			Entry{
-				Checksum: 0x0,
-				Key:      []byte("foo"),
-				Offset:   0,
-				Value:    []byte{},
-			},
-		).Return(int64(0), int64(0), ErrMockError)
-		db.curr = mockDatafile
-
-		err = db.Delete([]byte("foo"))
-		assert.Error(err)
-	})
-	*/
 }
 
 func TestConcurrent(t *testing.T) {
@@ -1507,144 +1215,10 @@ func TestConcurrent(t *testing.T) {
 			wg.Wait()
 		})
 
-		// XXX: This has data races
-		/* Test concurrent Scan() with concurrent Merge()
-		t.Run("ScanMerge", func(t *testing.T) {
-			doScan := func(wg *sync.WaitGroup, x int) {
-				defer func() {
-					wg.Done()
-				}()
-				for i := 0; i <= 100; i++ {
-					if i%x == 0 {
-						err := db.Scan([]byte("k"), func(key []byte) error {
-							return nil
-						})
-						assert.NoError(err)
-					}
-				}
-			}
-
-			doMerge := func(wg *sync.WaitGroup, x int) {
-				defer func() {
-					wg.Done()
-				}()
-				for i := 0; i <= 100; i++ {
-					if i%x == 0 {
-						err := db.Merge()
-						assert.NoError(err)
-					}
-				}
-			}
-
-			wg := &sync.WaitGroup{}
-			wg.Add(6)
-
-			go doScan(wg, 2)
-			go doScan(wg, 3)
-			go doScan(wg, 5)
-			go doMerge(wg, 1)
-			go doMerge(wg, 2)
-			go doMerge(wg, 4)
-
-			wg.Wait()
-		})
-		*/
-
 		t.Run("Close", func(t *testing.T) {
 			err = db.Close()
 			assert.NoError(err)
 		})
-	})
-}
-
-func TestSift(t *testing.T) {
-	assert := assert.New(t)
-
-	testdir, err := os.MkdirTemp("", "bitcask")
-	assert.NoError(err)
-
-	var db *Bitcask
-
-	t.Run("Setup", func(t *testing.T) {
-		t.Run("Open", func(t *testing.T) {
-			db, err = Open(testdir)
-			assert.NoError(err)
-		})
-
-		t.Run("PutBytes", func(t *testing.T) {
-			var items = map[string][]byte{
-				"1":     []byte("1"),
-				"2":     []byte("2"),
-				"3":     []byte("3"),
-				"food":  []byte("pizza"),
-				"foo":   []byte([]byte("foo")),
-				"fooz":  []byte("fooz ball"),
-				"hello": []byte("world"),
-			}
-			for k, v := range items {
-				err = db.PutBytes([]byte(k), v)
-				assert.NoError(err)
-			}
-		})
-	})
-
-	t.Run("SiftErrors", func(t *testing.T) {
-		err = db.Sift(func(key []byte) (bool, error) {
-			return false, ErrMockError
-		})
-		if errors.Is(err, ErrMockError) != true {
-			t.Errorf("resolv my error ErrMockError")
-		}
-
-		err = db.SiftScan([]byte("fo"), func(key []byte) (bool, error) {
-			return true, ErrMockError
-		})
-		if errors.Is(err, ErrMockError) != true {
-			t.Errorf("resolv my error ErrMockError")
-		}
-	})
-}
-func TestSiftScan(t *testing.T) {
-	assert := assert.New(t)
-
-	testdir, err := os.MkdirTemp("", "bitcask")
-	assert.NoError(err)
-
-	var db *Bitcask
-
-	t.Run("Setup", func(t *testing.T) {
-		t.Run("Open", func(t *testing.T) {
-			db, err = Open(testdir)
-			assert.NoError(err)
-		})
-
-		t.Run("PutBytes", func(t *testing.T) {
-			var items = map[string][]byte{
-				"1":     []byte("1"),
-				"2":     []byte("2"),
-				"3":     []byte("3"),
-				"food":  []byte("pizza"),
-				"foo":   []byte([]byte("foo")),
-				"fooz":  []byte("fooz ball"),
-				"hello": []byte("world"),
-			}
-			for k, v := range items {
-				err = db.PutBytes([]byte(k), v)
-				assert.NoError(err)
-			}
-		})
-	})
-
-	t.Run("SiftScanErrors", func(t *testing.T) {
-		err = db.SiftScan([]byte("fo"), func(key []byte) (bool, error) {
-			return false, ErrMockError
-		})
-		assert.Equal(ErrMockError, err)
-
-		err = db.SiftScan([]byte("fo"), func(key []byte) (bool, error) {
-			return true, ErrMockError
-		})
-		assert.Equal(ErrMockError, err)
 	})
 }
 
@@ -1719,99 +1293,6 @@ func TestScan(t *testing.T) {
 		if errors.Is(err, ErrMockError) != true {
 			t.Errorf("resolv my error: ErrMockErr")
 		}
-	})
-}
-func TestSiftRange(t *testing.T) {
-	assert := assert.New(t)
-
-	testdir, err := os.MkdirTemp("", "bitcask")
-	assert.NoError(err)
-
-	var db *Bitcask
-
-	t.Run("Setup", func(t *testing.T) {
-		t.Run("Open", func(t *testing.T) {
-			db, err = Open(testdir)
-			assert.NoError(err)
-		})
-
-		t.Run("PutBytes", func(t *testing.T) {
-			for i := 1; i < 10; i++ {
-				key := []byte(fmt.Sprintf("foo_%d", i))
-				val := []byte(fmt.Sprintf("%d", i))
-				err = db.PutBytes(key, val)
-				assert.NoError(err)
-			}
-		})
-	})
-
-	t.Run("SiftRange", func(t *testing.T) {
-		var (
-			vals     [][]byte
-			expected = [][]byte{
-				[]byte("1"),
-				[]byte("2"),
-				[]byte("4"),
-				[]byte("5"),
-				[]byte("6"),
-				[]byte("7"),
-				[]byte("8"),
-				[]byte("9"),
-			}
-		)
-
-		err = db.SiftRange([]byte("foo_3"), []byte("foo_7"), func(key []byte) (bool, error) {
-			val, err := db.Get(key)
-			assert.NoError(err)
-			defer val.Close()
-			data, err2 := io.ReadAll(val)
-			assert.NoError(err2)
-
-			if string(data) == "3" {
-				return true, nil
-			}
-			return false, nil
-		})
-		err = db.Fold(func(key []byte) error {
-			val, err := db.Get(key)
-			assert.NoError(err)
-			defer val.Close()
-			data, err := io.ReadAll(val)
-			assert.NoError(err)
-
-			vals = append(vals, data)
-
-			return nil
-		})
-
-		_, err = db.Get([]byte("foo_3"))
-		assert.Equal(ErrKeyNotFound, err)
-		sort.Slice(vals, func(i, j int) bool {
-			switch bytes.Compare(vals[i], vals[j]) {
-			case -1:
-				return true
-			case 0, 1:
-				return false
-			}
-			return false
-		})
-		assert.Equal(expected, vals)
-	})
-
-	t.Run("SiftRangeErrors", func(t *testing.T) {
-		err = db.SiftRange([]byte("foo_3"), []byte("foo_7"), func(key []byte) (bool, error) {
-			return true, ErrMockError
-		})
-		assert.Error(err)
-		assert.Equal(ErrMockError, err)
-	})
-
-	t.Run("InvalidRange", func(t *testing.T) {
-		err = db.SiftRange([]byte("foo_3"), []byte("foo_1"), func(key []byte) (bool, error) {
-			return false, nil
-		})
-		assert.Error(err)
-		assert.Equal(ErrInvalidRange, err)
 	})
 }
 
@@ -1906,45 +1387,6 @@ func TestLocking(t *testing.T) {
 	}
 }
 
-func TestGetExpiredInsideFold(t *testing.T) {
-	assert := assert.New(t)
-
-	testdir, err := os.MkdirTemp("", "bitcask")
-	assert.NoError(err)
-
-	db, err := Open(testdir)
-	assert.NoError(err)
-	defer db.Close()
-	// Add a node to the tree that won't expire
-	db.PutBytes([]byte("static"), []byte("static"))
-	// Add a node that expires almost immediately to the tree
-	db.PutBytesWithTTL([]byte("shortLived"), []byte("shortLived"), 1*time.Millisecond)
-	db.PutBytes([]byte("skipped"), []byte("skipped"))
-	db.PutBytes([]byte("static2"), []byte("static2"))
-	time.Sleep(2 * time.Millisecond)
-	var arr []string
-	_ = db.Fold(func(key []byte) error {
-		val, err := db.Get(key)
-		switch string(key) {
-		case "skipped":
-			fallthrough
-		case "static2":
-			fallthrough
-		case "static":
-			assert.NoError(err)
-			defer val.Close()
-			data, err := io.ReadAll(val)
-			assert.NoError(err)
-			assert.Equal(string(data), string(key))
-			arr = append(arr, string(data))
-		case "shortLived":
-			assert.Error(err)
-		}
-		return nil
-	})
-	assert.Contains(arr, "skipped")
-}
-
 func TestRunGCDeletesAllExpired(t *testing.T) {
 	assert := assert.New(t)
 
@@ -1970,9 +1412,82 @@ func TestRunGCDeletesAllExpired(t *testing.T) {
 	time.Sleep(3 * time.Millisecond)
 	db.RunGC()
 
-	_ = db.Fold(func(key []byte) error {
-		_, err := db.Get(key)
-		assert.NoError(err)
-		return nil
-	})
+	keys := make([][]byte, 0)
+	for k := range db.Keys() {
+		keys = append(keys, k)
+	}
+
+	if len(keys) != 4 {
+		t.Errorf("exists items 4 actual=%d", len(keys))
+	}
+}
+
+func TestReadAfterMerge(t *testing.T) {
+	dir, err := os.MkdirTemp("", "bitcask")
+	if err != nil {
+		t.Fatalf("no error: %+v", err)
+	}
+	defer os.RemoveAll(dir)
+
+	db, err := Open(dir, WithMaxDatafileSize(4*1024))
+	if err != nil {
+		t.Errorf("no error: %+v", err)
+	}
+	defer db.Close()
+
+	if err := db.PutBytes([]byte("foo"), bytes.Repeat([]byte("1234567890"), 1024)); err != nil {
+		t.Errorf("no error: %+v", err)
+	}
+	if err := db.PutBytes([]byte("bar"), bytes.Repeat([]byte("@"), 1024*1024)); err != nil {
+		t.Errorf("no error: %+v", err)
+	}
+	if err := db.PutBytes([]byte("baz"), bytes.Repeat([]byte("0123456789test"), 1024*1024)); err != nil {
+		t.Errorf("no error: %+v", err)
+	}
+
+	e1, err := db.Get([]byte("foo"))
+	if err != nil {
+		t.Errorf("no error: %+v", err)
+	}
+	defer e1.Close()
+
+	e2, err := db.Get([]byte("bar"))
+	if err != nil {
+		t.Errorf("no error: %+v", err)
+	}
+	defer e2.Close()
+
+	e3, err := db.Get([]byte("baz"))
+	if err != nil {
+		t.Errorf("no error: %+v", err)
+	}
+	defer e3.Close()
+
+	if err := db.Merge(); err != nil {
+		t.Errorf("no error: %+v", err)
+	}
+
+	data1, err := io.ReadAll(e1)
+	if err != nil {
+		t.Errorf("no error: %+v", err)
+	}
+	if len(data1) != 10240 {
+		t.Errorf("data vanished after merge: size=%d", len(data1))
+	}
+
+	data2, err := io.ReadAll(e2)
+	if err != nil {
+		t.Errorf("no error: %+v", err)
+	}
+	if len(data2) != 1048576 {
+		t.Errorf("data vanished after merge: size=%d", len(data2))
+	}
+
+	data3, err := io.ReadAll(e3)
+	if err != nil {
+		t.Errorf("no error: %+v", err)
+	}
+	if len(data3) != 14680064 {
+		t.Errorf("data vanished after merge: size=%d", len(data3))
+	}
 }
