@@ -59,24 +59,29 @@ func (m *merger) Merge(b *Bitcask, lim *priorate.Limiter) error {
 		m.merging = false
 		m.mutex.Unlock()
 	}()
+	start := time.Now()
 
-	lastFileID, mergeFileIds, err := m.forwardCurrentDafafile(b)
+	m.opt.Logger.Printf("info: merge / rotate datafiles (%s)", time.Since(start))
+	lastFileID, mergeFileIds, err := m.rotateCurrentDafafile(b)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
+	m.opt.Logger.Printf("info: merge / snapshot indexer (%s)", time.Since(start))
 	snapshot, err := m.snapshotIndexer(b, lim)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 	defer snapshot.Destroy(lim)
 
+	m.opt.Logger.Printf("info: merge / prepare merge db (%s)", time.Since(start))
 	temp, mergedFiler, err := m.renewMergedDB(b, mergeFileIds, snapshot, lim)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 	defer temp.Destroy(lim)
 
+	m.opt.Logger.Printf("info: merge / concatenate merge db and current db (%s)", time.Since(start))
 	// Reduce b blocking time by performing b.mu.Lock/Unlock within merger.reopen()
 	removeMarkedFiles, err := m.reopen(b, temp, lastFileID, lim)
 	if err != nil {
@@ -85,7 +90,10 @@ func (m *merger) Merge(b *Bitcask, lim *priorate.Limiter) error {
 
 	b.repliEmit.EmitMerge(mergedFiler)
 
+	m.opt.Logger.Printf("info: merge / cleanup files marked for remove (%s)", time.Since(start))
 	removeFileSlowly(removeMarkedFiles, lim)
+
+	m.opt.Logger.Printf("info: merge complete (%s)", time.Since(start))
 	return nil
 }
 
@@ -135,7 +143,7 @@ func (m *merger) reopen(b *Bitcask, temp *mergeTempDB, lastFileID datafile.FileI
 	return removeMarkedFiles, nil
 }
 
-func (m *merger) forwardCurrentDafafile(b *Bitcask) (datafile.FileID, []datafile.FileID, error) {
+func (m *merger) rotateCurrentDafafile(b *Bitcask) (datafile.FileID, []datafile.FileID, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
