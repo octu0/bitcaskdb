@@ -194,8 +194,7 @@ func (b *Bitcask) Has(key []byte) bool {
 }
 
 func (b *Bitcask) hasLocked(key []byte) bool {
-	_, found := b.trie.Search(key)
-	if found != true {
+	if _, found := b.trie.Search(key); found != true {
 		return false
 	}
 	if b.isExpired(key) {
@@ -454,23 +453,6 @@ func (b *Bitcask) RunGC() error {
 	})
 
 	return nil
-}
-
-// Fold iterates over all keys in the database calling the function `f` for
-// each key. If the function returns an error, no further keys are processed
-// and the error is returned.
-func (b *Bitcask) Fold(f func(key []byte) error) (err error) {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-
-	b.trie.ForEach(func(node art.Node) bool {
-		if err = f(node.Key()); err != nil {
-			return false
-		}
-		return true
-	})
-
-	return
 }
 
 func (b *Bitcask) maybeRotate() error {

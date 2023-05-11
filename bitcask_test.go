@@ -157,31 +157,6 @@ func TestAll(t *testing.T) {
 		assert.Equal([][]byte{[]byte("foo")}, keys)
 	})
 
-	t.Run("Fold", func(t *testing.T) {
-		var (
-			keys   [][]byte
-			values [][]byte
-		)
-
-		err := db.Fold(func(key []byte) error {
-			value, err := db.Get(key)
-			if err != nil {
-				return err
-			}
-			defer value.Close()
-			data, err := io.ReadAll(value)
-			if err != nil {
-				return err
-			}
-			keys = append(keys, key)
-			values = append(values, data)
-			return nil
-		})
-		assert.NoError(err)
-		assert.Equal([][]byte{[]byte("foo")}, keys)
-		assert.Equal([][]byte{[]byte("bar")}, values)
-	})
-
 	t.Run("Delete", func(t *testing.T) {
 		err := db.Delete([]byte("foo"))
 		assert.NoError(err)
@@ -1658,45 +1633,6 @@ func TestLocking(t *testing.T) {
 	}
 }
 
-func TestGetExpiredInsideFold(t *testing.T) {
-	assert := assert.New(t)
-
-	testdir, err := os.MkdirTemp("", "bitcask")
-	assert.NoError(err)
-
-	db, err := Open(testdir)
-	assert.NoError(err)
-	defer db.Close()
-	// Add a node to the tree that won't expire
-	db.PutBytes([]byte("static"), []byte("static"))
-	// Add a node that expires almost immediately to the tree
-	db.PutBytesWithTTL([]byte("shortLived"), []byte("shortLived"), 1*time.Millisecond)
-	db.PutBytes([]byte("skipped"), []byte("skipped"))
-	db.PutBytes([]byte("static2"), []byte("static2"))
-	time.Sleep(2 * time.Millisecond)
-	var arr []string
-	_ = db.Fold(func(key []byte) error {
-		val, err := db.Get(key)
-		switch string(key) {
-		case "skipped":
-			fallthrough
-		case "static2":
-			fallthrough
-		case "static":
-			assert.NoError(err)
-			defer val.Close()
-			data, err := io.ReadAll(val)
-			assert.NoError(err)
-			assert.Equal(string(data), string(key))
-			arr = append(arr, string(data))
-		case "shortLived":
-			assert.Error(err)
-		}
-		return nil
-	})
-	assert.Contains(arr, "skipped")
-}
-
 func TestRunGCDeletesAllExpired(t *testing.T) {
 	assert := assert.New(t)
 
@@ -1722,9 +1658,12 @@ func TestRunGCDeletesAllExpired(t *testing.T) {
 	time.Sleep(3 * time.Millisecond)
 	db.RunGC()
 
-	_ = db.Fold(func(key []byte) error {
-		_, err := db.Get(key)
-		assert.NoError(err)
-		return nil
-	})
+	keys := make([][]byte, 0)
+	for k := range db.Keys() {
+		keys = append(keys, k)
+	}
+
+	if len(keys) != 4 {
+		t.Errorf("exists items 4 actual=%d", len(keys))
+	}
 }
