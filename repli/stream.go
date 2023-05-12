@@ -1255,7 +1255,7 @@ func (r *streamReciver) reqDiffData(conn *nats.Conn, dst Destination, fileID dat
 func (r *streamReciver) requestBehindData(client *nats.Conn, dst Destination, repliTemp *temporaryRepliData) error {
 	requestedFileIds := make(map[datafile.FileID]struct{})
 
-	// Retrieve FileIDs that destination has that are behind
+	// Retrieve behind FileIDs
 	for _, f := range dst.LastFiles() {
 		lastIndex, err := r.reqCurrentIndex(client, f.FileID)
 		if err != nil {

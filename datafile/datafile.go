@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/octu0/bitcaskdb/codec"
+	"github.com/octu0/bitcaskdb/runtime"
 )
 
 type EOFType bool
@@ -111,7 +112,7 @@ func (df *defaultDatafile) Read() (*Entry, error) {
 			p.Close()
 		},
 	}
-	e.setFinalizer()
+	runtime.SetFinalizer(e, finalizeEntry)
 	return e, nil
 }
 
@@ -189,7 +190,7 @@ func (df *defaultDatafile) ReadAt(index, size int64) (*Entry, error) {
 			f.Close()
 		},
 	}
-	e.setFinalizer()
+	runtime.SetFinalizer(e, finalizeEntry)
 	return e, nil
 }
 
