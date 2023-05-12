@@ -3,6 +3,7 @@ package codec
 import (
 	"io"
 	"runtime"
+	"sync/atomic"
 	"time"
 )
 
@@ -33,7 +34,7 @@ type Payload struct {
 	Expiry    time.Time
 	N         int64
 	ValueSize int64
-	closed    bool
+	closed    int32
 	release   func()
 }
 
@@ -46,8 +47,7 @@ func (p *Payload) Read(buf []byte) (int, error) {
 }
 
 func (p *Payload) Close() error {
-	if p.closed != true {
-		p.closed = true
+	if atomic.CompareAndSwapInt32(&p.closed, 0, 1) {
 		runtime.SetFinalizer(p, nil) // clear finalizer
 		if p.release != nil {
 			p.release()
@@ -57,6 +57,5 @@ func (p *Payload) Close() error {
 }
 
 func finalizePayload(p *Payload) {
-	runtime.SetFinalizer(p, nil) // clear finalizer
 	p.Close()
 }

@@ -3,6 +3,7 @@ package datafile
 import (
 	"hash/crc32"
 	"io"
+	"sync/atomic"
 	"time"
 
 	"github.com/octu0/bitcaskdb/runtime"
@@ -28,7 +29,7 @@ type Entry struct {
 	ValueSize int64
 	Checksum  uint32
 	Expiry    time.Time
-	closed    bool
+	closed    int32
 	release   func()
 }
 
@@ -41,8 +42,7 @@ func (e *Entry) Read(p []byte) (int, error) {
 }
 
 func (e *Entry) Close() error {
-	if e.closed != true {
-		e.closed = true
+	if atomic.CompareAndSwapInt32(&e.closed, 0, 1) {
 		runtime.SetFinalizer(e, nil) // clear finalizer
 		if e.release != nil {
 			e.release()
@@ -75,6 +75,5 @@ func (e *Entry) Validate(ctx runtime.Context) error {
 }
 
 func finalizeEntry(e *Entry) {
-	runtime.SetFinalizer(e, nil) // clear finalizer
 	e.Close()
 }
