@@ -33,10 +33,6 @@ type Entry struct {
 	release   func()
 }
 
-func (e *Entry) setFinalizer() {
-	runtime.SetFinalizer(e, finalizeEntry)
-}
-
 func (e *Entry) Read(p []byte) (int, error) {
 	return e.Value.Read(p)
 }

@@ -38,10 +38,6 @@ type Payload struct {
 	release   func()
 }
 
-func (p *Payload) setFinalizer() {
-	runtime.SetFinalizer(p, finalizePayload)
-}
-
 func (p *Payload) Read(buf []byte) (int, error) {
 	return p.Value.Read(buf)
 }

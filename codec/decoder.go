@@ -111,7 +111,7 @@ func (d *Decoder) Decode() (*Payload, error) {
 		ValueSize: header.ValueSize,
 		release:   releaseFn,
 	}
-	p.setFinalizer()
+	runtime.SetFinalizer(p, finalizePayload)
 	d.r.Seek(p.N, io.SeekCurrent)
 	d.offset += p.N
 	return p, nil
